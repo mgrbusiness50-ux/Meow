@@ -1,0 +1,147 @@
+import { state } from '../../state.ts';
+import { Pet } from '../../types.ts';
+
+export function renderContactRequestModal(targetPet: Pet | null): string {
+  if (!targetPet) return '';
+
+  const userPets = state.getUserPets();
+  const isMating = targetPet.status === 'mating';
+
+  return `
+    <div id="contact-request-modal-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      <div class="bg-[#FFF9E9] rounded-3xl max-w-md w-full border-2 border-brand-peachBorder shadow-2xl overflow-hidden my-auto p-5 space-y-4 text-[#2d221b]">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-brand-peachBorder/60 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">${isMating ? '❤️' : '🏠'}</span>
+            <h3 class="text-base font-black text-brand-dark">
+              ${isMating ? 'إرسال طلب تزاوج' : 'إرسال طلب تبني'} إلى ${targetPet.ownerName}
+            </h3>
+          </div>
+          <button id="close-contact-request-btn" class="w-8 h-8 rounded-full bg-brand-peachBorder/40 hover:bg-brand-peachBorder text-brand-dark flex items-center justify-center cursor-pointer transition text-xs active:scale-90">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Target Cat Summary Pill -->
+        <div class="p-3 rounded-2xl bg-white border border-brand-peachBorder flex items-center gap-3 shadow-sm">
+          <img src="${targetPet.photos[0]}" alt="${targetPet.name}" class="w-12 h-12 rounded-xl object-cover border border-brand-peachBorder" />
+          <div class="flex-1 min-w-0">
+            <h4 class="text-sm font-black text-brand-dark truncate">${targetPet.name}</h4>
+            <span class="text-xs font-semibold text-brand-subtleGray block">${targetPet.breed} • ${targetPet.area}</span>
+          </div>
+          <span class="text-xs font-bold px-2 py-0.5 rounded-lg ${isMating ? 'bg-brand-orange/15 text-brand-orange' : 'bg-emerald-50 text-emerald-800'}">
+            ${isMating ? 'تزاوج ❤️' : 'تبني 🏠'}
+          </span>
+        </div>
+
+        <!-- If Mating: Select which of user's pets to pair -->
+        ${
+          isMating
+            ? `
+            <div class="space-y-1">
+              <label for="select-user-mating-pet" class="block text-xs font-black text-brand-dark">
+                اختر حيوانك الأليف المقترح للتزاوج:
+              </label>
+              <select
+                id="select-user-mating-pet"
+                class="w-full bg-white border border-brand-peachBorder rounded-2xl px-3 py-2 text-xs font-bold text-brand-dark focus:outline-none focus:border-brand-orange shadow-sm cursor-pointer"
+              >
+                ${userPets
+                  .map(
+                    (p) => `
+                  <option value="${p.id}">${p.name} (${p.breed} - ${p.gender === 'male' ? 'ذكر' : 'أنثى'} - ${p.ageYears} سنة)</option>
+                `
+                  )
+                  .join('')}
+              </select>
+            </div>
+            `
+            : ''
+        }
+
+        <!-- Message Field -->
+        <div class="space-y-1">
+          <label for="contact-request-message" class="block text-xs font-black text-brand-dark">
+            ${isMating ? 'رسالتك لصاحب القطة (التطعيمات، البيئة، الموعد المقترح):' : 'نبذة عن بيئة منزلك وتجربتك في رعاية الحيوانات:'}
+          </label>
+          <textarea
+            id="contact-request-message"
+            rows="3"
+            class="w-full bg-white border border-brand-peachBorder rounded-2xl p-3 text-xs font-semibold text-brand-dark placeholder-brand-subtleGray focus:outline-none focus:border-brand-orange shadow-sm leading-relaxed"
+            placeholder="${
+              isMating
+                ? 'السلام عليكم، يسعدني التنسيق معكم بخصوص تزاوج أليفي مع أليفكم الجميل، جميع الفحوصات واللقاحات سارية...'
+                : 'السلام عليكم، أود تقديم طلب لتبني هذا الأليف الرائع، لدينا منزل آمن وتجربة سابقة في العناية بالحيوانات...'
+            }"
+          ></textarea>
+        </div>
+
+        <!-- Privacy & Flow Notice -->
+        <div class="p-3 rounded-2xl bg-[#fff5ea] border border-brand-peachBorder text-xs text-brand-subtleGray space-y-1">
+          <div class="flex items-center gap-1.5 text-brand-orange font-black">
+            <i class="fa-solid fa-shield-halved text-xs"></i>
+            <span>نظام التواصل الآمن:</span>
+          </div>
+          <p class="m-0 leading-normal font-semibold">
+            سيصل طلبك إلى الطرف الآخر للموافقة، وبمجرد قبوله سيتم فتح محادثة فورية وتبادل معلومات الاتصال المباشر وفق إعدادات الخصوصية.
+          </p>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="flex items-center justify-end gap-2.5 pt-2">
+          <button id="cancel-contact-request-btn" class="px-4 py-2 rounded-xl bg-white border border-brand-peachBorder text-brand-dark font-extrabold text-xs hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer">
+            إلغاء
+          </button>
+          <button id="submit-contact-request-btn" class="px-6 py-2 rounded-xl bg-brand-orange text-white font-black text-xs shadow-soft hover:bg-brand-orange/95 transition active:scale-95 cursor-pointer">
+            إرسال الطلب الآن ✈️
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+}
+
+export function attachContactRequestModalEvents(targetPet: Pet | null): void {
+  if (!targetPet) return;
+
+  const closeBtn = document.getElementById('close-contact-request-btn');
+  const cancelBtn = document.getElementById('cancel-contact-request-btn');
+  const backdrop = document.getElementById('contact-request-modal-backdrop');
+
+  const handleClose = () => {
+    state.setSelectedPetForRequest(null);
+  };
+
+  if (closeBtn) closeBtn.addEventListener('click', handleClose);
+  if (cancelBtn) cancelBtn.addEventListener('click', handleClose);
+  if (backdrop) {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) handleClose();
+    });
+  }
+
+  const submitBtn = document.getElementById('submit-contact-request-btn');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', () => {
+      const messageTextarea = document.getElementById('contact-request-message') as HTMLTextAreaElement;
+      const petSelect = document.getElementById('select-user-mating-pet') as HTMLSelectElement;
+
+      const message =
+        messageTextarea && messageTextarea.value.trim()
+          ? messageTextarea.value.trim()
+          : targetPet.status === 'mating'
+          ? 'السلام عليكم، أود التواصل للتنسيق بخصوص تزاوج قطتي مع قطكم الجميل. التحاليل والتطعيمات سليمة.'
+          : 'السلام عليكم، أود تقديم طلب رسمي لتبني القطة وتوفير أفضل بيئة معيشية لها.';
+
+      const selectedUserPetId = petSelect ? petSelect.value : undefined;
+
+      state.sendContactRequest(targetPet, message, selectedUserPetId);
+      state.setSelectedPetForRequest(null);
+      // Switch to Chat tab to see the pending request
+      state.setCurrentTab('chat');
+    });
+  }
+}

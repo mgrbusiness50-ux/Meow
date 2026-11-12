@@ -1,0 +1,294 @@
+<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>Meow - شوفلك مياو</title>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Baloo Bhaijaan 2 & Bubblegum Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@500;600;700;800&amp;family=Bubblegum+Sans&amp;display=swap" rel="stylesheet">
+<!-- FontAwesome for playful rounded icons -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<!-- Tailwind Custom Configuration -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              cream: '#FFF9E9',
+              lightCream: '#FFFDF7',
+              orange: '#E67E22',
+              orangeHover: '#D35400',
+              accent: '#F38F42',
+              peachBorder: '#FFE2C5',
+              dark: '#2A2521',
+              subtleGray: '#8C827A'
+            }
+          },
+          fontFamily: {
+            baloo: ['"Baloo Bhaijaan 2"', 'cursive', 'sans-serif'],
+            bubble: ['"Bubblegum Sans"', 'cursive', 'sans-serif']
+          },
+          boxShadow: {
+            'soft': '0 8px 24px -4px rgba(230, 126, 34, 0.12)',
+            'card': '0 6px 18px -2px rgba(139, 90, 43, 0.08)',
+            'nav': '0 12px 36px 0 rgba(42, 37, 33, 0.16)'
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-brand-cream text-brand-dark font-baloo min-h-screen antialiased selection:bg-brand-orange selection:text-white pb-32">
+<style data-purpose="custom-scroll-and-enhancements">
+    /* Hide horizontal scrollbar for clean story-like filter pills */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    /* iOS friendly touch tap highlight */
+    * {
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Header transition for fast scroll auto-hide */
+    #main-header {
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+      will-change: transform;
+    }
+    #main-header.header-hidden {
+      transform: translateY(-110%);
+    }
+  </style>
+<!-- BEGIN: MobileContainer -->
+<div class="max-w-md mx-auto min-h-screen relative flex flex-col justify-start overflow-x-hidden"><div class="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true"><svg class="absolute -top-6 -left-8 w-36 h-36 text-brand-orange/5 rotate-[-25deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="11" cy="6.5" r="1.8"></circle><circle cx="15.5" cy="7.5" r="1.8"></circle><circle cx="18.5" cy="11" r="1.8"></circle><path d="M12 11c-3 0-5.5 2.2-5.5 4.8 0 2.2 2 3.7 4.2 3.7.8 0 1.6-.2 2.3-.5.8.3 1.6.5 2.3.5 2.2 0 4.2-1.5 4.2-3.7 0-2.6-2.5-4.8-5.5-4.8z"></path></svg><svg class="absolute top-1/4 -right-6 w-28 h-28 text-brand-orange/5 rotate-[18deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="11" cy="6.5" r="1.8"></circle><circle cx="15.5" cy="7.5" r="1.8"></circle><circle cx="18.5" cy="11" r="1.8"></circle><path d="M12 11c-3 0-5.5 2.2-5.5 4.8 0 2.2 2 3.7 4.2 3.7.8 0 1.6-.2 2.3-.5.8.3 1.6.5 2.3.5 2.2 0 4.2-1.5 4.2-3.7 0-2.6-2.5-4.8-5.5-4.8z"></path></svg><svg class="absolute top-2/3 -left-6 w-32 h-32 text-brand-orange/5 rotate-[35deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="11" cy="6.5" r="1.8"></circle><circle cx="15.5" cy="7.5" r="1.8"></circle><circle cx="18.5" cy="11" r="1.8"></circle><path d="M12 11c-3 0-5.5 2.2-5.5 4.8 0 2.2 2 3.7 4.2 3.7.8 0 1.6-.2 2.3-.5.8.3 1.6.5 2.3.5 2.2 0 4.2-1.5 4.2-3.7 0-2.6-2.5-4.8-5.5-4.8z"></path></svg><svg class="absolute bottom-24 right-4 w-24 h-24 text-brand-orange/5 rotate-[-15deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="11" cy="6.5" r="1.8"></circle><circle cx="15.5" cy="7.5" r="1.8"></circle><circle cx="18.5" cy="11" r="1.8"></circle><path d="M12 11c-3 0-5.5 2.2-5.5 4.8 0 2.2 2 3.7 4.2 3.7.8 0 1.6-.2 2.3-.5.8.3 1.6.5 2.3.5 2.2 0 4.2-1.5 4.2-3.7 0-2.6-2.5-4.8-5.5-4.8z"></path></svg></div>
+<!-- BEGIN: TopBarAndLogo -->
+<header class="sticky top-0 z-40 w-full bg-[#FFF9E9]/95 backdrop-blur-md border-b border-brand-peachBorder/40 shadow-sm" id="main-header">
+<div class="px-5 pt-3 pb-3 flex flex-col gap-3" style="padding-top: max(2rem, env(safe-area-inset-top, 2rem));">
+<!-- Row 1: Logo & View Switcher -->
+<div class="flex items-center justify-between"><!-- View Switcher (Swapped to first position) -->
+<div class="bg-white/80 border border-brand-peachBorder/60 p-1 rounded-2xl flex items-center gap-1 shadow-sm" data-purpose="view-switcher" id="view-switcher">
+<button aria-label="عرض شبكي" class="h-9 px-3 rounded-xl bg-brand-orange text-white flex items-center justify-center shadow-sm transition-all active:scale-95" id="btn-grid-view" onclick="setView('grid')" type="button">
+<i class="fa-solid fa-table-cells-large text-sm"></i>
+</button>
+<button aria-label="عرض قائمة" class="h-9 px-3 rounded-xl text-brand-dark/70 hover:bg-white/70 flex items-center justify-center transition-all active:scale-95" id="btn-list-view" onclick="setView('list')" type="button">
+<i class="fa-solid fa-list-ul text-sm"></i>
+</button>
+</div>
+<!-- Brand Logo (Significantly enlarged) -->
+<img alt="Meow Brand Logo" class="w-auto object-contain drop-shadow-sm cursor-pointer transition-transform active:scale-95" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAY6QJL7JKltHBT26Mu5KNgb6l2xOIOIxLco06CS0t_ZH2zdMUUy9UMf7RAzLI1gylCQjTd5f2uzeczaNLfb3SHkpCIEmQOqhUzf-HXWv9o8GLI4h79IX2hdBoWsZ_PqeGD1iL7-0F0ORVYN1Ft3sQywD_LcaiBkAV7-38J1wRwjfbzRneDBSOjHhLFX9vgoI7TDFiUrcCCMr_3r6FBg6lYdrHFVSA2gYQTefyVuIHC3CG9epzhruHRcfmo9yr_3SwC" style="height: 84px; max-height: 90px;"></div>
+<!-- Row 2: Filter Settings Button & Category Pills -->
+<div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5" id="category-filters-container"><!-- Filter Controls Button -->
+<div class="relative shrink-0">
+<button aria-label="تصفية النتائج" class="h-12 w-12 rounded-2xl border border-brand-peachBorder bg-white flex items-center justify-center text-brand-orange font-bold shadow-sm transition active:scale-95 hover:bg-brand-peachBorder/20" id="filter-toggle-btn" onclick="toggleFilterBadge()" type="button">
+<i class="fa-solid fa-sliders text-lg"></i>
+</button>
+<span class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-2 border-white rounded-full flex items-center justify-center text-[9px] text-white font-bold transition-all" id="filter-badge">✕</span>
+</div>
+<!-- Category: All (الكل) - Active -->
+<button class="category-tab h-12 px-6 rounded-2xl bg-brand-orange text-white font-black text-base flex items-center justify-center shadow-soft shrink-0 transition-all active:scale-95 border border-brand-orange" id="tab-all" onclick="filterPets('all', this)" type="button">
+<span class="">الكل</span>
+</button>
+<!-- Category: Cats (قطط) -->
+<button class="category-tab h-12 px-6 rounded-2xl bg-white border border-brand-peachBorder text-brand-dark font-black text-base flex items-center justify-center shrink-0 hover:bg-white/80 active:scale-95 transition-all shadow-sm" id="tab-cats" onclick="filterPets('cat', this)" type="button">
+<span class="">قطط</span>
+</button>
+<!-- Category: Dogs (كلاب) -->
+<button class="category-tab h-12 px-6 rounded-2xl bg-white border border-brand-peachBorder text-brand-dark font-black text-base flex items-center justify-center shrink-0 hover:bg-white/80 active:scale-95 transition-all shadow-sm" id="tab-dogs" onclick="filterPets('dog', this)" type="button">
+<span class="">كلاب</span>
+</button></div>
+</div>
+<div class="pointer-events-none absolute -bottom-4 left-0 right-0 h-4 bg-gradient-to-b from-[#FFF9E9] to-transparent" style="padding-top: max(2rem, env(safe-area-inset-top, 2rem));"></div></header>
+<!-- END: TopBarAndLogo -->
+<!-- BEGIN: CategoryFilters -->
+<!-- END: CategoryFilters -->
+<!-- BEGIN: PetCardsGrid -->
+<main class="px-5 pt-3 pb-6 flex-1">
+<div class="grid grid-cols-2 gap-4" data-purpose="pet-listings-grid"><!-- Pet Card 1: طعمة (Taeme) -->
+<article class="pet-card bg-brand-lightCream rounded-3xl border border-brand-peachBorder overflow-hidden shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft" data-pet-type="cat">
+<div class="relative w-full h-44 overflow-hidden bg-brand-peachBorder/30">
+<img alt="صورة القطة طعمة" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGEhIQ5AiAo9vN3pIRSSp7JgVwCGOUkicRnrt9bsba_jQdO2K28l45CO2HQ5y1Q4-a0Zxaa-2f_pDUkHTvt5aSNc0YfqD_N4xgVftHaTtNnl9sPL-o77ME_LhZkx2fAIC72N0bdLvFuAggbnEDBkA_OIjWtg12vMyiAyV6915NRaCoWRhKvlP67GjIqXsEypc5R7kczNUUVxFFyGqHyYfu40f-GDdCzx8rkaQhLfI">
+<div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm">
+<span class="">للتبني</span>
+<span class="text-[10px]">✨</span>
+</div>
+<button aria-label="إضافة للمفضلة" class="fav-btn absolute top-2.5 left-2.5 w-8 h-8 rounded-full bg-brand-dark/40 backdrop-blur-md text-white flex items-center justify-center hover:bg-brand-orange transition-colors active:scale-90" onclick="toggleFavorite(this)" type="button">
+<i class="fa-regular fa-heart text-xs"></i>
+</button>
+</div>
+<div class="p-3 text-center flex flex-col justify-center items-center">
+<h2 class="text-lg font-black text-brand-dark tracking-tight leading-tight">Taeme, 4</h2>
+<p class="text-xs uppercase font-extrabold text-brand-subtleGray tracking-wider mt-0.5">شيرازي • GRIFFON</p>
+</div>
+</article>
+<!-- Pet Card 2: مايلو (Mylo) -->
+<article class="pet-card bg-brand-lightCream rounded-3xl border border-brand-peachBorder overflow-hidden shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft" data-pet-type="dog">
+<div class="relative w-full h-44 overflow-hidden bg-brand-peachBorder/30">
+<img alt="صورة الكلب مايلو" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAuO5hU-Ap1nVkLkcUiJq6LrITMGKn1fh4oYFTbR-q01UvKBumQ1VzkfhwjLduA1aPoB0ChpNTd-i8gF5_UHzwCCbnHLkqLgUWzLWo2QgVnFwDToiqovpzCzHmCBQWLqeI3rpT0MbMZA2RoqNe28zDhSWimmcPQpN46DAB8_RUqBNolFlPgRW0XKryp_z-PeYOC7QNTzeyottazHrZEfOxIcu7G-ZjQcu3oJr3RKj4">
+<div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm">
+<span class="">للتبني</span>
+<span class="text-[10px]">✨</span>
+</div>
+<button aria-label="إضافة للمفضلة" class="fav-btn absolute top-2.5 left-2.5 w-8 h-8 rounded-full bg-brand-dark/40 backdrop-blur-md text-white flex items-center justify-center hover:bg-brand-orange transition-colors active:scale-90" onclick="toggleFavorite(this)" type="button">
+<i class="fa-regular fa-heart text-xs"></i>
+</button>
+</div>
+<div class="p-3 text-center flex flex-col justify-center items-center">
+<h2 class="text-lg font-black text-brand-dark tracking-tight leading-tight">Mylo, 2</h2>
+<p class="text-xs uppercase font-extrabold text-brand-subtleGray tracking-wider mt-0.5">رومي • CHIHUAHUA</p>
+</div>
+</article>
+<!-- Pet Card 3: زعتر (Zataar) -->
+<article class="pet-card bg-brand-lightCream rounded-3xl border border-brand-peachBorder overflow-hidden shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft" data-pet-type="cat">
+<div class="relative w-full h-44 overflow-hidden bg-brand-peachBorder/30">
+<img alt="صورة القطة زعتر" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7kMh2SsYAFFsT4HNrI6n9dgK9d-2pCRW7PLL2Xdp0pGDCjcTUw8XrH1U3UWcKoHAVbCT9GgNvi6C2cYJsTemnTGm6tjb-twcG6unW6ozTtbDW9efG2pz5tu51LRgnNfh2VVyjrHXlkAXBuSOl0KeCOzcLtTLPRDrG5VCbM7nFPSwEYprukpiC4S8tM66wY9oka63RLdC2UwPet_44l42uRWLuosOypKBstNdkmDY">
+<div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm">
+<span class="">للتبني</span>
+<span class="text-[10px]">✨</span>
+</div>
+<button aria-label="إضافة للمفضلة" class="fav-btn absolute top-2.5 left-2.5 w-8 h-8 rounded-full bg-brand-dark/40 backdrop-blur-md text-white flex items-center justify-center hover:bg-brand-orange transition-colors active:scale-90" onclick="toggleFavorite(this)" type="button">
+<i class="fa-regular fa-heart text-xs"></i>
+</button>
+</div>
+<div class="p-3 text-center flex flex-col justify-center items-center">
+<h2 class="text-lg font-black text-brand-dark tracking-tight leading-tight">Zataar, 2</h2>
+<p class="text-xs uppercase font-extrabold text-brand-subtleGray tracking-wider mt-0.5">سكوتش • SCOTTISH</p>
+</div>
+</article>
+<!-- Pet Card 4: جوهر (Gohar) -->
+<article class="pet-card bg-brand-lightCream rounded-3xl border border-brand-peachBorder overflow-hidden shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft" data-pet-type="cat">
+<div class="relative w-full h-44 overflow-hidden bg-brand-peachBorder/30">
+<img alt="صورة القطة جوهر" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyyjqkNyclYjDxcUXDD1vwTbzz3Ak2FS1lE-UTBDNkv6-a2Gr1yh5B0Uo8TclnFXYeqskoGuZq2Xq5kKrcSkcS4His7kNYlllTbmtqNC0oNBiAdZIMtNCnqS6inqJN0tP35xw_ToOYN3fHp7p3vKuOVGb-1e1dZwnuo03e1291mCUH7cMkey6b1WTg96lBXSSnssrmTMatvPAN-mAtI3FdNN33dRFiYHV8Q9kQ6K0">
+<div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm">
+<span class="">للتبني</span>
+<span class="text-[10px]">✨</span>
+</div>
+<button aria-label="إضافة للمفضلة" class="fav-btn absolute top-2.5 left-2.5 w-8 h-8 rounded-full bg-brand-dark/40 backdrop-blur-md text-white flex items-center justify-center hover:bg-brand-orange transition-colors active:scale-90" onclick="toggleFavorite(this)" type="button">
+<i class="fa-regular fa-heart text-xs"></i>
+</button>
+</div>
+<div class="p-3 text-center flex flex-col justify-center items-center">
+<h2 class="text-lg font-black text-brand-dark tracking-tight leading-tight">Gohar, 6</h2>
+<p class="text-xs uppercase font-extrabold text-brand-subtleGray tracking-wider mt-0.5">بريتيش • BRITISH</p>
+</div>
+</article></div>
+</main>
+<!-- END: PetCardsGrid -->
+<!-- BEGIN: FloatingBottomNavigation -->
+<nav aria-label="الشريط السفلي" class="fixed left-0 right-0 max-w-md mx-auto px-6 z-50 pointer-events-none mb-3" style="bottom: 2.5rem;">
+<div class="bg-white/95 backdrop-blur-md border border-brand-peachBorder rounded-full py-2.5 shadow-nav flex items-center pointer-events-auto px-3 justify-between"><!-- Tab 1: التزاوج (Mating / Heart) --><button aria-label="التزاوج" class="flex items-center justify-center p-1 rounded-full text-brand-subtleGray hover:text-brand-orange transition-all active:scale-90 group" type="button"><div class="w-12 h-12 rounded-full flex items-center justify-center hover:bg-brand-peachBorder/20 transition-all"><svg class="w-7 h-7 fill-none stroke-current stroke-2 group-hover:scale-110 transition-transform" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path></svg></div></button><!-- Tab 2: التبني (Adoption / House) --><button aria-label="التبني" class="flex items-center justify-center p-1 rounded-full text-brand-orange transition-all active:scale-90 group" type="button"><div class="w-12 h-12 rounded-full bg-gradient-to-tr from-brand-orange to-brand-accent text-white flex items-center justify-center shadow-soft hover:shadow-card transition-all"><svg class="w-7 h-7 fill-none stroke-current stroke-2 drop-shadow-sm" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1h-5a1 1 0 01-1-1v-5a1 1 0 00-1-1h-2a1 1 0 00-1 1v5a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"></path><path d="M12 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill="currentColor" stroke="none"></path></svg></div></button><!-- Tab 3: الرسائل (Messages / Chat) --><button aria-label="الرسائل" class="flex items-center justify-center p-1 rounded-full text-brand-subtleGray hover:text-brand-orange transition-all active:scale-90 group" type="button"><div class="w-12 h-12 rounded-full flex items-center justify-center hover:bg-brand-peachBorder/20 transition-all"><svg class="w-7 h-7 fill-none stroke-current stroke-2 group-hover:scale-110 transition-transform" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"></path><circle cx="8.5" cy="11.5" fill="currentColor" r="1"></circle><circle cx="12" cy="11.5" fill="currentColor" r="1"></circle><circle cx="15.5" cy="11.5" fill="currentColor" r="1"></circle></svg></div></button><!-- Tab 4: العيادة (Clinic / Medical Kit) --><button aria-label="العيادة" class="flex items-center justify-center p-1 rounded-full text-brand-subtleGray hover:text-brand-orange transition-all active:scale-90 group" type="button"><div class="w-12 h-12 rounded-full flex items-center justify-center hover:bg-brand-peachBorder/20 transition-all"><svg class="w-7 h-7 fill-none stroke-current stroke-2 group-hover:scale-110 transition-transform" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect height="15" rx="3" width="18" x="3" y="6"></rect><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"></path><path d="M12 10v7M8.5 13.5h7" stroke-width="2.5"></path></svg></div></button><!-- Tab 5: المتجر (Store / Storefront) --><button aria-label="المتجر" class="relative flex items-center justify-center p-1 rounded-full text-brand-dark/70 hover:text-brand-orange transition-all active:scale-90 group" type="button"><div class="w-12 h-12 rounded-full flex items-center justify-center hover:bg-brand-peachBorder/20 transition-all relative"><svg class="w-7 h-7 fill-none stroke-current stroke-2 group-hover:scale-110 transition-transform" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 9l1.5-6h15L21 9M3 9a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0M3 9v11a2 2 0 002 2h14a2 2 0 002-2V9"></path><path d="M10 14h4v4h-4z" fill="currentColor" fill-opacity="0.15"></path></svg><span class="absolute top-1 right-1 w-2.5 h-2.5 bg-brand-orange rounded-full border-2 border-white shadow-sm"></span></div></button><!-- Tab 6: الملف الشخصي (Profile / User) --><button aria-label="الملف الشخصي" class="flex items-center justify-center p-1 rounded-full text-brand-subtleGray hover:text-brand-orange transition-all active:scale-90 group" type="button"><div class="w-12 h-12 rounded-full flex items-center justify-center hover:bg-brand-peachBorder/20 transition-all"><svg class="w-7 h-7 fill-none stroke-current stroke-2 group-hover:scale-110 transition-transform" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path><circle cx="12" cy="7" r="4"></circle><path d="M9 6a1.5 1.5 0 013-1.5" stroke-linecap="round"></path></svg></div></button></div>
+</nav><script>
+  function filterPets(category, activeBtn) {
+    document.querySelectorAll('.category-tab').forEach(btn => {
+      btn.classList.remove('bg-brand-orange', 'text-white', 'shadow-soft', 'border-brand-orange');
+      btn.classList.add('bg-white', 'border-brand-peachBorder', 'text-brand-dark');
+    });
+    activeBtn.classList.remove('bg-white', 'border-brand-peachBorder', 'text-brand-dark');
+    activeBtn.classList.add('bg-brand-orange', 'text-white', 'shadow-soft', 'border-brand-orange');
+
+    const cards = document.querySelectorAll('.pet-card');
+    cards.forEach(card => {
+      const type = card.getAttribute('data-pet-type');
+      if (category === 'all' || type === category) {
+        card.style.display = '';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+  }
+
+  function setView(mode) {
+    const grid = document.querySelector("[data-purpose='pet-listings-grid']");
+    const btnGrid = document.getElementById('btn-grid-view');
+    const btnList = document.getElementById('btn-list-view');
+    if (!grid) return;
+
+    if (mode === 'grid') {
+      grid.classList.remove('grid-cols-1');
+      grid.classList.add('grid-cols-2');
+      btnGrid.className = 'h-9 px-3 rounded-xl bg-brand-orange text-white flex items-center justify-center shadow-sm transition-all active:scale-95';
+      btnList.className = 'h-9 px-3 rounded-xl text-brand-dark/70 hover:bg-white/70 flex items-center justify-center transition-all active:scale-95';
+    } else {
+      grid.classList.remove('grid-cols-2');
+      grid.classList.add('grid-cols-1');
+      btnList.className = 'h-9 px-3 rounded-xl bg-brand-orange text-white flex items-center justify-center shadow-sm transition-all active:scale-95';
+      btnGrid.className = 'h-9 px-3 rounded-xl text-brand-dark/70 hover:bg-white/70 flex items-center justify-center transition-all active:scale-95';
+    }
+  }
+
+  function toggleFilterBadge() {
+    const badge = document.getElementById('filter-badge');
+    if (badge) {
+      badge.style.display = badge.style.display === 'none' ? 'flex' : 'none';
+    }
+  }
+
+  function toggleFavorite(button) {
+    const icon = button.querySelector('i');
+    if (icon) {
+      if (icon.classList.contains('fa-regular')) {
+        icon.classList.remove('fa-regular');
+        icon.classList.add('fa-solid', 'text-red-500');
+        button.classList.add('bg-white');
+        button.classList.remove('bg-brand-dark/40');
+      } else {
+        icon.classList.remove('fa-solid', 'text-red-500');
+        icon.classList.add('fa-regular');
+        button.classList.remove('bg-white');
+        button.classList.add('bg-brand-dark/40');
+      }
+    }
+  }
+
+  /* Intelligent Velocity-based Header Hide & Reveal */
+  (function initSmartHeaderScroll() {
+    const header = document.getElementById('main-header');
+    if (!header) return;
+
+    let lastScrollY = window.pageYOffset || document.documentElement.scrollTop;
+    let lastTime = performance.now();
+    let scrollStopTimer = null;
+
+    window.addEventListener('scroll', () => {
+      const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
+      const currentTime = performance.now();
+      const deltaY = currentScrollY - lastScrollY;
+      const deltaTime = Math.max(currentTime - lastTime, 1);
+      const velocity = deltaY / deltaTime; // px per ms
+
+      // Fast scroll down (velocity > 1.2 px/ms and scrolled past header height)
+      if (velocity > 1.2 && currentScrollY > 100) {
+        header.classList.add('header-hidden');
+      } 
+      // Any upward scroll immediately restores header
+      else if (deltaY < -2 || currentScrollY <= 20) {
+        header.classList.remove('header-hidden');
+      }
+
+      // When user stops scrolling, automatically restore header smoothly
+      clearTimeout(scrollStopTimer);
+      scrollStopTimer = setTimeout(() => {
+        header.classList.remove('header-hidden');
+      }, 150);
+
+      lastScrollY = currentScrollY;
+      lastTime = currentTime;
+    }, { passive: true });
+  })();
+</script>
+<!-- END: FloatingBottomNavigation -->
+</div>
+<!-- END: MobileContainer -->
+
+
+
+
+
+
+
+
+</body></html>

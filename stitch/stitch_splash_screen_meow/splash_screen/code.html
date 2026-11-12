@@ -1,0 +1,68 @@
+<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+              "primary": "#944a00",
+              "background-start": "#FFFBEB",
+              "background-end": "#FFF8E7",
+              "glow-color": "#F7E1C3",
+              "on-background": "#3E2723"
+            },
+            "fontFamily": {
+              "headline": ["Plus Jakarta Sans"],
+              "body": ["Plus Jakarta Sans"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background: radial-gradient(circle at center, #FFFBEB 0%, #FFF8E7 100%);
+            color: #3E2723;
+        }
+        .animate-fade-in {
+            animation: fadeIn 1.2s ease-out forwards;
+        }
+        .soft-aura {
+            filter: blur(40px);
+            background: #F7E1C3;
+            opacity: 0.4;
+            border-radius: 50%;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&amp;family=Bubblegum+Sans&amp;display=swap"></head>
+<body class="antialiased overflow-hidden min-h-screen" data-mode="connect">
+<main class="relative h-screen w-full flex flex-col items-center justify-center px-8">
+<!-- Center Logo Section with Soft Aura -->
+<div class="relative flex-grow flex items-center justify-center animate-fade-in">
+<!-- Subtle Glow/Aura -->
+<div class="absolute w-72 h-72 soft-aura -z-10"></div>
+<img alt="Meow Logo" class="relative z-10 w-64 h-auto object-contain max-w-[80vw]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBkUboxHVAVTpJU18DOk8LGxlZINhBS3GyspVpAnljo_ufEzmybRtZjfwD2izQ4ck6QZJszfzEROi_8GSqmxgIs8nfh6X9a2weRQJHugsh7tIjzldPRXfASsGwL1ed96d1NI3PLfkVzY7jisJPkE-wbo5VsxogWc5MkQYTEdiFPaSO2GHSv4O7QhUswU9KT4XnE4sieTVurv6MPIAjNrs3MPskxA07TFv2ZDQdowVrUfuT6-BTLSIhQKmYp7q5sJcab">
+</div>
+<!-- Footer Text -->
+<div class="pb-12 text-center animate-fade-in" style="animation-delay: 0.3s; font-family: &quot;Bubblegum Sans&quot;, cursive;">
+<p class="text-[10px] uppercase tracking-[0.3em] opacity-40 mb-1.5 font-medium">By</p>
+<p class="text-sm font-semibold tracking-[0.05em] text-[#3E2723]/80">Mohamed Gamil</p>
+</div>
+</main>
+
+
+
+
+
+
+</body></html>

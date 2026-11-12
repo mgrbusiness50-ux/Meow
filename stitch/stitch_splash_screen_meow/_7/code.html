@@ -1,0 +1,223 @@
+<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Meow - تسجيل بيانات المالك</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&amp;family=Bubblegum+Sans&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&amp;family=Bubblegum+Sans&amp;family=Fredoka:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#FFFBEB",
+                    "primary-brand": "#e67e22",
+                    "primary-hover": "#ea580c"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "1.5rem",
+                    "xl": "2rem"
+            }
+          },
+        },
+      }
+    </script>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+  html, body, h1, h2, h3, h4, h5, h6, p, span, a, button, input, label, select, div {
+    font-family: 'Baloo Bhaijaan 2', 'Plus Jakarta Sans', system-ui, sans-serif !important;
+  }
+  body {
+    min-height: max(884px, 100dvh);
+    background-color: #FFF9E9;
+    color: #2d221b;
+    -webkit-font-smoothing: antialiased;
+  }
+</style>
+</head>
+<body class="bg-[#FFF9E9] text-[#2d221b] min-h-screen flex flex-col items-center justify-between p-6"><div aria-hidden="true" class="pointer-events-none fixed inset-0 overflow-hidden z-0 select-none opacity-25"><svg class="absolute top-12 left-6 text-[#d6c7b2] w-12 h-12 transform -rotate-12" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="2"></circle><circle cx="11" cy="6.5" r="2"></circle><circle cx="15" cy="7.5" r="2"></circle><circle cx="18" cy="10.5" r="1.8"></circle><path d="M13 11c-2.8 0-5 2-5 4.5 0 2.2 2 3.5 4.5 3.5s4.5-1.3 4.5-3.5c0-2.5-1.2-4.5-4-4.5z"></path></svg><svg class="absolute top-44 right-8 text-[#d6c7b2] w-14 h-14 transform rotate-45" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="2"></circle><circle cx="11" cy="6.5" r="2"></circle><circle cx="15" cy="7.5" r="2"></circle><circle cx="18" cy="10.5" r="1.8"></circle><path d="M13 11c-2.8 0-5 2-5 4.5 0 2.2 2 3.5 4.5 3.5s4.5-1.3 4.5-3.5c0-2.5-1.2-4.5-4-4.5z"></path></svg><svg class="absolute top-1/2 left-4 text-[#d6c7b2] w-10 h-10 transform 15deg" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="2"></circle><circle cx="11" cy="6.5" r="2"></circle><circle cx="15" cy="7.5" r="2"></circle><circle cx="18" cy="10.5" r="1.8"></circle><path d="M13 11c-2.8 0-5 2-5 4.5 0 2.2 2 3.5 4.5 3.5s4.5-1.3 4.5-3.5c0-2.5-1.2-4.5-4-4.5z"></path></svg><svg class="absolute bottom-28 right-6 text-[#d6c7b2] w-12 h-12 transform -rotate-45" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="2"></circle><circle cx="11" cy="6.5" r="2"></circle><circle cx="15" cy="7.5" r="2"></circle><circle cx="18" cy="10.5" r="1.8"></circle><path d="M13 11c-2.8 0-5 2-5 4.5 0 2.2 2 3.5 4.5 3.5s4.5-1.3 4.5-3.5c0-2.5-1.2-4.5-4-4.5z"></path></svg><svg class="absolute bottom-8 left-10 text-[#d6c7b2] w-11 h-11 transform rotate-12" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="2"></circle><circle cx="11" cy="6.5" r="2"></circle><circle cx="15" cy="7.5" r="2"></circle><circle cx="18" cy="10.5" r="1.8"></circle><path d="M13 11c-2.8 0-5 2-5 4.5 0 2.2 2 3.5 4.5 3.5s4.5-1.3 4.5-3.5c0-2.5-1.2-4.5-4-4.5z"></path></svg></div><style>* { font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive, sans-serif !important; }</style>
+<!-- Header Section -->
+<header class="w-full max-w-md pt-8 flex flex-col items-center text-center space-y-4">
+<!-- Official Logo -->
+<div class="relative w-44 h-44 flex items-center justify-center">
+<img alt="Meow Logo" class="w-44 h-auto mx-auto object-contain drop-shadow-sm select-none" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDOjzE_84p_WGavfrDJ3-70SEK_qT-jFV26LCj73tUiejtx2BXmBOpUK8JYXTnYxaJLLeYPNKOhASAx5j6o6ePG6epVJBO9XsmAGl5cm6D1Qob56gl7nsfiP-DYJRCTcVlbEHut_xhiamzXaxZ5LCI7QYIMQW9tzVIsTYZrsZrtQC5QOQoo2c-MPmy0IuEaWdn9flFhOAgB-BiE0-J0Fn6yhPHd56Rw_Fi8rzJfVBXD6zQ3nWl5Q-IMRVptn0svjSXf">
+</div>
+<!-- Typography Cluster -->
+<div class="space-y-1">
+<h1 class="text-2xl sm:text-3xl font-extrabold text-[#1a1612] tracking-normal">تسجيل بيانات المالك</h1>
+</div>
+</header>
+<!-- Main Content: Form -->
+<main class="w-full max-w-md flex-1 flex flex-col justify-start py-5">
+<form class="space-y-5" id="ownerForm" onsubmit="return false;">
+<!-- الاسم -->
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">الاسم</label>
+<div class="relative flex items-center">
+<input class="w-full h-16 px-6 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm" id="ownerName" placeholder="اكتب اسمك الكامل" type="text">
+</div>
+</div>
+<!-- رقم الهاتف -->
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">رقم الهاتف</label>
+<div class="relative flex items-center h-16" dir="ltr">
+<span class="h-full inline-flex items-center justify-center px-5 rounded-l-[28px] border-2 border-r-0 border-[#d6c7b2] bg-[#F7E1C3] text-[#1a1612] font-black text-lg tracking-wider select-none">+20</span>
+<input class="w-full h-full px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-r-[28px] text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left" dir="ltr" id="ownerPhone" placeholder="01xxxxxxxxx" type="tel">
+</div>
+</div>
+<!-- الجنس -->
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">الجنس</label>
+<div class="grid grid-cols-2 gap-3.5">
+<!-- Male Option Button -->
+<button class="h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]" id="gender-male-btn" onclick="setGender('male')" type="button"><span class="text-2xl">♂</span><span class="">ذكر</span></button>
+<!-- Female Option Button -->
+<button class="h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]" id="gender-female-btn" onclick="setGender('female')" type="button"><span class="text-2xl">♀</span><span class="">أنثى</span></button>
+<input id="gender-input" name="gender" type="hidden" value="female">
+</div>
+</div>
+<!-- المحافظة والحي -->
+<div class="grid grid-cols-2 gap-3.5">
+<!-- المحافظة -->
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">المحافظة</label>
+<div class="relative flex items-center h-16">
+<select class="w-full h-full px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-bold text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none cursor-pointer" id="govSelect"><option value="القاهرة">القاهرة</option><option value="الجيزة">الجيزة</option><option value="الإسكندرية">الإسكندرية</option><option value="القليوبية">القليوبية</option><option value="الدقهلية">الدقهلية</option><option value="الغربية">الغربية</option><option value="الشرقية">الشرقية</option><option value="المنوفية">المنوفية</option><option value="البحيرة">البحيرة</option><option value="كفر الشيخ">كفر الشيخ</option><option value="دمياط">دمياط</option><option value="بورسعيد">بورسعيد</option><option value="الإسماعيلية">الإسماعيلية</option><option value="السويس">السويس</option><option value="شمال سيناء">شمال سيناء</option><option value="جنوب سيناء">جنوب سيناء</option><option value="بني سويف">بني سويف</option><option value="الفيوم">الفيوم</option><option value="المنيا">المنيا</option><option value="أسيوط">أسيوط</option><option value="سوهاج">سوهاج</option><option value="قنا">قنا</option><option value="الأقصر">الأقصر</option><option value="أسوان">أسوان</option><option value="البحر الأحمر">البحر الأحمر</option><option value="الوادي الجديد">الوادي الجديد</option><option value="مطروح">مطروح</option></select>
+
+</div>
+</div>
+<!-- المدينة / الحي -->
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">المدينة / الحي</label>
+<div class="relative flex items-center h-16">
+<select class="w-full h-full px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-bold text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none cursor-pointer" id="citySelect"><option value="مدينة نصر">مدينة نصر</option><option value="مصر الجديدة">مصر الجديدة</option><option value="التجمع الخامس / القاهرة الجديدة">التجمع الخامس / القاهرة الجديدة</option><option value="المعادي">المعادي</option><option value="الزمالك">الزمالك</option><option value="الدقي / وسط البلد">الدقي / وسط البلد</option><option value="شبرا">شبرا</option><option value="حلوان">حلوان</option><option value="المقطم">المقطم</option><option value="عين شمس">عين شمس</option></select>
+
+</div>
+</div>
+</div>
+<!-- CTA Button -->
+<div class="pt-5">
+<button class="w-full h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[28px] font-extrabold text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer" type="submit"><span class="">اشطا</span></button>
+</div>
+</form>
+</main>
+<!-- Footer Spacer -->
+<footer class="w-full max-w-md pb-6 text-center"></footer>
+<script>
+  // Comprehensive Governorates & Cities Data for Egypt (All 27 Governorates)
+  const egyptData = {
+    "القاهرة": ["مدينة نصر", "مصر الجديدة", "التجمع الخامس / القاهرة الجديدة", "المعادي", "الزمالك", "الدقي / وسط البلد", "شبرا", "حلوان", "المقطم", "عين شمس"],
+    "الجيزة": ["الدقي", "المهندسين", "6 أكتوبر", "الشيخ زايد", "الهرم", "فيصل", "العجوزة", "العمرانية", "الحوامدية"],
+    "الإسكندرية": ["سموحة", "سيدي جابر", "لوران", "جليم", "ميامي", "المنتزه", "العجمي", "الرمل", "الإبراهيمية"],
+    "القليوبية": ["بنها", "شبرا الخيمة", "قلیوب", "العبور", "طوخ", "القناطر الخيرية"],
+    "الدقهلية": ["المنصورة", "ميت غمر", "طلخا", "دكرنس", "بلقاس", "السنبلاوين"],
+    "الغربية": ["طنطا", "المحلة الكبرى", "زفتى", "كفر الزيات", "سمنود"],
+    "الشرقية": ["الزقازيق", "العاشر من رمضان", "بلبيس", "منيا القمح", "فاقوس"],
+    "المنوفية": ["شبين الكوم", "قويسنا", "أشمون", "منوف", "السادات", "بركة السبع"],
+    "البحيرة": ["دمنهور", "كفر الدوار", "إيتاي البارود", "رشيد", "أبو حمص"],
+    "كفر الشيخ": ["كفر الشيخ", "دسوق", "فوة", "مطوبس", "بلطيم"],
+    "دمياط": ["دمياط", "رأس البر", "دمياط الجديدة", "فارسكور", "كفر سعد"],
+    "بورسعيد": ["حي الشرق", "حي بورفؤاد", "حي العرب", "حي الضواحي", "حي الزهور"],
+    "الإسماعيلية": ["الإسماعيلية", "فايد", "القنطرة غرب", "القنطرة شرق", "التل الكبير"],
+    "السويس": ["حي السويس", "الأربعين", "فيصل", "الجناين", "عتاقة"],
+    "شمال سيناء": ["العريش", "بئر العبد", "الشيخ زويد", "رفح", "الحسنة"],
+    "جنوب سيناء": ["شرم الشيخ", "دهب", "نويبع", "طور سيناء", "طابا", "رأس سدر"],
+    "بني سويف": ["بني سويف", "بني سويف الجديدة", "الواسطى", "ناصر", "ببا"],
+    "الفيوم": ["الفيوم", "سنورس", "إطسا", "طامية", "يوسف الصديق"],
+    "المنيا": ["المنيا", "المنيا الجديدة", "ملوي", "مغاغة", "بني مزار", "سمالوط"],
+    "أسيوط": ["أسيوط", "أسيوط الجديدة", "ديروط", "القوصية", "منفلوط", "أبنوب"],
+    "سوهاج": ["سوهاج", "سوهاج الجديدة", "أخميم", "جرجا", "طهطا", "المراغة"],
+    "قنا": ["قنا", "قنا الجديدة", "نجع حمادي", "دشنا", "قوص", "فرشوط"],
+    "الأقصر": ["الأقصر", "البياضية", "القرنة", "أرمنت", "إسنا", "طيبة الجديدة"],
+    "أسوان": ["أسوان", "أسوان الجديدة", "كوم أمبو", "إدفو", "نصر النوبة", "دراو"],
+    "البحر الأحمر": ["الغردقة", "الجونة", "سفاجا", "القصير", "مرسى علم", "رأس غارب"],
+    "الالوادي الجديد": ["الخارجة", "الداخلة", "الفرافرة", "باريس", "بلاط"],
+    "الوادي الجديد": ["الخارجة", "الداخلة", "الفرافرة", "باريس", "بلاط"],
+    "مطروح": ["مرسى مطروح", "العلمين", "الساحل الشمالي", "سيوة", "الضبعة"]
+  };
+
+  // Gender Selection handler
+  function setGender(val) {
+    const maleBtn = document.getElementById('gender-male-btn');
+    const femaleBtn = document.getElementById('gender-female-btn');
+    const input = document.getElementById('gender-input');
+
+    if (input) input.value = val;
+
+    const unselectedClasses = 'h-14 relative flex items-center justify-center gap-2 px-4 rounded-2xl border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const maleSelectedClasses = 'h-14 relative flex items-center justify-center gap-2 px-4 rounded-2xl border-2 border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb] font-bold text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const femaleSelectedClasses = 'h-14 relative flex items-center justify-center gap-2 px-4 rounded-2xl border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+
+    if (val === 'male') {
+      if (maleBtn) maleBtn.className = maleSelectedClasses;
+      if (femaleBtn) femaleBtn.className = unselectedClasses;
+    } else if (val === 'female') {
+      if (femaleBtn) femaleBtn.className = femaleSelectedClasses;
+      if (maleBtn) maleBtn.className = unselectedClasses;
+    }
+  }
+
+  // Populate Governorates and Cities
+  function populateLocations() {
+    const govSelect = document.getElementById('govSelect');
+    const citySelect = document.getElementById('citySelect');
+    if (!govSelect || !citySelect) return;
+
+    // Filter unique keys from egyptData
+    const governorates = Object.keys(egyptData).filter(g => g !== 'الالوادي الجديد');
+
+    govSelect.innerHTML = '';
+    governorates.forEach((gov, index) => {
+      const opt = document.createElement('option');
+      opt.value = gov;
+      opt.textContent = gov;
+      if (gov === 'القاهرة') opt.selected = true;
+      govSelect.appendChild(opt);
+    });
+
+    function updateCities(selectedGov) {
+      const cities = egyptData[selectedGov] || [];
+      citySelect.innerHTML = '';
+      cities.forEach((city, index) => {
+        const opt = document.createElement('option');
+        opt.value = city;
+        opt.textContent = city;
+        if (index === 0) opt.selected = true;
+        citySelect.appendChild(opt);
+      });
+    }
+
+    // Initial setup with Cairo
+    updateCities('القاهرة');
+
+    // Event listener for changes
+    govSelect.addEventListener('change', function () {
+      updateCities(this.value);
+    });
+  }
+
+  // Bind Listeners
+  document.addEventListener('DOMContentLoaded', () => {
+    populateLocations();
+  });
+
+  // Run immediately in case DOM is already parsed
+  if (document.readyState === 'interactive' || document.readyState === 'complete') {
+    populateLocations();
+  }
+</script>
+
+
+
+
+
+
+
+
+
+
+</body></html>

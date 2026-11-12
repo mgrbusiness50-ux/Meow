@@ -1,0 +1,160 @@
+<!DOCTYPE html><html dir="rtl" lang="ar" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Meow - Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&amp;family=Bubblegum+Sans&amp;family=Fredoka:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-variant": "#e4e3db",
+                    "secondary-fixed": "#f5dfc1",
+                    "outline-variant": "#dcc1b1",
+                    "on-tertiary-fixed": "#360f00",
+                    "on-tertiary-fixed-variant": "#6c3921",
+                    "on-primary": "#ffffff",
+                    "surface": "#fffbef",
+                    "error-container": "#ffdad6",
+                    "surface-dim": "#dcdad2",
+                    "on-secondary-container": "#3E2723",
+                    "on-secondary": "#ffffff",
+                    "on-error": "#ffffff",
+                    "inverse-on-surface": "#f3f1e9",
+                    "on-surface-variant": "#3E2723",
+                    "on-secondary-fixed": "#251a07",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-container": "#e67e22",
+                    "surface-container-highest": "#e4e3db",
+                    "surface-container-high": "#eae8e0",
+                    "on-primary-container": "#502600",
+                    "primary": "#944a00",
+                    "surface-bright": "#fffbef",
+                    "outline": "#897365",
+                    "error": "#ba1a1a",
+                    "secondary-fixed-dim": "#d8c4a7",
+                    "inverse-surface": "#30312c",
+                    "on-secondary-fixed-variant": "#53452f",
+                    "on-primary-fixed-variant": "#713700",
+                    "background": "#fffbef",
+                    "background-light": "#fffbef",
+                    "secondary": "#6c5c45",
+                    "primary-fixed": "#ffdcc5",
+                    "surface-tint": "#944a00",
+                    "on-surface": "#3E2723",
+                    "surface-container-low": "#f5f4ec",
+                    "primary-fixed-dim": "#ffb783",
+                    "inverse-primary": "#ffb783",
+                    "tertiary-container": "#cd896b",
+                    "on-tertiary-container": "#52240e",
+                    "on-primary-fixed": "#301400",
+                    "tertiary-fixed": "#ffdbcd",
+                    "on-tertiary": "#ffffff",
+                    "secondary-container": "#F7E1C3",
+                    "surface-container": "#f0eee6",
+                    "tertiary": "#895036",
+                    "tertiary-fixed-dim": "#ffb596",
+                    "on-background": "#3E2723",
+                    "on-error-container": "#93000a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "display": ["Plus Jakarta Sans"],
+                    "headline": ["Plus Jakarta Sans"],
+                    "body": ["Plus Jakarta Sans"],
+                    "label": ["Plus Jakarta Sans"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #fffbef;
+            -webkit-font-smoothing: antialiased;
+            color: #3E2723;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .editorial-gradient {
+            background: linear-gradient(135deg, #944a00 0%, #e67e22 100%);
+        }
+        * {
+            border-top-color: transparent;
+        }
+    </style>
+<style>
+        body {
+          min-height: max(884px, 100dvh);
+        }
+    </style>
+<style>
+  html, body, h1, h2, h3, h4, h5, h6, p, span, a, button, input, label, div {
+    font-family: 'Baloo Bhaijaan 2', 'Bubblegum Sans', 'Fredoka', cursive, sans-serif !important;
+  }
+</style></head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col items-center justify-between p-6 border-0 outline-none" data-mode="connect" style="background-color: rgb(255, 249, 233); -webkit-font-smoothing: antialiased; color: rgb(62, 39, 35); min-height: max(884px, 100dvh); border-width: medium; border-style: none;"><div class="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none" aria-hidden="true" style="opacity: 0.35;"><svg class="absolute top-12 left-8 text-primary opacity-10 rotate-[-20deg] w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="17" cy="8.5" r="1.8"></circle><circle cx="10.2" cy="5.5" r="1.8"></circle><circle cx="13.8" cy="5.5" r="1.8"></circle><path d="M12 11c-2.8 0-5 1.8-5 4.5 0 1.9 1.4 3.5 3.3 3.5.9 0 1.4-.4 1.7-.4s.8.4 1.7.4c1.9 0 3.3-1.6 3.3-3.5 0-2.7-2.2-4.5-5-4.5z"></path></svg><svg class="absolute top-36 right-8 text-primary opacity-10 rotate-[25deg] w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="17" cy="8.5" r="1.8"></circle><circle cx="10.2" cy="5.5" r="1.8"></circle><circle cx="13.8" cy="5.5" r="1.8"></circle><path d="M12 11c-2.8 0-5 1.8-5 4.5 0 1.9 1.4 3.5 3.3 3.5.9 0 1.4-.4 1.7-.4s.8.4 1.7.4c1.9 0 3.3-1.6 3.3-3.5 0-2.7-2.2-4.5-5-4.5z"></path></svg><svg class="absolute top-1/2 left-6 text-primary opacity-10 rotate-[15deg] w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="17" cy="8.5" r="1.8"></circle><circle cx="10.2" cy="5.5" r="1.8"></circle><circle cx="13.8" cy="5.5" r="1.8"></circle><path d="M12 11c-2.8 0-5 1.8-5 4.5 0 1.9 1.4 3.5 3.3 3.5.9 0 1.4-.4 1.7-.4s.8.4 1.7.4c1.9 0 3.3-1.6 3.3-3.5 0-2.7-2.2-4.5-5-4.5z"></path></svg><svg class="absolute bottom-40 right-10 text-primary opacity-10 rotate-[-15deg] w-9 h-9" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="17" cy="8.5" r="1.8"></circle><circle cx="10.2" cy="5.5" r="1.8"></circle><circle cx="13.8" cy="5.5" r="1.8"></circle><path d="M12 11c-2.8 0-5 1.8-5 4.5 0 1.9 1.4 3.5 3.3 3.5.9 0 1.4-.4 1.7-.4s.8.4 1.7.4c1.9 0 3.3-1.6 3.3-3.5 0-2.7-2.2-4.5-5-4.5z"></path></svg><svg class="absolute bottom-16 left-12 text-primary opacity-10 rotate-[30deg] w-11 h-11" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="8.5" r="1.8"></circle><circle cx="17" cy="8.5" r="1.8"></circle><circle cx="10.2" cy="5.5" r="1.8"></circle><circle cx="13.8" cy="5.5" r="1.8"></circle><path d="M12 11c-2.8 0-5 1.8-5 4.5 0 1.9 1.4 3.5 3.3 3.5.9 0 1.4-.4 1.7-.4s.8.4 1.7.4c1.9 0 3.3-1.6 3.3-3.5 0-2.7-2.2-4.5-5-4.5z"></path></svg></div><style id="custom-font-style">* { font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive, sans-serif !important; }</style>
+<!-- Header Section -->
+<header class="w-full max-w-md pt-12 flex flex-col items-center text-center space-y-6 border-0 outline-none relative">
+<!-- Official Logo -->
+<div class="relative w-48 h-48 flex items-center justify-center border-0 outline-none">
+<img alt="Meow Logo" class="w-48 h-auto mx-auto object-contain drop-shadow-sm mb-4 border-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCy9-Bj41l3NxFfhGlxRN08LoqRQnQ1SXxTVm1PtAEaOLPCaCHSFDjF793njbjSmXLRpAMg_tN3Gvdc2zMPuYffbqTMo_Q4yl1wRHKEVV8DE0fNf68bdpASm_Hr2LvcpEege6Kz9FgRKf7W_JmzQzEETksPk5yqvYIh575uJ3SvE1kPF1e7PsIt-CZrakhgCME4hPAnVsmHuzpTSF1PE5RmuIX4x-wulpCbmiXtHnsalGcMt-SBNYCqTXK8COGmqzzI">
+</div>
+<!-- Typography Cluster -->
+<div class="space-y-2 border-0"><h1 class="text-2xl font-bold text-[#3E2723]">تسجيل الدخول</h1><p class="text-on-surface/70 font-body text-lg font-bold" style="font-weight: 700; letter-spacing: -0.01em;">مرحباً بعودتك إلى Meow 🐾</p></div>
+</header>
+<!-- Main Content: Login Form -->
+<main class="w-full max-w-md flex-1 flex flex-col justify-center space-y-8 py-10 relative">
+<!-- Social Login Grid -->
+<div class="space-y-4">
+<button class="flex items-center justify-center gap-4 w-full py-4 px-6 bg-white text-[#1f1f1f] rounded-2xl font-semibold transition-all hover:bg-gray-50 active:scale-95 shadow-sm border border-[#3E2723]/10"><div class="flex items-center justify-center gap-4 w-full"><svg class="w-6 h-6" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"></path><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path></svg><span class="font-label tracking-wide text-[17px] font-bold" style="font-weight: 600;">الدخول بواسطة Google</span></div></button>
+<button class="flex items-center justify-center gap-4 w-full py-4 px-6 bg-black text-white rounded-2xl font-semibold transition-all hover:opacity-90 active:scale-95 shadow-sm border border-black"><div class="flex items-center justify-center gap-4 w-full"><svg class="w-6 h-6 fill-white" viewBox="0 0 384 512"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 21.8-88.5 21.8-11.4 0-51.1-20.8-82.3-20.1-41.2.6-79.1 23.9-100.4 61-43.7 75.8-11.2 188.6 31.1 250.3 20.6 29.7 45.4 63.3 77.2 62.1 30.6-1.1 42.1-19.8 79-19.8 36.8 0 47.4 19.8 79.9 19.2 33.4-.6 54.8-30.3 75.2-60.2 23.5-34.4 33.2-67.8 33.6-69.5-.8-.3-65-24.9-65.1-99.3zm-30.2-184.2c27.1-32.9 25.1-62.4 23.6-70.5-23.7 1.1-51.1 15.7-68 35.5-15.1 17.5-28.1 47.2-24.2 74.9 26.8 2.1 51.5-17 68.6-39.9z"></path></svg><span class="font-label tracking-wide text-[17px] font-bold" style="font-weight: 600;">الدخول بواسطة Apple</span></div></button>
+</div>
+<!-- Primary CTA Area -->
+<div class="space-y-6">
+<button class="w-full py-4 text-white rounded-2xl font-semibold text-lg shadow-sm hover:opacity-95 active:scale-98 transition-all font-bold" style="background-color: rgb(243, 143, 66); font-weight: 700;">تسجيل الدخول</button>
+<!-- Agreements -->
+<div class="flex items-start gap-3 px-2">
+<div class="mt-1">
+<input class="w-5 h-5 rounded border-[#3E2723]/20 text-primary focus:ring-primary/20 bg-white/50 transition-colors cursor-pointer" id="terms" type="checkbox">
+</div>
+<label class="text-[#3E2723]/70 text-sm leading-relaxed" for="terms">
+                من خلال المتابعة، أنت توافق على 
+                <a class="text-primary font-bold hover:underline" href="#">شروط الاستخدام</a> 
+                و 
+                <a class="text-primary font-bold hover:underline" href="#">سياسة الخصوصية</a>.
+            </label>
+</div>
+</div>
+</main>
+<!-- Footer Area -->
+<footer class="w-full max-w-md pb-10 text-center relative">
+<div class="inline-flex items-center gap-2 p-1 px-5 py-2.5 rounded-full bg-[#F7E1C3]/30 border border-[#F7E1C3]/50" style="background-color: rgba(247, 225, 195, 0.5); border-color: rgba(230, 126, 34, 0.2);"><span class="text-[#3E2723]/70 text-sm font-semibold">ليس لديك حساب؟</span><a class="text-primary font-bold text-sm transition-colors hover:underline" href="#">إنشاء حساب جديد</a></div>
+</footer>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</body></html>

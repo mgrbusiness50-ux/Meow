@@ -1,0 +1,292 @@
+<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Meow - تسجيل بيانات الأليف</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&amp;family=Bubblegum+Sans&amp;family=Fredoka:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#FFFBEB",
+                    "primary-brand": "#e67e22",
+                    "primary-hover": "#ea580c"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "1.5rem",
+                    "xl": "2rem"
+            }
+          },
+        },
+      }
+    </script>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+  html, body, h1, h2, h3, h4, h5, h6, p, span, a, button, input, label, select, textarea, div {
+    font-family: 'Baloo Bhaijaan 2', 'Plus Jakarta Sans', system-ui, sans-serif !important;
+  }
+  body {
+    min-height: max(884px, 100dvh);
+    background-color: #FFF9E9;
+    color: #2d221b;
+    -webkit-font-smoothing: antialiased;
+  }
+</style>
+</head>
+<body class="bg-[#FFF9E9] text-[#2d221b] min-h-screen flex flex-col items-center justify-between p-6"><div aria-hidden="true" class="fixed inset-0 pointer-events-none overflow-hidden select-none z-0"><svg class="absolute top-12 left-6 w-16 h-16 text-[#e67e22] opacity-[0.06] transform -rotate-12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-4 1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-9.5 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-5.5.5c-2.49 0-4.5 1.79-4.5 4 0 1.25.64 2.37 1.66 3.12.55.4 1.25.63 2 .63.31 0 .61-.05.9-.13.56.24 1.18.38 1.84.38.74 0 1.44-.18 2.05-.48.24.07.49.1.75.1.75 0 1.45-.23 2-.63 1.02-.75 1.66-1.87 1.66-3.12 0-2.21-2.01-4-4.5-4z"></path></svg><svg class="absolute top-1/4 right-4 w-20 h-20 text-[#e67e22] opacity-[0.05] transform rotate-45" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-4 1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-9.5 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-5.5.5c-2.49 0-4.5 1.79-4.5 4 0 1.25.64 2.37 1.66 3.12.55.4 1.25.63 2 .63.31 0 .61-.05.9-.13.56.24 1.18.38 1.84.38.74 0 1.44-.18 2.05-.48.24.07.49.1.75.1.75 0 1.45-.23 2-.63 1.02-.75 1.66-1.87 1.66-3.12 0-2.21-2.01-4-4.5-4z"></path></svg><svg class="absolute top-1/2 left-3 w-24 h-24 text-[#8a7663] opacity-[0.05] transform -rotate-25" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-4 1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-9.5 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-5.5.5c-2.49 0-4.5 1.79-4.5 4 0 1.25.64 2.37 1.66 3.12.55.4 1.25.63 2 .63.31 0 .61-.05.9-.13.56.24 1.18.38 1.84.38.74 0 1.44-.18 2.05-.48.24.07.49.1.75.1.75 0 1.45-.23 2-.63 1.02-.75 1.66-1.87 1.66-3.12 0-2.21-2.01-4-4.5-4z"></path></svg><svg class="absolute bottom-36 right-5 w-16 h-16 text-[#e67e22] opacity-[0.06] transform rotate-12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-4 1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-9.5 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-5.5.5c-2.49 0-4.5 1.79-4.5 4 0 1.25.64 2.37 1.66 3.12.55.4 1.25.63 2 .63.31 0 .61-.05.9-.13.56.24 1.18.38 1.84.38.74 0 1.44-.18 2.05-.48.24.07.49.1.75.1.75 0 1.45-.23 2-.63 1.02-.75 1.66-1.87 1.66-3.12 0-2.21-2.01-4-4.5-4z"></path></svg><svg class="absolute bottom-8 left-10 w-20 h-20 text-[#e67e22] opacity-[0.05] transform -rotate-45" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-4 1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-9.5 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-5.5.5c-2.49 0-4.5 1.79-4.5 4 0 1.25.64 2.37 1.66 3.12.55.4 1.25.63 2 .63.31 0 .61-.05.9-.13.56.24 1.18.38 1.84.38.74 0 1.44-.18 2.05-.48.24.07.49.1.75.1.75 0 1.45-.23 2-.63 1.02-.75 1.66-1.87 1.66-3.12 0-2.21-2.01-4-4.5-4z"></path></svg></div>
+<!-- Header Section -->
+<header class="w-full max-w-md pt-6 flex flex-col items-center text-center space-y-3">
+<!-- Official Logo -->
+<div class="relative w-40 h-40 flex items-center justify-center">
+<img alt="Meow Logo" class="w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqbEwIe2Q5S_C88Ya-MKHETG5IWy1pPHqIduzcJnMQMqwwhN2E5Jy0VbMO24TEizZvZK3i7i-ZCrs9eEtef-3FiMrdOvL7HsaMBVH8Q6PortypEY3l5Jf1UT63vXP4vjZ7GPlPwkU5hWASs2MJikgQnrUit7_cNd86_3ZL_3BcN4fqFgNKSrIjVVYcy1NHtIRz0lhp66QWPpssJ0PupTx33u0OFPysdPL7c-mZO34">
+</div>
+<!-- Typography Cluster -->
+<div class="space-y-1">
+<h1 class="text-2xl sm:text-3xl font-extrabold text-[#1a1612] tracking-normal">تسجيل بيانات المياو</h1>
+</div>
+</header>
+<!-- Main Content: Form -->
+<main class="w-full max-w-md flex-1 flex flex-col justify-start py-4">
+<form class="space-y-5" id="petForm" onsubmit="return false;">
+<!-- نوع الأليف (قطة / كلب) -->
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">عندك ايه<br></label>
+<div class="grid grid-cols-2 gap-3.5"><button class="h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]" id="type-cat-btn" onclick="setPetType('cat')" type="button">
+<span class="text-2xl">🐱</span>
+<span class="font-black">قطة</span>
+</button>
+<button class="h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-4" id="type-dog-btn" onclick="setPetType('dog')" type="button">
+<span class="text-2xl">🐶</span>
+<span class="font-black">كلب</span>
+</button>
+<input class="" id="pet-type-input" name="petType" type="hidden" value="cat"></div>
+</div>
+<!-- صور الأليف (3 صور) -->
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<label class="block text-base font-bold text-[#2d221b]">صور للمياو</label>
+</div>
+<div class="grid grid-cols-3 gap-3"><label class="relative flex items-center justify-center aspect-square rounded-3xl border-2 border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5e5] cursor-pointer transition-all shadow-sm group"><input accept="image/*" class="hidden" type="file"><span class="text-4xl font-black text-[#e67e22] group-hover:scale-110 transition-transform">+</span></label><label class="relative flex items-center justify-center aspect-square rounded-3xl border-2 border-[#d6c7b2] bg-[#fffefc] hover:bg-[#faf6ed] cursor-pointer transition-all shadow-sm group"><input accept="image/*" class="hidden" type="file"><span class="text-4xl font-black text-[#998b7c] group-hover:scale-110 transition-transform">+</span></label><label class="relative flex items-center justify-center aspect-square rounded-3xl border-2 border-[#d6c7b2] bg-[#fffefc] hover:bg-[#faf6ed] cursor-pointer transition-all shadow-sm group"><input accept="image/*" class="hidden" type="file"><span class="text-4xl font-black text-[#998b7c] group-hover:scale-110 transition-transform">+</span></label></div>
+</div>
+<!-- اسم الأليف -->
+<div class="grid grid-cols-2 gap-3.5">
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">اسم المياو</label>
+<div class="relative flex items-center h-16"><input class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm" id="petName" name="petName" type="text"></div>
+</div>
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">اللون</label>
+<div class="relative flex items-center h-16"><input class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm" id="petColor" name="petColor" type="text"></div>
+</div>
+</div>
+<!-- السلالة والعمر -->
+<div class="space-y-3.5"><div class="grid grid-cols-2 gap-3.5"><div class="space-y-2"><label class="block text-base font-black text-[#2d221b]">السلالة</label><div class="relative flex items-center h-16"><select class="w-full h-16 py-3 pr-4 pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm cursor-pointer appearance-none truncate" id="petBreed"><option value="بلدي (ماو مصري)">بلدي (ماو مصري)</option><option selected="" value="شيرازي (فارسي)">شيرازي (فارسي)</option><option value="سيامي">سيامي</option><option value="هيمالايا">هيمالايا</option><option value="سكوتش فولد">سكوتش فولد</option><option value="بريطاني قصير الشعر">بريطاني قصير الشعر</option><option value="راغدول">راغدول</option><option value="مين كون">مين كون</option><option value="بنغالي">بنغالي</option><option value="سفينكس (الفرعوني)">سفينكس (الفرعوني)</option><option value="حبشي">حبشي</option><option value="روسي أزرق">روسي أزرق</option><option value="تركي أنغورا">تركي أنغورا</option><option value="بيرمان">بيرمان</option><option value="أمريكي قصير الشعر">أمريكي قصير الشعر</option><option value="نرويجي غابات">نرويجي غابات</option><option value="كورنيش ريكس">كورنيش ريكس</option><option value="ديفون ريكس">ديفون ريكس</option><option value="بومباي">بومباي</option><option value="صومالي">صومالي</option><option value="تونكينيز">تونكينيز</option><option value="مانكس">مانكس</option><option value="سيبيري">سيبيري</option><option value="بورمي">بورمي</option><option value="شرقي قصير الشعر">شرقي قصير الشعر</option><option value="هجين / مختلط">هجين / مختلط</option><option value="سلالة أخرى">سلالة أخرى</option></select><div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]"><svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path></svg></div></div></div><div class="space-y-2"><label class="block text-base font-black text-[#2d221b]">سلالة هجينة (اختياري)</label><div class="relative flex items-center h-16"><select class="w-full h-16 py-3 pr-4 pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm cursor-pointer appearance-none truncate" id="petBreedSecondary"><option selected="" value="">بدون هجين</option><option value="بلدي (ماو مصري)">بلدي (ماو مصري)</option><option value="شيرازي (فارسي)">شيرازي (فارسي)</option><option value="سيامي">سيامي</option><option value="هيمالايا">هيمالايا</option><option value="سكوتش فولد">سكوتش فولد</option><option value="بريطاني قصير الشعر">بريطاني قصير الشعر</option><option value="راغدول">راغدول</option><option value="مين كون">مين كون</option><option value="بنغالي">بنغالي</option><option value="سفينكس (الفرعوني)">سفينكس (الفرعوني)</option><option value="حبشي">حبشي</option><option value="روسي أزرق">روسي أزرق</option><option value="تركي أنغورا">تركي أنغورا</option><option value="بيرمان">بيرمان</option><option value="أمريكي قصير الشعر">أمريكي قصير الشعر</option><option value="نرويجي غابات">نرويجي غابات</option><option value="كورنيش ريكس">كورنيش ريكس</option><option value="ديفون ريكس">ديفون ريكس</option><option value="بومباي">بومباي</option><option value="صومالي">صومالي</option><option value="تونكينيز">تونكينيز</option><option value="مانكس">مانكس</option><option value="سيبيري">سيبيري</option><option value="بورمي">بورمي</option><option value="شرقي قصير الشعر">شرقي قصير الشعر</option><option value="سلالة أخرى">سلالة أخرى</option></select><div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]"><svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path></svg></div></div></div></div><div class="space-y-2"><label class="block text-base font-black text-[#2d221b]">العمر</label><div class="grid grid-cols-2 gap-3.5 h-16"><div class="relative flex items-center h-16"><input class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm" id="petAgeYears" inputmode="numeric" min="0" name="petAgeYears" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="سنة" type="number"></div><div class="relative flex items-center h-16"><input class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm" id="petAgeMonths" inputmode="numeric" max="11" min="0" name="petAgeMonths" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="شهر (اختياري)" type="number"></div></div></div></div>
+<!-- الجنس -->
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">الجنس</label>
+<div class="grid grid-cols-2 gap-3.5"><button class="h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5" id="gender-male-btn" onclick="setPetGender('male')" type="button"><span class="font-black">ذكر</span></button><button class="h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]" id="gender-female-btn" onclick="setPetGender('female')" type="button"><span class="font-black">انثى</span></button><input class="" id="gender-input" name="gender" type="hidden" value="female"></div>
+</div>
+<!-- اللون والتطعيم -->
+<div class="space-y-2">
+<label class="block text-base font-black text-[#2d221b]">حالة التطعيم</label>
+<div class="grid grid-cols-2 gap-3.5 h-16"><button class="h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2" id="vax-yes-btn" onclick="setVaccination('yes')" type="button"><span class="font-black">مطعم ������</span></button><button class="h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]" id="vax-no-btn" onclick="setVaccination('no')" type="button"><span class="font-black">غير مطعم</span></button></div>
+<input id="vaccination-input" name="vaccinated" type="hidden" value="no">
+</div>
+<!-- سمات الشخصية -->
+<div class="space-y-2.5 pt-2">
+<div class="flex items-center justify-between pb-1"><div class="flex items-center gap-3"><label class="block text-xl sm:text-2xl font-black text-[#2d221b]">الشخصية</label><span class="text-sm font-bold text-[#8a7663] bg-[#fffbf2] border border-[#d6c7b2]/60 px-3 py-1 rounded-full shadow-sm">(اختر 3 إلى 6 صفات)</span></div><span class="text-sm font-black px-3.5 py-1.5 rounded-full bg-[#faecd8] text-[#c25807] border border-[#e67e22]/20 transition-all shadow-sm" id="traits-counter">المحدد: 0 من 6</span></div>
+<div class="flex flex-wrap pt-2 gap-3 justify-start" id="traitsContainer"><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="مجرم" onclick="toggleTrait(this)" type="button">مجرم</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="حرامي" onclick="toggleTrait(this)" type="button">حرامي</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="شحات" onclick="toggleTrait(this)" type="button">شحات</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="متسول" onclick="toggleTrait(this)" type="button">متسول</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="عبيط" onclick="toggleTrait(this)" type="button">عبيط</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="تعبان في دماغه" onclick="toggleTrait(this)" type="button">تعبان في دماغه</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="لئيم / لئيمة" onclick="toggleTrait(this)" type="button">لئيم / لئيمة</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="ذكي" onclick="toggleTrait(this)" type="button">ذكي</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="غيبوبة" onclick="toggleTrait(this)" type="button">غيبوبة</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="متمرد" onclick="toggleTrait(this)" type="button">متمرد</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="مجنون" onclick="toggleTrait(this)" type="button">مجنون</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="هادئ" onclick="toggleTrait(this)" type="button">هادئ</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="لطيف" onclick="toggleTrait(this)" type="button">لطيف</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="مرح" onclick="toggleTrait(this)" type="button">مرح</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="شجاع" onclick="toggleTrait(this)" type="button">شجاع</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="مخلص" onclick="toggleTrait(this)" type="button">مخلص</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="نشيط" onclick="toggleTrait(this)" type="button">نشيط</button><button class="trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-6 py-3.5 font-black text-lg transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50 shadow-sm flex items-center justify-center" data-trait="اجتماعي" onclick="toggleTrait(this)" type="button">اجتماعي</button></div>
+<p class="text-xs font-bold text-rose-500 hidden" id="trait-limit-msg">الحد الأقصى هو 6 صفات فقط!</p>
+</div>
+<!-- ملاحظات صحية -->
+<div class="space-y-2">
+<label class="block text-base font-bold text-[#2d221b]">ملاحظات صحية / سلوكية</label>
+<div class="relative flex items-center"><textarea class="w-full p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none" id="petNotes" rows="3"></textarea></div>
+</div>
+<!-- CTA Button -->
+<div class="pt-4">
+<button class="w-full h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[28px] font-extrabold text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer" type="submit">نونو على الكلام</button>
+</div>
+</form>
+</main>
+<!-- Footer Spacer -->
+<footer class="w-full max-w-md pb-6 text-center"></footer>
+<script>
+  const catBreeds = [
+    'بلدي (ماو مصري)',
+    'شيرازي (فارسي)',
+    'سيامي',
+    'هيمالايا',
+    'سكوتش فولد',
+    'بريطاني قصير الشعر',
+    'راغدول',
+    'مين كون',
+    'بنغالي',
+    'سفينكس (الفرعوني)',
+    'حبشي',
+    'روسي أزرق',
+    'تركي أنغورا',
+    'بيرمان',
+    'أمريكي قصير الشعر',
+    'نرويجي غابات',
+    'كورنيش ريكس',
+    'ديفون ريكس',
+    'بومباي',
+    'صومالي',
+    'تونكينيز',
+    'مانكس',
+    'سيبيري',
+    'بورمي',
+    'شرقي قصير الشعر',
+    'هجين / مختلط',
+    'سلالة أخرى'
+  ];
+
+  const dogBreeds = [
+    'بلدي',
+    'جيرمن شيبرد (الراعي الألماني)',
+    'غولدن ريتريفر',
+    'لابرادور ريتريفر',
+    'هاسكي سيبيري',
+    'روتوايلر',
+    'بيت بول',
+    'دوبرمان',
+    'بولدوغ فرنسي',
+    'كان كورسو',
+    'شيواوا',
+    'مالينوا بلجيكي',
+    'بوكسر',
+    'شيتزو',
+    'يوركشاير ترير',
+    'بودل',
+    'داشهوند',
+    'بيغل',
+    'سامويد',
+    'جريت دان',
+    'سانت برنارد',
+    'شار بي',
+    'بوسطن ترير',
+    'أكيتا',
+    'هجين / مختلط',
+    'سلالة أخرى'
+  ];
+
+  function updateBreedOptions(type) {
+    const breedSelect = document.getElementById('petBreed');
+    if (!breedSelect) return;
+    const breeds = type === 'dog' ? dogBreeds : catBreeds;
+    const defaultSelected = type === 'dog' ? 'بلدي' : 'شيرازي (فارسي)';
+    breedSelect.innerHTML = breeds.map(breed => `<option value="${breed}" ${breed === defaultSelected ? 'selected' : ''}>${breed}</option>`).join('');
+  }
+
+  const defaultInactiveClass = 'relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+
+  // Pet Type Handler
+  function setPetType(type) {
+    const catBtn = document.getElementById('type-cat-btn');
+    const dogBtn = document.getElementById('type-dog-btn');
+    const input = document.getElementById('pet-type-input');
+    if (input) input.value = type;
+
+    const catActiveClass = 'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const dogActiveClass = 'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const inactiveClass = 'h-16 ' + defaultInactiveClass + ' text-xl px-4';
+
+    if (type === 'cat') {
+      if (catBtn) catBtn.className = catActiveClass;
+      if (dogBtn) dogBtn.className = inactiveClass;
+    } else {
+      if (dogBtn) dogBtn.className = dogActiveClass;
+      if (catBtn) catBtn.className = inactiveClass;
+    }
+
+    updateBreedOptions(type);
+  }
+
+  // Gender Selection Handler
+  function setPetGender(gender) {
+    const maleBtn = document.getElementById('gender-male-btn');
+    const femaleBtn = document.getElementById('gender-female-btn');
+    const input = document.getElementById('gender-input');
+    if (input) input.value = gender;
+
+    const maleActiveClass = 'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#3b82f6] bg-[#eff6ff] text-[#2563eb] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const femaleActiveClass = 'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const inactiveClass = 'h-16 ' + defaultInactiveClass + ' text-xl px-5';
+
+    if (gender === 'male') {
+      if (maleBtn) maleBtn.className = maleActiveClass;
+      if (femaleBtn) femaleBtn.className = inactiveClass;
+    } else {
+      if (femaleBtn) femaleBtn.className = femaleActiveClass;
+      if (maleBtn) maleBtn.className = inactiveClass;
+    }
+  }
+
+  // Vaccination Handler
+  function setVaccination(status) {
+    const yesBtn = document.getElementById('vax-yes-btn');
+    const noBtn = document.getElementById('vax-no-btn');
+    const input = document.getElementById('vaccination-input');
+    if (input) input.value = status;
+
+    const yesActiveClass = 'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#10b981] bg-[#ecfdf5] text-[#059669] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const noActiveClass = 'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const inactiveClass = 'h-16 ' + defaultInactiveClass + ' text-base px-2';
+
+    if (status === 'yes') {
+      if (yesBtn) yesBtn.className = yesActiveClass;
+      if (noBtn) noBtn.className = inactiveClass;
+    } else {
+      if (noBtn) noBtn.className = noActiveClass;
+      if (yesBtn) yesBtn.className = inactiveClass;
+    }
+  }
+
+  // Personality Traits Handler
+  const selectedTraits = new Set();
+  const maxTraits = 6;
+
+  function toggleTrait(btn) {
+    const trait = btn.getAttribute('data-trait');
+    const limitMsg = document.getElementById('trait-limit-msg');
+    
+    if (selectedTraits.has(trait)) {
+      selectedTraits.delete(trait);
+      btn.className = 'trait-chip rounded-full border-2 border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] px-3.5 py-1.5 font-bold text-sm transition-all cursor-pointer select-none active:scale-95 hover:border-[#e67e22]/50';
+      if (limitMsg) limitMsg.classList.add('hidden');
+    } else {
+      if (selectedTraits.size >= maxTraits) {
+        if (limitMsg) {
+          limitMsg.classList.remove('hidden');
+          setTimeout(() => limitMsg.classList.add('hidden'), 2500);
+        }
+        return;
+      }
+      selectedTraits.add(trait);
+      btn.className = 'trait-chip rounded-full border-2 border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black px-3.5 py-1.5 text-sm transition-all cursor-pointer select-none shadow-sm active:scale-95 ring-2 ring-[#e67300]/20';
+      if (limitMsg) limitMsg.classList.add('hidden');
+    }
+
+    const counter = document.getElementById('traits-counter');
+    if (counter) {
+      counter.textContent = `المحدد: ${selectedTraits.size} من ${maxTraits}`;
+      if (selectedTraits.size >= 3) {
+        counter.className = 'text-xs font-black px-2.5 py-1 rounded-full bg-[#ecfdf5] text-[#059669] transition-all';
+      } else {
+        counter.className = 'text-xs font-black px-2.5 py-1 rounded-full bg-[#faecd8] text-[#c25807] transition-all';
+      }
+    }
+  }
+</script>
+
+
+
+
+</body></html>

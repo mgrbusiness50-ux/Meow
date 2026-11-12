@@ -1,0 +1,175 @@
+<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Meow - تسجيل بيانات المالك</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&amp;family=Bubblegum+Sans&amp;family=Fredoka:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#FFFBEB",
+                    "primary-brand": "#e67e22",
+                    "primary-hover": "#ea580c"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "1.5rem",
+                    "xl": "2rem"
+            }
+          },
+        },
+      }
+    </script>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+  html, body, h1, h2, h3, h4, h5, h6, p, span, a, button, input, label, select, div {
+    font-family: 'Baloo Bhaijaan 2', 'Plus Jakarta Sans', system-ui, sans-serif !important;
+  }
+  body {
+    min-height: max(884px, 100dvh);
+    background-color: #FFF9E9;
+    color: #2d221b;
+    -webkit-font-smoothing: antialiased;
+  }
+</style>
+</head>
+<body class="bg-[#FFF9E9] text-[#2d221b] min-h-screen flex flex-col items-center justify-between p-6"><div class="fixed inset-0 pointer-events-none overflow-hidden select-none z-0"><svg class="absolute top-10 left-8 w-10 h-10 text-[#e67e22] opacity-15 rotate-[-20deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="6.5" r="2"></circle><circle cx="11.5" cy="4.5" r="2"></circle><circle cx="16" cy="6.5" r="2"></circle><circle cx="19" cy="11" r="1.8"></circle><circle cx="4.5" cy="11" r="1.8"></circle><path d="M12 9.5c-3.2 0-5.5 2.2-5.5 5.5 0 2.2 1.8 4 5.5 4s5.5-1.8 5.5-4c0-3.3-2.3-5.5-5.5-5.5z"></path></svg><svg class="absolute top-36 right-10 w-9 h-9 text-[#d97706] opacity-15 rotate-[25deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="6.5" r="2"></circle><circle cx="11.5" cy="4.5" r="2"></circle><circle cx="16" cy="6.5" r="2"></circle><circle cx="19" cy="11" r="1.8"></circle><circle cx="4.5" cy="11" r="1.8"></circle><path d="M12 9.5c-3.2 0-5.5 2.2-5.5 5.5 0 2.2 1.8 4 5.5 4s5.5-1.8 5.5-4c0-3.3-2.3-5.5-5.5-5.5z"></path></svg><svg class="absolute top-1/2 left-6 w-12 h-12 text-[#e67e22] opacity-15 rotate-[15deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="6.5" r="2"></circle><circle cx="11.5" cy="4.5" r="2"></circle><circle cx="16" cy="6.5" r="2"></circle><circle cx="19" cy="11" r="1.8"></circle><circle cx="4.5" cy="11" r="1.8"></circle><path d="M12 9.5c-3.2 0-5.5 2.2-5.5 5.5 0 2.2 1.8 4 5.5 4s5.5-1.8 5.5-4c0-3.3-2.3-5.5-5.5-5.5z"></path></svg><svg class="absolute top-[62%] right-8 w-11 h-11 text-[#d97706] opacity-15 rotate-[-25deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="6.5" r="2"></circle><circle cx="11.5" cy="4.5" r="2"></circle><circle cx="16" cy="6.5" r="2"></circle><circle cx="19" cy="11" r="1.8"></circle><circle cx="4.5" cy="11" r="1.8"></circle><path d="M12 9.5c-3.2 0-5.5 2.2-5.5 5.5 0 2.2 1.8 4 5.5 4s5.5-1.8 5.5-4c0-3.3-2.3-5.5-5.5-5.5z"></path></svg><svg class="absolute bottom-16 left-12 w-10 h-10 text-[#e67e22] opacity-15 rotate-[35deg] fill-current" viewBox="0 0 24 24"><circle cx="7" cy="6.5" r="2"></circle><circle cx="11.5" cy="4.5" r="2"></circle><circle cx="16" cy="6.5" r="2"></circle><circle cx="19" cy="11" r="1.8"></circle><circle cx="4.5" cy="11" r="1.8"></circle><path d="M12 9.5c-3.2 0-5.5 2.2-5.5 5.5 0 2.2 1.8 4 5.5 4s5.5-1.8 5.5-4c0-3.3-2.3-5.5-5.5-5.5z"></path></svg></div><style id="custom-font-style">* { font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive, sans-serif !important; }</style>
+<!-- Header Section -->
+<header class="w-full max-w-md pt-8 flex flex-col items-center text-center space-y-4">
+<!-- Official Logo -->
+<div class="relative w-44 h-44 flex items-center justify-center">
+<img alt="Meow Logo" class="w-44 h-auto mx-auto object-contain drop-shadow-sm select-none" src="https://lh3.googleusercontent.com/aida-public/AB6AXuATFADKoSjN1Uw6R2VhjHqyuowMNl1UVxgWiKkryE0cCcMX73vicRsUlSMCL3juRgI-wrSBsHMMa1kdhPZIRusPr6UGSLVcC2HeobngC4RffuAgnLStEZVXg0CJvmYOOS59i-uppxGdSDQV6ClyfjpUKfC71jQvEWFJb_ct2SiJgF2954Xyh-KqxQrCZJzKexn9jpP54o5h6VXFiQMMYm7l3iQgQeSYXn9-AB10DfkmA3DpFkUbfWKidGkTt8ne8bpX">
+</div>
+<!-- Typography Cluster -->
+
+</header>
+<!-- Main Content: Form -->
+<main class="w-full max-w-md flex-1 flex flex-col justify-start py-5"><div class="flex-1 flex flex-col items-center justify-center text-center space-y-10 my-auto py-8"><div class="space-y-3"><h2 class="text-3xl sm:text-4xl font-extrabold text-[#2d221b] tracking-normal leading-snug">هل تمتلك حيواناً أليفاً؟</h2></div><div class="flex justify-center items-center my-2"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkbGNMk8BmUCkQwfJzMRgVLJ6YM4ZQ2xa1Kx7XTjZmZOxi7v4fKZlOLD_AbvHf4xoMJyUQrj-e2KOl1quHveOGec2YsESHyr1RnDqxUrz_GAW3ONfw1SQOvqYyw0BXrQAhejT3PFjgSGvfBdn5XqRlC9nQtG4cpsMao_3MPClhD_-dqZwCURM7xLoaVj5YB4ibED4FGnoq6fxYLGSa6XdpXLFPA--BuLrBVFjS1E5bd2S7y1VFJ5mi" alt="Pet" class="w-56 h-56 object-cover rounded-3xl shadow-md border-4 border-white/60"></div><div class="flex flex-col sm:flex-row items-center justify-center gap-5 w-full px-4"><button type="button" class="w-full sm:w-48 py-5 px-8 bg-[#e67e22] hover:bg-[#ea580c] active:scale-[0.98] text-white text-2xl font-black rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 cursor-pointer ring-4 ring-transparent focus:ring-[#e67e22]/30"><span class="whitespace-nowrap">مياو</span><span class="text-2xl">🐾</span></button><button type="button" class="w-full sm:w-48 py-5 px-8 bg-[#F3EBDD] hover:bg-[#eae0d0] active:scale-[0.98] text-[#564337] text-2xl font-black rounded-full border-2 border-[#d6c7b2] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-3 cursor-pointer ring-4 ring-transparent focus:ring-[#564337]/20"><span class="">لا</span></button></div></div></main>
+<!-- Footer Spacer -->
+<footer class="w-full max-w-md pb-6 text-center"></footer>
+<script>
+  // Comprehensive Governorates & Cities Data for Egypt (All 27 Governorates)
+  const egyptData = {
+    "القاهرة": ["مدينة نصر", "مصر الجديدة", "التجمع الخامس / القاهرة الجديدة", "المعادي", "الزمالك", "الدقي / وسط البلد", "شبرا", "حلوان", "المقطم", "عين شمس"],
+    "الجيزة": ["الدقي", "المهندسين", "6 أكتوبر", "الشيخ زايد", "الهرم", "فيصل", "العجوزة", "العمرانية", "الحوامدية"],
+    "الإسكندرية": ["سموحة", "سيدي جابر", "لوران", "جليم", "ميامي", "المنتزه", "العجمي", "الرمل", "الإبراهيمية"],
+    "القليوبية": ["بنها", "شبرا الخيمة", "قلیوب", "العبور", "طوخ", "القناطر الخيرية"],
+    "الدقهلية": ["المنصورة", "ميت غمر", "طلخا", "دكرنس", "بلقاس", "السنبلاوين"],
+    "الغربية": ["طنطا", "المحلة الكبرى", "زفتى", "كفر الزيات", "سمنود"],
+    "الشرقية": ["الزقازيق", "العاشر من رمضان", "بلبيس", "منيا القمح", "فاقوس"],
+    "المنوفية": ["شبين الكوم", "قويسنا", "أشمون", "منوف", "السادات", "بركة السبع"],
+    "البحيرة": ["دمنهور", "كفر الدوار", "إيتاي البارود", "رشيد", "أبو حمص"],
+    "كفر الشيخ": ["كفر الشيخ", "دسوق", "فوة", "مطوبس", "بلطيم"],
+    "دمياط": ["دمياط", "رأس البر", "دمياط الجديدة", "فارسكور", "كفر سعد"],
+    "بورسعيد": ["حي الشرق", "حي بورفؤاد", "حي العرب", "حي الضواحي", "حي الزهور"],
+    "الإسماعيلية": ["الإسماعيلية", "فايد", "القنطرة غرب", "القنطرة شرق", "التل الكبير"],
+    "السويس": ["حي السويس", "الأربعين", "فيصل", "الجناين", "عتاقة"],
+    "شمال سيناء": ["العريش", "بئر العبد", "الشيخ زويد", "رفح", "الحسنة"],
+    "جنوب سيناء": ["شرم الشيخ", "دهب", "نويبع", "طور سيناء", "طابا", "رأس سدر"],
+    "بني سويف": ["بني سويف", "بني سويف الجديدة", "الواسطى", "ناصر", "ببا"],
+    "الفيوم": ["الفيوم", "سنورس", "إطسا", "طامية", "يوسف الصديق"],
+    "المنيا": ["المنيا", "المنيا الجديدة", "ملوي", "مغاغة", "بني مزار", "سمالوط"],
+    "أسيوط": ["أسيوط", "أسيوط الجديدة", "ديروط", "القوصية", "منفلوط", "أبنوب"],
+    "سوهاج": ["سوهاج", "سوهاج الجديدة", "أخميم", "جرجا", "طهطا", "المراغة"],
+    "قنا": ["قنا", "قنا الجديدة", "نجع حمادي", "دشنا", "قوص", "فرشوط"],
+    "الأقصر": ["الأقصر", "البياضية", "القرنة", "أرمنت", "إسنا", "طيبة الجديدة"],
+    "أسوان": ["أسوان", "أسوان الجديدة", "كوم أمبو", "إدفو", "نصر النوبة", "دراو"],
+    "البحر الأحمر": ["الغردقة", "الجونة", "سفاجا", "القصير", "مرسى علم", "رأس غارب"],
+    "الالوادي الجديد": ["الخارجة", "الداخلة", "الفرافرة", "باريس", "بلاط"],
+    "الوادي الجديد": ["الخارجة", "الداخلة", "الفرافرة", "باريس", "بلاط"],
+    "مطروح": ["مرسى مطروح", "العلمين", "الساحل الشمالي", "سيوة", "الضبعة"]
+  };
+
+  // Gender Selection handler
+  function setGender(val) {
+    const maleBtn = document.getElementById('gender-male-btn');
+    const femaleBtn = document.getElementById('gender-female-btn');
+    const input = document.getElementById('gender-input');
+
+    if (input) input.value = val;
+
+    const unselectedClasses = 'h-14 relative flex items-center justify-center gap-2 px-4 rounded-2xl border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const maleSelectedClasses = 'h-14 relative flex items-center justify-center gap-2 px-4 rounded-2xl border-2 border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb] font-bold text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    const femaleSelectedClasses = 'h-14 relative flex items-center justify-center gap-2 px-4 rounded-2xl border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+
+    if (val === 'male') {
+      if (maleBtn) maleBtn.className = maleSelectedClasses;
+      if (femaleBtn) femaleBtn.className = unselectedClasses;
+    } else if (val === 'female') {
+      if (femaleBtn) femaleBtn.className = femaleSelectedClasses;
+      if (maleBtn) maleBtn.className = unselectedClasses;
+    }
+  }
+
+  // Populate Governorates and Cities
+  function populateLocations() {
+    const govSelect = document.getElementById('govSelect');
+    const citySelect = document.getElementById('citySelect');
+    if (!govSelect || !citySelect) return;
+
+    // Filter unique keys from egyptData
+    const governorates = Object.keys(egyptData).filter(g => g !== 'الالوادي الجديد');
+
+    govSelect.innerHTML = '';
+    governorates.forEach((gov, index) => {
+      const opt = document.createElement('option');
+      opt.value = gov;
+      opt.textContent = gov;
+      if (gov === 'القاهرة') opt.selected = true;
+      govSelect.appendChild(opt);
+    });
+
+    function updateCities(selectedGov) {
+      const cities = egyptData[selectedGov] || [];
+      citySelect.innerHTML = '';
+      cities.forEach((city, index) => {
+        const opt = document.createElement('option');
+        opt.value = city;
+        opt.textContent = city;
+        if (index === 0) opt.selected = true;
+        citySelect.appendChild(opt);
+      });
+    }
+
+    // Initial setup with Cairo
+    updateCities('القاهرة');
+
+    // Event listener for changes
+    govSelect.addEventListener('change', function () {
+      updateCities(this.value);
+    });
+  }
+
+  // Bind Listeners
+  document.addEventListener('DOMContentLoaded', () => {
+    populateLocations();
+  });
+
+  // Run immediately in case DOM is already parsed
+  if (document.readyState === 'interactive' || document.readyState === 'complete') {
+    populateLocations();
+  }
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</body></html>

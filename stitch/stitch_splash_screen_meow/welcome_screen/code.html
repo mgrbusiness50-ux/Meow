@@ -1,0 +1,133 @@
+<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Meow - Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&amp;family=Bubblegum+Sans&amp;family=Fredoka:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-variant": "#e4e3db",
+                    "secondary-fixed": "#f5dfc1",
+                    "outline-variant": "#dcc1b1",
+                    "on-tertiary-fixed": "#360f00",
+                    "on-tertiary-fixed-variant": "#6c3921",
+                    "on-primary": "#ffffff",
+                    "surface": "#fffbef",
+                    "error-container": "#ffdad6",
+                    "surface-dim": "#dcdad2",
+                    "on-secondary-container": "#3E2723",
+                    "on-secondary": "#ffffff",
+                    "on-error": "#ffffff",
+                    "inverse-on-surface": "#f3f1e9",
+                    "on-surface-variant": "#3E2723",
+                    "on-secondary-fixed": "#251a07",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-container": "#e67e22",
+                    "surface-container-highest": "#e4e3db",
+                    "surface-container-high": "#eae8e0",
+                    "on-primary-container": "#502600",
+                    "primary": "#944a00",
+                    "surface-bright": "#fffbef",
+                    "outline": "#897365",
+                    "error": "#ba1a1a",
+                    "secondary-fixed-dim": "#d8c4a7",
+                    "inverse-surface": "#30312c",
+                    "on-secondary-fixed-variant": "#53452f",
+                    "on-primary-fixed-variant": "#713700",
+                    "background": "#fffbef",
+                    "background-light": "#fffbef",
+                    "secondary": "#6c5c45",
+                    "primary-fixed": "#ffdcc5",
+                    "surface-tint": "#944a00",
+                    "on-surface": "#3E2723",
+                    "surface-container-low": "#f5f4ec",
+                    "primary-fixed-dim": "#ffb783",
+                    "inverse-primary": "#ffb783",
+                    "tertiary-container": "#cd896b",
+                    "on-tertiary-container": "#52240e",
+                    "on-primary-fixed": "#301400",
+                    "tertiary-fixed": "#ffdbcd",
+                    "on-tertiary": "#ffffff",
+                    "secondary-container": "#F7E1C3",
+                    "surface-container": "#f0eee6",
+                    "tertiary": "#895036",
+                    "tertiary-fixed-dim": "#ffb596",
+                    "on-background": "#3E2723",
+                    "on-error-container": "#93000a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "display": ["Plus Jakarta Sans"],
+                    "headline": ["Plus Jakarta Sans"],
+                    "body": ["Plus Jakarta Sans"],
+                    "label": ["Plus Jakarta Sans"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #fffbef;
+            -webkit-font-smoothing: antialiased;
+            color: #3E2723;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .editorial-gradient {
+            background: linear-gradient(135deg, #944a00 0%, #e67e22 100%);
+        }
+        * {
+            border-top-color: transparent;
+        }
+    </style>
+<style>
+        body {
+          min-height: max(884px, 100dvh);
+        }
+    </style>
+<style>
+  html, body, h1, h2, h3, h4, h5, h6, p, span, a, button, input, label, div {
+    font-family: 'Baloo Bhaijaan 2', 'Bubblegum Sans', 'Fredoka', cursive, sans-serif !important;
+  }
+</style></head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col items-center justify-between p-6 border-0 outline-none" data-mode="connect" style="background-color: rgb(255, 249, 233); -webkit-font-smoothing: antialiased; color: rgb(62, 39, 35); min-height: max(884px, 100dvh); border-width: medium; border-style: none;"><div class="pointer-events-none fixed inset-0 overflow-hidden z-0 select-none opacity-20" aria-hidden="true" style="pointer-events: none;"><svg class="absolute top-12 left-6 w-12 h-12 text-[#e67e22] opacity-30 transform -rotate-12" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="6" r="2"></circle><circle cx="17" cy="6" r="2"></circle><circle cx="11" cy="3.5" r="2"></circle><circle cx="13" cy="3.5" r="2"></circle><path d="M12 8.5c-3 0-5.5 2.2-5.5 5 0 2.2 1.8 3.5 3.5 3.5 1.2 0 1.5-.5 2-.5s.8.5 2 .5c1.7 0 3.5-1.3 3.5-3.5 0-2.8-2.5-5-5.5-5z"></path></svg><svg class="absolute top-28 right-8 w-14 h-14 text-[#944a00] opacity-25 transform rotate-45" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="6" r="2"></circle><circle cx="17" cy="6" r="2"></circle><circle cx="11" cy="3.5" r="2"></circle><circle cx="13" cy="3.5" r="2"></circle><path d="M12 8.5c-3 0-5.5 2.2-5.5 5 0 2.2 1.8 3.5 3.5 3.5 1.2 0 1.5-.5 2-.5s.8.5 2 .5c1.7 0 3.5-1.3 3.5-3.5 0-2.8-2.5-5-5.5-5z"></path></svg><svg class="absolute top-1/2 left-4 w-10 h-10 text-[#cd896b] opacity-35 transform 25" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="6" r="2"></circle><circle cx="17" cy="6" r="2"></circle><circle cx="11" cy="3.5" r="2"></circle><circle cx="13" cy="3.5" r="2"></circle><path d="M12 8.5c-3 0-5.5 2.2-5.5 5 0 2.2 1.8 3.5 3.5 3.5 1.2 0 1.5-.5 2-.5s.8.5 2 .5c1.7 0 3.5-1.3 3.5-3.5 0-2.8-2.5-5-5.5-5z"></path></svg><svg class="absolute top-2/3 right-6 w-16 h-16 text-[#e67e22] opacity-20 transform -rotate-25" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="6" r="2"></circle><circle cx="17" cy="6" r="2"></circle><circle cx="11" cy="3.5" r="2"></circle><circle cx="13" cy="3.5" r="2"></circle><path d="M12 8.5c-3 0-5.5 2.2-5.5 5 0 2.2 1.8 3.5 3.5 3.5 1.2 0 1.5-.5 2-.5s.8.5 2 .5c1.7 0 3.5-1.3 3.5-3.5 0-2.8-2.5-5-5.5-5z"></path></svg><svg class="absolute bottom-16 left-12 w-12 h-12 text-[#944a00] opacity-25 transform 15" fill="currentColor" viewBox="0 0 24 24"><circle cx="7" cy="6" r="2"></circle><circle cx="17" cy="6" r="2"></circle><circle cx="11" cy="3.5" r="2"></circle><circle cx="13" cy="3.5" r="2"></circle><path d="M12 8.5c-3 0-5.5 2.2-5.5 5 0 2.2 1.8 3.5 3.5 3.5 1.2 0 1.5-.5 2-.5s.8.5 2 .5c1.7 0 3.5-1.3 3.5-3.5 0-2.8-2.5-5-5.5-5z"></path></svg></div>
+<!-- Header Section -->
+<header class="w-full max-w-md pt-8 pb-2 flex flex-col items-center text-center border-0 outline-none relative">
+<!-- Official Logo -->
+<div class="relative w-48 h-48 flex items-center justify-center border-0 outline-none">
+<img alt="Meow Logo" class="w-48 h-auto mx-auto object-contain drop-shadow-sm mb-4 border-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAWUkBSCToKuvsTzQdLeDgwewWrq25QuzlXIMyGRB-Io9sku--2d3rTcZCl6XZF69mO-W6kLkpbWijMmbnBhZlr96SK1xym8KWRRwcSdB8eG2gUQx5yRozTUYvWbUiRkg1vcpkatS1wxB3IgxzpC-b_yVuh9f3pVi_2uo_Gf95WQrWe8elhb3rg8B95vh6Qy2i7uhWh2lwB01rwZrliMckY1uDIvnwkaTKPZtS7CJw">
+</div>
+<!-- Typography Cluster -->
+</header>
+<!-- Main Content: Login Form -->
+<main class="w-full max-w-md flex-1 flex flex-col justify-between py-6 relative"><div class="flex flex-col items-center text-center space-y-6 my-auto"><div class="relative flex items-center justify-center"><div class="w-48 h-48 rounded-3xl overflow-hidden shadow-lg border-4 border-white/80 bg-white/40 flex items-center justify-center"><img alt="Meow Mascot" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBjCmSu0xDxJXyrHUBK1tLOi3THUHNrBykChM-wCkfFmb7-SylOoi2gZy7q_0EhekEOoSWaq1XAW437WsLx2Q-8LdB5VeHq3alZjh5JUU5lAdHpKERnUOvvsVZHitTZTkE0WfQaUjnb15I4u4ZRg-k6nKAGaMLGRGvlkBmmux8JCsxfcFhuyG6PsA2X6yQCLhFb6xjiq2en0tv84Rc-_1K1_Iz8Ksk-G_oCqvhJR4epnBXI3Nb8P4VJGtYl5QeTGeaj"></div></div><div class="space-y-3 px-4 w-full max-w-sm mx-auto"><h1 class="text-3xl sm:text-4xl font-bold text-[#2d1b10] leading-snug" style="font-weight: 800; font-size: 1.85rem; line-height: 1.4;">كل الي حيوانك الأليف محتاجه في مكان واحد<span class="block text-2xl pt-2 text-[#895036]">🤎</span></h1></div></div><div class="w-full pt-4 flex" style="justify-content: flex-end; display: flex;"><button class="w-24 h-24 rounded-3xl font-bold text-lg text-white shadow-md active:scale-95 transition-all flex flex-col items-center justify-center gap-1.5 hover:opacity-95" style="background-color: rgb(230, 126, 34); aspect-ratio: 1 / 1; width: 6rem; height: 6rem;"><span class="text-lg">التالي</span><svg class="w-6 h-6 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24" style="width: 1.5rem; height: 1.5rem;"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg></button></div></main>
+<!-- Footer Area -->
+<footer class="w-full max-w-md pb-10 text-center">
+
+</footer>
+
+
+
+
+
+
+
+
+
+
+
+
+</body></html>
