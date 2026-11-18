@@ -1,281 +1,442 @@
 import { state } from '../../state.ts';
-import { Pet, PetSpecies, PetGender, VaccinationStatus, PetStatus } from '../../types.ts';
+import { Pet, PetSpecies, PetGender, VaccinationStatus } from '../../types.ts';
+import { CAT_BREEDS, DOG_BREEDS } from '../../data/egyptLocations.ts';
+import { PERSONALITY_TRAITS } from '../views/OnboardingView.ts';
 
-const PRESET_CAT_PHOTOS = [
-  'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1573865526739-10659fec78a5?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1561948955-570b270e7c36?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1543852786-1cf6624b9987?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?auto=format&fit=crop&w=800&q=80',
-];
+function escapeAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function getPetNameTextColorClass(gender: PetGender | null): string {
+  if (gender === 'male') return 'text-[#60A5FA]';
+  if (gender === 'female') return 'text-[#F472B6]';
+  return 'text-[#1a1612]';
+}
+
+function renderBreedOptionsHtml(
+  species: PetSpecies | null,
+  includeNoHybridPrefix = false,
+  selectedValue = ''
+): string {
+  if (!species) {
+    return includeNoHybridPrefix
+      ? `<option value="" selected>بدون هجين</option>`
+      : `<option value="" selected>اختر النوع أولاً</option>`;
+  }
+
+  const baseBreeds = species === 'dog' ? DOG_BREEDS : CAT_BREEDS;
+  const normalizedSelected = (selectedValue || '').trim();
+  const hasCustom = Boolean(normalizedSelected && !baseBreeds.includes(normalizedSelected));
+  const breeds = hasCustom ? [normalizedSelected, ...baseBreeds] : baseBreeds;
+
+  if (includeNoHybridPrefix) {
+    return [
+      `<option value="" ${normalizedSelected === '' ? 'selected' : ''}>بدون هجين</option>`,
+      ...breeds.map(
+        (breed) =>
+          `<option value="${escapeAttr(breed)}" ${breed === normalizedSelected ? 'selected' : ''}>${breed}</option>`
+      ),
+    ].join('');
+  }
+
+  return [
+    `<option value="" ${normalizedSelected === '' ? 'selected' : ''}>اختر السلالة</option>`,
+    ...breeds.map(
+      (breed) =>
+        `<option value="${escapeAttr(breed)}" ${breed === normalizedSelected ? 'selected' : ''}>${breed}</option>`
+    ),
+  ].join('');
+}
 
 export function renderAddPetModal(petToEdit: Pet | null): string {
   const isEdit = Boolean(petToEdit);
 
-  const name = petToEdit?.name || '';
-  let selectedSpecies = petToEdit?.species || 'cat';
-  const breed = petToEdit?.breed || '';
-  const hybridBreed = petToEdit?.hybridBreed || '';
-  const ageYears = petToEdit?.ageYears ?? 1;
-  const ageMonths = petToEdit?.ageMonths ?? 6;
-  const color = petToEdit?.color || '';
-  const gender = petToEdit?.gender || 'male';
-  const area = petToEdit?.area || 'حي النرجس، الرياض';
-  const vaccinationStatus = petToEdit?.vaccinationStatus || 'fully_vaccinated';
-  const healthNotes = petToEdit?.healthNotes || 'تم الفحص البيطري ودفتر التطعيمات متوفر.';
-  const personality = petToEdit?.personality?.join('، ') || 'مرح، ذكي، هادئ، حنون';
-  const status = petToEdit?.status || 'mating';
+  // Strict parity with Onboarding Step 6: ZERO defaults on Add, full pre-fill on Edit
+  const selectedSpecies: PetSpecies | null = petToEdit ? petToEdit.species : null;
+  const selectedGender: PetGender | null = petToEdit ? petToEdit.gender : null;
+  const selectedVaccination: 'yes' | 'no' | 'partial' | null = petToEdit
+    ? petToEdit.vaccinationStatus === 'fully_vaccinated'
+      ? 'yes'
+      : petToEdit.vaccinationStatus === 'not_vaccinated'
+      ? 'no'
+      : 'partial'
+    : null;
+
+  const petName = petToEdit?.name || '';
+  const petColor = petToEdit?.color || '';
+  const petBreed = petToEdit?.breed || '';
+  const petHybrid = petToEdit?.hybridBreed || '';
+  const petAgeYears = petToEdit
+    ? petToEdit.ageYears > 0 || petToEdit.ageMonths === 0
+      ? String(petToEdit.ageYears)
+      : ''
+    : '';
+  const petAgeMonths =
+    petToEdit && petToEdit.ageMonths > 0 ? String(petToEdit.ageMonths) : '';
+  const petNotes = petToEdit?.healthNotes || '';
+  const existingPhotos = petToEdit?.photos || [];
+
+  const petTraitsList = petToEdit?.personality || [];
+  const selectedTraitsSet = new Set<string>(petTraitsList);
+  const displayTraits = [
+    ...PERSONALITY_TRAITS,
+    ...petTraitsList.filter((t) => !PERSONALITY_TRAITS.includes(t)),
+  ];
+
+  const isTraitsValid = selectedTraitsSet.size >= 3 && selectedTraitsSet.size <= 6;
+  const petNameColorClass = getPetNameTextColorClass(selectedGender);
 
   return `
     <div id="add-pet-modal-backdrop" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in" dir="rtl">
-      <div class="bg-[#FFF9E9] dark:bg-[#1C1713] rounded-3xl max-w-lg w-full border-2 border-brand-peachBorder dark:border-warm-darkBorder shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col relative text-[#2d221b] dark:text-[#F7EFE8] animate-scale-up">
-        
-        <!-- Header Section matching _1/code.html -->
-        <div class="p-4 px-5 flex items-center justify-between border-b border-brand-peachBorder/60 dark:border-warm-darkBorder bg-white/80 dark:bg-[#27201B] sticky top-0 z-10 backdrop-blur-sm">
-          <div class="flex items-center gap-2.5">
-            <div class="w-10 h-10 rounded-2xl bg-brand-orange/15 text-brand-orange flex items-center justify-center text-xl shadow-xs">
+      <div class="bg-[#FFF9E9] rounded-3xl max-w-lg w-full border-2 border-[#d6c7b2] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col relative text-[#2d221b] animate-scale-up">
+
+        <!-- Header matching Onboarding Step 6 & clean modal close -->
+        <div class="px-5 py-4 flex items-center justify-between border-b border-[#d6c7b2]/60 bg-[#FFF9E9]/95 sticky top-0 z-10">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-10 h-10 rounded-2xl bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center text-lg shrink-0">
               <i class="fa-solid fa-paw"></i>
             </div>
-            <div>
-              <h3 class="text-base sm:text-lg font-black font-baloo text-brand-dark dark:text-white leading-tight m-0">
-                ${isEdit ? `تعديل بيانات: ${petToEdit?.name}` : 'تسجيل بيانات المياو 🐾'}
-              </h3>
-              <p class="text-xs font-bold text-brand-subtleGray dark:text-[#A89F91] m-0">
-                ${isEdit ? 'تعديل البيانات والصور بدقة' : 'املأ بيانات حيوانك لربطه بفرص التزاوج والتبني'}
-              </p>
-            </div>
+            <h3 class="text-xl sm:text-2xl font-extrabold font-baloo text-[#1a1612] m-0 truncate">
+              ${isEdit ? `تعديل بيانات: ${escapeAttr(petToEdit!.name)}` : 'تسجيل بيانات المياو'}
+            </h3>
           </div>
-          <button id="close-add-pet-modal-btn" class="w-9 h-9 rounded-2xl bg-brand-peachBorder/40 dark:bg-[#342A24] hover:bg-brand-orange hover:text-white text-brand-dark dark:text-white flex items-center justify-center cursor-pointer transition text-xs active:scale-90" type="button">
-            <i class="fa-solid fa-xmark text-sm"></i>
+          <button
+            id="close-add-pet-modal-btn"
+            class="w-9 h-9 rounded-full bg-[#fffefc] border border-[#d6c7b2] hover:bg-[#e67e22] hover:text-white text-[#2d221b] flex items-center justify-center cursor-pointer transition text-sm active:scale-90 shrink-0"
+            type="button"
+            aria-label="إغلاق"
+          >
+            <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
 
-        <!-- Form Body matching _1/code.html field by field -->
-        <form id="pet-form" class="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
-          
-          <!-- 1. عندك ايه؟ (نوع الأليف - قطة / كلب) -->
-          <div class="space-y-1.5">
-            <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white">عندك ايه؟ 🐾</label>
-            <div class="grid grid-cols-2 gap-3">
+        <!-- Scrollable Form Body (Exact same fields, order, colors & design as Onboarding Step 6) -->
+        <form id="pet-form" novalidate class="p-5 overflow-y-auto space-y-5 flex-1 font-baloo">
+
+          <!-- 1. عندك ايه (قطة / كلب) -->
+          <div class="space-y-2">
+            <label class="block text-base font-bold text-[#2d221b]">عندك ايه</label>
+            <div id="modal-pet-species-group" class="grid grid-cols-2 gap-3.5 rounded-[28px]">
               <button
                 type="button"
                 id="type-cat-btn"
-                class="species-choice-btn h-14 relative flex items-center justify-center gap-2 rounded-2xl border-2 transition-all cursor-pointer shadow-sm active:scale-95 font-baloo ${
+                class="h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 ${
                   selectedSpecies === 'cat'
-                    ? 'border-brand-orange bg-[#fff5ea] dark:bg-[#342A24] text-brand-orange font-black'
-                    : 'border-brand-peachBorder dark:border-warm-darkBorder bg-white dark:bg-[#27201B] text-brand-subtleGray dark:text-[#A89F91] font-bold'
-                }"
+                    ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
+                    : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
+                } text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="text-2xl">🐱</span>
-                <span class="text-base">قطة</span>
+                <span class="font-black">قطة</span>
               </button>
+
               <button
                 type="button"
                 id="type-dog-btn"
-                class="species-choice-btn h-14 relative flex items-center justify-center gap-2 rounded-2xl border-2 transition-all cursor-pointer shadow-sm active:scale-95 font-baloo ${
+                class="h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 ${
                   selectedSpecies === 'dog'
-                    ? 'border-brand-orange bg-[#fff5ea] dark:bg-[#342A24] text-brand-orange font-black'
-                    : 'border-brand-peachBorder dark:border-warm-darkBorder bg-white dark:bg-[#27201B] text-brand-subtleGray dark:text-[#A89F91] font-bold'
-                }"
+                    ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
+                    : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
+                } text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="text-2xl">🐶</span>
-                <span class="text-base">كلب</span>
+                <span class="font-black">كلب</span>
               </button>
-              <input id="form-pet-species" type="hidden" value="${selectedSpecies}" />
+              <input id="form-pet-species" type="hidden" value="${selectedSpecies || ''}" />
             </div>
           </div>
 
-          <!-- 2. صور للمياو (3 صور أساسية) -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white">صور للمياو (3 صور متتالية) 📸</label>
-              <span class="text-[11px] font-bold text-brand-orange font-baloo">تصفح وتأكد من الصور</span>
-            </div>
-            <div class="grid grid-cols-3 gap-2.5">
-              ${(petToEdit?.photos || PRESET_CAT_PHOTOS.slice(0, 3))
-                .slice(0, 3)
-                .map((photo, i) => `
-                  <div class="relative aspect-square rounded-2xl overflow-hidden border-2 border-brand-orange bg-[#fffbf2] dark:bg-[#342A24] shadow-sm">
-                    <img src="${photo}" alt="صورة ${i + 1}" class="w-full h-full object-cover" />
-                    <span class="absolute top-1 right-1 w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center shadow-sm">
-                      ${i + 1}
-                    </span>
-                  </div>
-                `)
+          <!-- 2. صور للمياو (3 مربعات) -->
+          <div class="space-y-2">
+            <label class="block text-base font-bold text-[#2d221b]">صور للمياو</label>
+            <div id="modal-pet-photos-group" class="grid grid-cols-3 gap-3 rounded-3xl">
+              ${[0, 1, 2]
+                .map((idx) => {
+                  const photo = existingPhotos[idx];
+                  const isPrimary = idx === 0;
+                  return `
+                    <div class="relative aspect-square rounded-3xl border-2 overflow-hidden ${
+                      isPrimary
+                        ? 'border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5e5]'
+                        : 'border-[#d6c7b2] bg-[#fffefc] hover:bg-[#faf6ed]'
+                    } shadow-sm group">
+                      <label class="w-full h-full flex items-center justify-center cursor-pointer">
+                        <input accept="image/*" class="hidden add-pet-photo-input" data-photo-slot="${idx}" type="file" />
+                        ${
+                          photo
+                            ? `<img src="${photo}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`
+                            : `<span class="text-4xl font-black ${
+                                isPrimary ? 'text-[#e67e22]' : 'text-[#998b7c]'
+                              } group-hover:scale-110 transition-transform">+</span>`
+                        }
+                      </label>
+                      ${
+                        photo
+                          ? `
+                            <button
+                              type="button"
+                              data-clear-photo-slot="${idx}"
+                              class="clear-pet-photo-btn absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-black/65 hover:bg-black/85 text-white text-xs font-black flex items-center justify-center cursor-pointer transition shadow-sm"
+                              aria-label="إزالة الصورة"
+                            >×</button>
+                          `
+                          : ''
+                      }
+                    </div>
+                  `;
+                })
                 .join('')}
             </div>
           </div>
 
-          <!-- 3. اسم المياو & اللون -->
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">اسم المياو *</label>
-              <input
-                type="text"
-                id="form-pet-name"
-                required
-                value="${name}"
-                placeholder="سيمبا، لونا، مشمش..."
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
-              />
+          <!-- 3. اسم المياو واللون -->
+          <div class="grid grid-cols-2 gap-3.5">
+            <div class="space-y-2">
+              <label for="form-pet-name" class="block text-base font-bold text-[#2d221b]">اسم المياو</label>
+              <div class="relative flex items-center h-16">
+                <input
+                  type="text"
+                  id="form-pet-name"
+                  value="${escapeAttr(petName)}"
+                  autocomplete="off"
+                  class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                />
+              </div>
             </div>
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">اللون *</label>
-              <input
-                type="text"
-                id="form-pet-color"
-                required
-                value="${color}"
-                placeholder="أبيض ناصع، برتقالي، رمادي..."
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
-              />
+
+            <div class="space-y-2">
+              <label for="form-pet-color" class="block text-base font-bold text-[#2d221b]">اللون</label>
+              <div class="relative flex items-center h-16">
+                <input
+                  type="text"
+                  id="form-pet-color"
+                  value="${escapeAttr(petColor)}"
+                  autocomplete="off"
+                  class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                />
+              </div>
             </div>
           </div>
 
-          <!-- 4. السلالة & سلالة هجينة (اختياري) -->
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">السلالة *</label>
-              <input
-                type="text"
-                id="form-pet-breed"
-                required
-                value="${breed}"
-                placeholder="شيرازي، بريطاني، هاسكي..."
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
-              />
+          <!-- 4. السلالة وسلالة هجينة (اختياري) + 5. العمر -->
+          <div class="space-y-3.5">
+            <div class="grid grid-cols-2 gap-3.5">
+              <div class="space-y-2">
+                <label for="form-pet-breed" class="block text-base font-black text-[#2d221b]">السلالة</label>
+                <div class="relative flex items-center h-16">
+                  <select
+                    id="form-pet-breed"
+                    ${selectedSpecies ? '' : 'disabled'}
+                    class="w-full h-16 py-3 pr-4 pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                      selectedSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
+                    }"
+                  >
+                    ${renderBreedOptionsHtml(selectedSpecies, false, petBreed)}
+                  </select>
+                  <div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <label for="form-pet-hybrid" class="block text-base font-black text-[#2d221b]">سلالة هجينة (اختياري)</label>
+                <div class="relative flex items-center h-16">
+                  <select
+                    id="form-pet-hybrid"
+                    ${selectedSpecies ? '' : 'disabled'}
+                    class="w-full h-16 py-3 pr-4 pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                      selectedSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
+                    }"
+                  >
+                    ${renderBreedOptionsHtml(selectedSpecies, true, petHybrid)}
+                  </select>
+                  <div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
+                    </svg>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">سلالة هجينة (اختياري)</label>
-              <input
-                type="text"
-                id="form-pet-hybrid"
-                value="${hybridBreed}"
-                placeholder="بدون هجين / سيامي..."
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
-              />
+
+            <!-- العمر -->
+            <div class="space-y-2">
+              <label class="block text-base font-black text-[#2d221b]">العمر</label>
+              <div id="modal-pet-age-group" class="grid grid-cols-2 gap-3.5 h-16 rounded-[28px]">
+                <div class="relative flex items-center h-16">
+                  <input
+                    type="number"
+                    id="form-pet-age-years"
+                    inputmode="numeric"
+                    min="0"
+                    max="25"
+                    placeholder="سنة"
+                    value="${escapeAttr(petAgeYears)}"
+                    class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  />
+                </div>
+                <div class="relative flex items-center h-16">
+                  <input
+                    type="number"
+                    id="form-pet-age-months"
+                    inputmode="numeric"
+                    min="0"
+                    max="11"
+                    placeholder="شهر (اختياري)"
+                    value="${escapeAttr(petAgeMonths)}"
+                    class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- 5. العمر (سنة وشهر) & الجنس -->
-          <div class="grid grid-cols-3 gap-2.5">
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">الجنس *</label>
-              <select
-                id="form-pet-gender"
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-2.5 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm cursor-pointer font-baloo"
+          <!-- 6. الجنس -->
+          <div class="space-y-2">
+            <label class="block text-base font-bold text-[#2d221b]">الجنس</label>
+            <div id="modal-pet-gender-group" class="grid grid-cols-2 gap-3.5 rounded-[28px]">
+              <button
+                type="button"
+                id="form-gender-male-btn"
+                class="h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 ${
+                  selectedGender === 'male'
+                    ? 'border-[#3b82f6] bg-[#eff6ff] text-[#2563eb]'
+                    : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
+                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5"
               >
-                <option value="male" ${gender === 'male' ? 'selected' : ''}>ذكر (♂️)</option>
-                <option value="female" ${gender === 'female' ? 'selected' : ''}>أنثى (♀️)</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">العمر (سنوات)</label>
-              <input
-                type="number"
-                id="form-pet-age-years"
-                min="0"
-                max="25"
-                value="${ageYears}"
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo text-center"
-              />
-            </div>
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">العمر (أشهر)</label>
-              <input
-                type="number"
-                id="form-pet-age-months"
-                min="0"
-                max="11"
-                value="${ageMonths}"
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo text-center"
-              />
-            </div>
-          </div>
+                <span class="font-black">ذكر</span>
+              </button>
 
-          <!-- 6. حالة التطعيم & المدينة -->
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">حالة التطعيم *</label>
-              <select
-                id="form-pet-vaccination"
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm cursor-pointer font-baloo"
+              <button
+                type="button"
+                id="form-gender-female-btn"
+                class="h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 ${
+                  selectedGender === 'female'
+                    ? 'border-[#ec4899] bg-[#fce7f3] text-[#db2777]'
+                    : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
+                } font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <option value="fully_vaccinated" ${vaccinationStatus === 'fully_vaccinated' ? 'selected' : ''}>مُطعّم بالكامل ✓</option>
-                <option value="partially_vaccinated" ${vaccinationStatus === 'partially_vaccinated' ? 'selected' : ''}>مطعم جزئياً</option>
-                <option value="not_vaccinated" ${vaccinationStatus === 'not_vaccinated' ? 'selected' : ''}>غير مطعم</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">المدينة والحي *</label>
-              <input
-                type="text"
-                id="form-pet-area"
-                required
-                value="${area}"
-                placeholder="المعادي، القاهرة"
-                class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
-              />
+                <span class="font-black">انثى</span>
+              </button>
+              <input id="form-pet-gender" type="hidden" value="${selectedGender || ''}" />
             </div>
           </div>
 
-          <!-- 7. الشخصية والطباع (السمات) -->
-          <div>
-            <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">الشخصية والطباع (مفصولة بفواصل)</label>
-            <input
-              id="form-pet-personality"
-              type="text"
-              placeholder="مثال: مرح، ذكي، هادئ، حنون"
-              value="${personality}"
-              class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
-            />
-          </div>
+          <!-- 7. حالة التطعيم -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <label class="block text-base font-black text-[#2d221b]">حالة التطعيم</label>
+              ${
+                selectedVaccination === 'partial'
+                  ? `<span id="modal-vax-partial-note" class="text-xs font-black px-2.5 py-0.5 rounded-full bg-[#fff5ea] text-[#e67e22] border border-[#e67e22]/30">المسجل حالياً: مطعم جزئياً</span>`
+                  : ''
+              }
+            </div>
+            <div id="modal-pet-vax-group" class="grid grid-cols-2 gap-3.5 h-16 rounded-[28px]">
+              <button
+                type="button"
+                id="modal-vax-yes-btn"
+                class="h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 ${
+                  selectedVaccination === 'yes'
+                    ? 'border-[#10b981] bg-[#ecfdf5] text-[#059669]'
+                    : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
+                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2"
+              >
+                <i class="fa-solid fa-check"></i>
+                <span class="font-black">مطعم</span>
+              </button>
 
-          <!-- 8. ملاحظات صحية / سلوكية -->
-          <div>
-            <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white mb-1">ملاحظات صحية / سلوكية</label>
-            <textarea
-              id="form-pet-health-notes"
-              rows="2"
-              placeholder="أي تفاصيل صحية أو سلوكية إضافية..."
-              class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl p-3 text-xs sm:text-sm font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
-            >${healthNotes}</textarea>
-          </div>
-
-          <!-- 9. تفعيل الظهور (تزاوج / تبني / غير متاح) -->
-          <div class="p-3.5 rounded-2xl bg-[#fff5ea] dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder space-y-2">
-            <label class="block text-xs sm:text-sm font-black text-brand-dark dark:text-white">تفعيل ظهور الأليف في أقسام التطبيق: *</label>
-            <div class="grid grid-cols-3 gap-2">
-              <label class="flex items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder cursor-pointer">
-                <input type="radio" name="form_pet_status" value="mating" ${status === 'mating' ? 'checked' : ''} class="accent-brand-orange" />
-                <span class="text-xs font-black text-brand-dark dark:text-white font-baloo">تزاوج ❤️</span>
-              </label>
-              <label class="flex items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder cursor-pointer">
-                <input type="radio" name="form_pet_status" value="adoption" ${status === 'adoption' ? 'checked' : ''} class="accent-brand-orange" />
-                <span class="text-xs font-black text-brand-dark dark:text-white font-baloo">تبني 🏠</span>
-              </label>
-              <label class="flex items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder cursor-pointer">
-                <input type="radio" name="form_pet_status" value="not_available" ${status === 'not_available' ? 'checked' : ''} class="accent-brand-orange" />
-                <span class="text-xs font-black text-brand-subtleGray dark:text-[#A89F91] font-baloo">خاص ⏸️</span>
-              </label>
+              <button
+                type="button"
+                id="modal-vax-no-btn"
+                class="h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 ${
+                  selectedVaccination === 'no'
+                    ? 'border-[#ea580c] bg-[#fff7ed] text-[#c2410c]'
+                    : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
+                } font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+              >
+                <span class="font-black">غير مطعم</span>
+              </button>
             </div>
           </div>
 
-          <!-- Footer Actions -->
-          <div class="pt-2 flex items-center justify-end gap-2.5">
+          <!-- 8. سمات الشخصية -->
+          <div id="modal-pet-traits-group" class="space-y-2.5 pt-2 rounded-3xl">
+            <div class="flex items-center justify-between gap-2 pb-1 flex-wrap">
+              <div class="flex items-center gap-2">
+                <label class="block text-xl font-black text-[#2d221b]">الشخصية</label>
+                <span class="text-xs sm:text-sm font-bold text-[#8a7663] bg-[#fffbf2] border border-[#d6c7b2]/60 px-3 py-1 rounded-full shadow-sm">(اختر 3 إلى 6 صفات)</span>
+              </div>
+              <span
+                id="modal-traits-count-badge"
+                class="text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm ${
+                  isTraitsValid
+                    ? 'bg-[#ecfdf5] text-[#059669] border-[#10b981]/30'
+                    : 'bg-[#faecd8] text-[#c25807] border-[#e67e22]/20'
+                }"
+              >
+                المحدد: ${selectedTraitsSet.size} من 6
+              </span>
+            </div>
+
+            <div class="flex flex-wrap pt-2 gap-2.5 justify-start">
+              ${displayTraits
+                .map((trait) => {
+                  const isSelected = selectedTraitsSet.has(trait);
+                  return `
+                    <button
+                      type="button"
+                      data-modal-trait-name="${escapeAttr(trait)}"
+                      class="modal-trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center ${
+                        isSelected
+                          ? 'border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20'
+                          : 'border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50'
+                      }"
+                    >
+                      ${trait}
+                    </button>
+                  `;
+                })
+                .join('')}
+            </div>
+
+            <p id="modal-trait-limit-msg" class="text-xs font-bold text-[#c25807] hidden">الحد الأقصى هو 6 صفات فقط!</p>
+          </div>
+
+          <!-- 9. ملاحظات صحية / سلوكية -->
+          <div class="space-y-2">
+            <label for="form-pet-health-notes" class="block text-base font-bold text-[#2d221b]">ملاحظات صحية / سلوكية</label>
+            <div class="relative flex items-center">
+              <textarea
+                id="form-pet-health-notes"
+                rows="3"
+                class="w-full p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
+              >${escapeAttr(petNotes)}</textarea>
+            </div>
+          </div>
+
+          <!-- Validation Alert -->
+          <div
+            id="modal-pet-form-error"
+            class="hidden rounded-2xl border-2 border-[#e67e22] bg-[#fff5ea] px-4 py-3 text-sm font-bold text-[#9a3412] leading-relaxed"
+            role="alert"
+          ></div>
+
+          <!-- CTA Button -->
+          <div class="pt-4">
             <button
-              type="button"
-              id="cancel-add-pet-btn"
-              class="px-5 py-2.5 rounded-xl bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-white font-black text-xs sm:text-sm hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer font-baloo"
-            >
-              إلغاء
-            </button>
-            <button
+              id="modal-btn-pet-submit"
               type="submit"
-              class="px-6 py-2.5 rounded-xl bg-brand-orange text-white font-black text-xs sm:text-sm shadow-soft hover:bg-brand-orangeHover transition active:scale-95 cursor-pointer font-baloo"
+              class="w-full h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[28px] font-extrabold text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
             >
-              ${isEdit ? 'حفظ التعديلات ✨' : 'تسجيل الأليف الآن 🐾'}
+              <span>${isEdit ? 'حفظ التعديلات' : 'نونو على الكلام'}</span>
             </button>
           </div>
 
@@ -288,89 +449,444 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
 
 export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   const closeBtn = document.getElementById('close-add-pet-modal-btn');
-  const cancelBtn = document.getElementById('cancel-add-pet-btn');
   const backdrop = document.getElementById('add-pet-modal-backdrop');
-  const form = document.getElementById('pet-form') as HTMLFormElement;
+  const form = document.getElementById('pet-form') as HTMLFormElement | null;
 
   const handleClose = () => {
     state.setAddPetModalVisible(false, null);
   };
 
   if (closeBtn) closeBtn.addEventListener('click', handleClose);
-  if (cancelBtn) cancelBtn.addEventListener('click', handleClose);
   if (backdrop) {
     backdrop.addEventListener('click', (e) => {
       if (e.target === backdrop) handleClose();
     });
   }
 
-  // Species toggle
+  let currentSpecies: PetSpecies | null = petToEdit ? petToEdit.species : null;
+  let currentGender: PetGender | null = petToEdit ? petToEdit.gender : null;
+  let currentVaccination: 'yes' | 'no' | 'partial' | null = petToEdit
+    ? petToEdit.vaccinationStatus === 'fully_vaccinated'
+      ? 'yes'
+      : petToEdit.vaccinationStatus === 'not_vaccinated'
+      ? 'no'
+      : 'partial'
+    : null;
+  const uploadedSlots: (string | undefined)[] = [
+    petToEdit?.photos?.[0],
+    petToEdit?.photos?.[1],
+    petToEdit?.photos?.[2],
+  ];
+  const selectedTraits = new Set<string>(petToEdit?.personality || []);
+
+  const speciesGroup = document.getElementById('modal-pet-species-group');
+  const photosGroup = document.getElementById('modal-pet-photos-group');
   const catBtn = document.getElementById('type-cat-btn');
   const dogBtn = document.getElementById('type-dog-btn');
-  const speciesInput = document.getElementById('form-pet-species') as HTMLInputElement;
+  const speciesInput = document.getElementById('form-pet-species') as HTMLInputElement | null;
 
-  if (catBtn && dogBtn && speciesInput) {
-    catBtn.addEventListener('click', () => {
-      speciesInput.value = 'cat';
-      catBtn.className = 'species-choice-btn h-14 relative flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-orange bg-[#fff5ea] dark:bg-[#342A24] text-brand-orange font-black shadow-sm active:scale-95 transition-all cursor-pointer font-baloo';
-      dogBtn.className = 'species-choice-btn h-14 relative flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-peachBorder dark:border-warm-darkBorder bg-white dark:bg-[#27201B] text-brand-subtleGray dark:text-[#A89F91] font-bold shadow-sm active:scale-95 transition-all cursor-pointer font-baloo';
+  const petNameInput = document.getElementById('form-pet-name') as HTMLInputElement | null;
+  const petColorInput = document.getElementById('form-pet-color') as HTMLInputElement | null;
+  const breedSelect = document.getElementById('form-pet-breed') as HTMLSelectElement | null;
+  const hybridSelect = document.getElementById('form-pet-hybrid') as HTMLSelectElement | null;
+  const ageYearsInput = document.getElementById('form-pet-age-years') as HTMLInputElement | null;
+  const ageMonthsInput = document.getElementById('form-pet-age-months') as HTMLInputElement | null;
+  const petAgeGroup = document.getElementById('modal-pet-age-group');
+  const petGenderGroup = document.getElementById('modal-pet-gender-group');
+  const genderInput = document.getElementById('form-pet-gender') as HTMLInputElement | null;
+  const maleBtn = document.getElementById('form-gender-male-btn');
+  const femaleBtn = document.getElementById('form-gender-female-btn');
+  const petVaxGroup = document.getElementById('modal-pet-vax-group');
+  const vaxYesBtn = document.getElementById('modal-vax-yes-btn');
+  const vaxNoBtn = document.getElementById('modal-vax-no-btn');
+  const petTraitsGroup = document.getElementById('modal-pet-traits-group');
+  const countBadge = document.getElementById('modal-traits-count-badge');
+  const limitMsg = document.getElementById('modal-trait-limit-msg');
+  const petNotesInput = document.getElementById('form-pet-health-notes') as HTMLTextAreaElement | null;
+  const formError = document.getElementById('modal-pet-form-error');
+
+  // Input clear validation highlights
+  petNameInput?.addEventListener('input', () => {
+    petNameInput.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
+  });
+  petColorInput?.addEventListener('input', () => {
+    petColorInput.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
+  });
+  breedSelect?.addEventListener('change', () => {
+    breedSelect.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
+  });
+
+  // 1. Species toggle + dynamic breed dropdowns
+  const updateSpeciesUI = (species: PetSpecies) => {
+    const speciesChanged = currentSpecies !== species;
+    currentSpecies = species;
+    if (speciesInput) speciesInput.value = species;
+    speciesGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
+
+    if (catBtn && dogBtn) {
+      if (species === 'cat') {
+        catBtn.className =
+          'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        dogBtn.className =
+          'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+      } else {
+        dogBtn.className =
+          'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        catBtn.className =
+          'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+      }
+    }
+
+    const nextBreedVal = speciesChanged ? '' : breedSelect?.value || '';
+    const nextHybridVal = speciesChanged ? '' : hybridSelect?.value || '';
+
+    if (breedSelect) {
+      breedSelect.disabled = false;
+      breedSelect.classList.remove('opacity-65', 'cursor-not-allowed');
+      breedSelect.classList.add('cursor-pointer');
+      breedSelect.innerHTML = renderBreedOptionsHtml(species, false, nextBreedVal);
+    }
+    if (hybridSelect) {
+      hybridSelect.disabled = false;
+      hybridSelect.classList.remove('opacity-65', 'cursor-not-allowed');
+      hybridSelect.classList.add('cursor-pointer');
+      hybridSelect.innerHTML = renderBreedOptionsHtml(species, true, nextHybridVal);
+    }
+  };
+
+  catBtn?.addEventListener('click', () => updateSpeciesUI('cat'));
+  dogBtn?.addEventListener('click', () => updateSpeciesUI('dog'));
+
+  // 2. Photo slot uploads & clear buttons
+  const renderSlotState = (slotEl: HTMLElement, idx: number, photoUrl?: string) => {
+    const label = slotEl.querySelector('label');
+    if (label) {
+      const existingImg = label.querySelector('img');
+      const existingPlus = label.querySelector('span');
+      if (photoUrl) {
+        if (existingPlus) existingPlus.remove();
+        if (existingImg) {
+          existingImg.src = photoUrl;
+        } else {
+          const img = document.createElement('img');
+          img.src = photoUrl;
+          img.alt = `صورة ${idx + 1}`;
+          img.className = 'w-full h-full object-cover';
+          label.appendChild(img);
+        }
+      } else {
+        if (existingImg) existingImg.remove();
+        if (!existingPlus) {
+          const span = document.createElement('span');
+          span.className = `text-4xl font-black ${
+            idx === 0 ? 'text-[#e67e22]' : 'text-[#998b7c]'
+          } group-hover:scale-110 transition-transform`;
+          span.textContent = '+';
+          label.appendChild(span);
+        }
+      }
+    }
+    const existingClear = slotEl.querySelector('.clear-pet-photo-btn');
+    if (photoUrl && !existingClear) {
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.setAttribute('data-clear-photo-slot', String(idx));
+      clearBtn.className =
+        'clear-pet-photo-btn absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-black/65 hover:bg-black/85 text-white text-xs font-black flex items-center justify-center cursor-pointer transition shadow-sm';
+      clearBtn.setAttribute('aria-label', 'إزالة الصورة');
+      clearBtn.textContent = '×';
+      clearBtn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        uploadedSlots[idx] = undefined;
+        const inputEl = slotEl.querySelector<HTMLInputElement>('.add-pet-photo-input');
+        if (inputEl) inputEl.value = '';
+        renderSlotState(slotEl, idx, undefined);
+      });
+      slotEl.appendChild(clearBtn);
+    } else if (!photoUrl && existingClear) {
+      existingClear.remove();
+    }
+  };
+
+  document.querySelectorAll<HTMLInputElement>('.add-pet-photo-input').forEach((input) => {
+    input.addEventListener('change', () => {
+      const slotStr = input.getAttribute('data-photo-slot');
+      const slot = slotStr ? parseInt(slotStr, 10) : -1;
+      const file = input.files?.[0];
+      if (!file || slot < 0 || slot > 2) return;
+      photosGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : undefined;
+        if (!result) return;
+        uploadedSlots[slot] = result;
+        const slotWrapper = input.closest('div');
+        if (slotWrapper) {
+          renderSlotState(slotWrapper, slot, result);
+        }
+      };
+      reader.readAsDataURL(file);
     });
-    dogBtn.addEventListener('click', () => {
-      speciesInput.value = 'dog';
-      dogBtn.className = 'species-choice-btn h-14 relative flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-orange bg-[#fff5ea] dark:bg-[#342A24] text-brand-orange font-black shadow-sm active:scale-95 transition-all cursor-pointer font-baloo';
-      catBtn.className = 'species-choice-btn h-14 relative flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-peachBorder dark:border-warm-darkBorder bg-white dark:bg-[#27201B] text-brand-subtleGray dark:text-[#A89F91] font-bold shadow-sm active:scale-95 transition-all cursor-pointer font-baloo';
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.clear-pet-photo-btn').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const slotStr = btn.getAttribute('data-clear-photo-slot');
+      const slot = slotStr ? parseInt(slotStr, 10) : -1;
+      if (slot < 0 || slot > 2) return;
+      uploadedSlots[slot] = undefined;
+      const slotWrapper = btn.closest('div');
+      if (slotWrapper) {
+        const inputEl = slotWrapper.querySelector<HTMLInputElement>('.add-pet-photo-input');
+        if (inputEl) inputEl.value = '';
+        renderSlotState(slotWrapper, slot, undefined);
+      }
+    });
+  });
+
+  // 3. Age numeric sanitization
+  ageYearsInput?.addEventListener('input', () => {
+    ageYearsInput.value = ageYearsInput.value.replace(/[^0-9]/g, '');
+    petAgeGroup?.classList.remove('ring-2', 'ring-[#e67e22]');
+  });
+  ageMonthsInput?.addEventListener('input', () => {
+    ageMonthsInput.value = ageMonthsInput.value.replace(/[^0-9]/g, '');
+    petAgeGroup?.classList.remove('ring-2', 'ring-[#e67e22]');
+  });
+
+  // 4. Gender Buttons + Live Pet Name Text Color
+  const applyPetNameGenderColor = (gender: PetGender | null) => {
+    if (!petNameInput) return;
+    petNameInput.classList.remove('text-[#1a1612]', 'text-[#60A5FA]', 'text-[#F472B6]');
+    petNameInput.classList.add(getPetNameTextColorClass(gender));
+  };
+
+  if (maleBtn && femaleBtn) {
+    maleBtn.addEventListener('click', () => {
+      currentGender = 'male';
+      if (genderInput) genderInput.value = 'male';
+      petGenderGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
+      maleBtn.className =
+        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#3b82f6] bg-[#eff6ff] text-[#2563eb] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5';
+      femaleBtn.className =
+        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+      applyPetNameGenderColor('male');
+    });
+    femaleBtn.addEventListener('click', () => {
+      currentGender = 'female';
+      if (genderInput) genderInput.value = 'female';
+      petGenderGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
+      femaleBtn.className =
+        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+      maleBtn.className =
+        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5';
+      applyPetNameGenderColor('female');
     });
   }
 
+  // 5. Vaccination Yes/No buttons
+  if (vaxYesBtn && vaxNoBtn) {
+    vaxYesBtn.addEventListener('click', () => {
+      currentVaccination = 'yes';
+      document.getElementById('modal-vax-partial-note')?.classList.add('hidden');
+      petVaxGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
+      vaxYesBtn.className =
+        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#10b981] bg-[#ecfdf5] text-[#059669] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2';
+      vaxNoBtn.className =
+        'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+    });
+    vaxNoBtn.addEventListener('click', () => {
+      currentVaccination = 'no';
+      document.getElementById('modal-vax-partial-note')?.classList.add('hidden');
+      petVaxGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
+      vaxNoBtn.className =
+        'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+      vaxYesBtn.className =
+        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2';
+    });
+  }
+
+  // 6. Personality Trait Chips (3 to 6)
+  document.querySelectorAll<HTMLButtonElement>('.modal-trait-chip-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const trait = btn.getAttribute('data-modal-trait-name');
+      if (!trait) return;
+
+      if (selectedTraits.has(trait)) {
+        selectedTraits.delete(trait);
+        btn.className =
+          'modal-trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50';
+        if (limitMsg) limitMsg.classList.add('hidden');
+      } else {
+        if (selectedTraits.size >= 6) {
+          if (limitMsg) {
+            limitMsg.classList.remove('hidden');
+            setTimeout(() => limitMsg.classList.add('hidden'), 2500);
+          }
+          return;
+        }
+        selectedTraits.add(trait);
+        btn.className =
+          'modal-trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20';
+        if (limitMsg) limitMsg.classList.add('hidden');
+      }
+
+      if (selectedTraits.size >= 3) {
+        petTraitsGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-2');
+      }
+
+      if (countBadge) {
+        countBadge.textContent = `المحدد: ${selectedTraits.size} من 6`;
+        if (selectedTraits.size >= 3) {
+          countBadge.className =
+            'text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm bg-[#ecfdf5] text-[#059669] border-[#10b981]/30';
+        } else {
+          countBadge.className =
+            'text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm bg-[#faecd8] text-[#c25807] border-[#e67e22]/20';
+        }
+      }
+    });
+  });
+
+  // 7. Submit handler (exact Onboarding Step 6 validation + zero data loss on Edit)
   if (form) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
 
-      const nameInput = document.getElementById('form-pet-name') as HTMLInputElement;
-      const breedInput = document.getElementById('form-pet-breed') as HTMLInputElement;
-      const hybridInput = document.getElementById('form-pet-hybrid') as HTMLInputElement;
-      const colorInput = document.getElementById('form-pet-color') as HTMLInputElement;
-      const genderSelect = document.getElementById('form-pet-gender') as HTMLSelectElement;
-      const ageYearsInput = document.getElementById('form-pet-age-years') as HTMLInputElement;
-      const ageMonthsInput = document.getElementById('form-pet-age-months') as HTMLInputElement;
-      const vaccinationSelect = document.getElementById('form-pet-vaccination') as HTMLSelectElement;
-      const areaInput = document.getElementById('form-pet-area') as HTMLInputElement;
-      const personalityInput = document.getElementById('form-pet-personality') as HTMLInputElement;
-      const notesInput = document.getElementById('form-pet-health-notes') as HTMLTextAreaElement;
+      const name = (petNameInput?.value || '').trim();
+      const color = (petColorInput?.value || '').trim();
+      const breed = (breedSelect?.value || '').trim();
+      const hybridBreed = (hybridSelect?.value || '').trim();
+      const ageYearsRaw = (ageYearsInput?.value || '').trim();
+      const ageMonthsRaw = (ageMonthsInput?.value || '').trim();
+      const notes = (petNotesInput?.value || '').trim();
 
-      const selectedStatusRadio = document.querySelector<HTMLInputElement>(
-        'input[name="form_pet_status"]:checked'
-      );
+      const ageYears = ageYearsRaw !== '' ? parseInt(ageYearsRaw, 10) : 0;
+      const ageMonths = ageMonthsRaw !== '' ? parseInt(ageMonthsRaw, 10) : 0;
+      const validPhotos = uploadedSlots.filter((p): p is string => Boolean(p));
 
-      const status = (selectedStatusRadio?.value as PetStatus) || 'mating';
+      const errors: string[] = [];
 
-      const personalityArray = personalityInput ? personalityInput.value
-        .split(/[،,]/)
-        .map((s) => s.trim())
-        .filter(Boolean) : ['أليف', 'لطيف'];
+      if (!currentSpecies) {
+        errors.push('• يرجى اختيار نوع الأليف (قطة أو كلب).');
+        speciesGroup?.classList.add('ring-2', 'ring-[#e67e22]', 'p-1');
+      }
+      if (validPhotos.length === 0) {
+        errors.push('• يرجى إضافة صورة واحدة على الأقل للأليف.');
+        photosGroup?.classList.add('ring-2', 'ring-[#e67e22]', 'p-1');
+      }
+      if (!name) {
+        errors.push('• يرجى كتابة اسم الأليف.');
+        petNameInput?.classList.add('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
+      }
+      if (!color) {
+        errors.push('• يرجى كتابة لون الأليف.');
+        petColorInput?.classList.add('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
+      }
+      if (!breed) {
+        errors.push('• يرجى اختيار سلالة الأليف.');
+        breedSelect?.classList.add('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
+      }
+      if (
+        (ageYearsRaw === '' && ageMonthsRaw === '') ||
+        isNaN(ageYears) ||
+        isNaN(ageMonths) ||
+        ageYears < 0 ||
+        ageYears > 25 ||
+        ageMonths < 0 ||
+        ageMonths > 11 ||
+        ageYears + ageMonths === 0
+      ) {
+        errors.push('• يرجى إدخال عمر صحيح للأليف (سنوات من 0-25 أو أشهر من 1-11).');
+        petAgeGroup?.classList.add('ring-2', 'ring-[#e67e22]');
+      }
+      if (!currentGender) {
+        errors.push('• يرجى اختيار جنس الأليف (ذكر أو أنثى).');
+        petGenderGroup?.classList.add('ring-2', 'ring-[#e67e22]', 'p-1');
+      }
+      if (!currentVaccination) {
+        errors.push('• يرجى تحديد حالة التطعيم (مطعم أو غير مطعم).');
+        petVaxGroup?.classList.add('ring-2', 'ring-[#e67e22]', 'p-1');
+      }
+      if (selectedTraits.size < 3 || selectedTraits.size > 6) {
+        errors.push('• يرجى اختيار من 3 إلى 6 صفات شخصية للأليف.');
+        petTraitsGroup?.classList.add('ring-2', 'ring-[#e67e22]', 'p-2');
+      }
 
-      const petData: Partial<Pet> = {
-        id: petToEdit ? petToEdit.id : undefined,
-        name: nameInput.value.trim(),
-        species: (speciesInput ? speciesInput.value : 'cat') as PetSpecies,
-        breed: breedInput.value.trim(),
-        hybridBreed: hybridInput ? hybridInput.value.trim() : '',
-        color: colorInput.value.trim(),
-        gender: genderSelect.value as PetGender,
-        ageYears: parseInt(ageYearsInput.value, 10) || 1,
-        ageMonths: parseInt(ageMonthsInput.value, 10) || 0,
-        area: areaInput.value.trim(),
-        city: areaInput.value.includes('الجيزة') ? 'الجيزة' : areaInput.value.includes('الإسكندرية') ? 'الإسكندرية' : 'القاهرة',
-        healthStatus: 'ممتازة',
-        vaccinationStatus: (vaccinationSelect ? vaccinationSelect.value : 'fully_vaccinated') as VaccinationStatus,
-        personality: personalityArray.length > 0 ? personalityArray : ['أليف', 'لطيف'],
-        healthNotes: notesInput ? notesInput.value.trim() : '',
-        status,
-        photos: petToEdit?.photos || PRESET_CAT_PHOTOS.slice(0, 3),
-      };
+      if (errors.length > 0) {
+        if (formError) {
+          formError.innerHTML = errors.join('<br />');
+          formError.classList.remove('hidden');
+          formError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return;
+      }
 
-      state.savePet(petData);
-      state.setAddPetModalVisible(false, null);
+      if (formError) {
+        formError.innerHTML = '';
+        formError.classList.add('hidden');
+      }
+
+      const resolvedVaccination: VaccinationStatus =
+        currentVaccination === 'yes'
+          ? 'fully_vaccinated'
+          : currentVaccination === 'partial'
+          ? 'partially_vaccinated'
+          : 'not_vaccinated';
+
+      const currentUser = state.getUser();
+
+      if (petToEdit) {
+        // Edit mode: preserve untouched geo, status, adoption metadata, and healthStatus
+        state.savePet({
+          id: petToEdit.id,
+          name,
+          species: currentSpecies!,
+          breed,
+          hybridBreed: hybridBreed || undefined,
+          color,
+          gender: currentGender!,
+          ageYears,
+          ageMonths,
+          vaccinationStatus: resolvedVaccination,
+          personality: Array.from(selectedTraits),
+          healthNotes: notes,
+          photos: validPhotos,
+        });
+      } else {
+        // Add mode: inherits user's geo hierarchy and starts in 'mating' like Onboarding Step 6
+        state.savePet({
+          name,
+          species: currentSpecies!,
+          breed,
+          hybridBreed: hybridBreed || undefined,
+          color,
+          gender: currentGender!,
+          ageYears,
+          ageMonths,
+          area: currentUser.village || currentUser.city || currentUser.governorate || 'القاهرة',
+          city: currentUser.city || currentUser.governorate || 'القاهرة',
+          governorate: currentUser.governorate || 'القاهرة',
+          markaz: currentUser.markaz,
+          village: currentUser.village,
+          governorateId: currentUser.governorateId,
+          markazId: currentUser.markazId,
+          cityId: currentUser.cityId,
+          villageId: currentUser.villageId,
+          locationId: currentUser.locationId,
+          lat: currentUser.lat,
+          lng: currentUser.lng,
+          vaccinationStatus: resolvedVaccination,
+          personality: Array.from(selectedTraits),
+          healthNotes: notes,
+          photos: validPhotos,
+          status: 'mating',
+        });
+      }
     });
   }
 }

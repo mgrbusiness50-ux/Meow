@@ -26,13 +26,24 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
 
         <!-- Target Cat Summary Pill -->
         <div class="p-3 rounded-2xl bg-white border border-brand-peachBorder flex items-center gap-3 shadow-sm">
-          <img src="${targetPet.photos[0]}" alt="${targetPet.name}" class="w-12 h-12 rounded-xl object-cover border border-brand-peachBorder" />
+          <img src="${targetPet.photos[0]}" alt="${targetPet.name}" class="w-12 h-12 rounded-xl object-cover border border-brand-peachBorder shrink-0" />
           <div class="flex-1 min-w-0">
             <h4 class="text-sm font-black text-brand-dark truncate">${targetPet.name}</h4>
-            <span class="text-xs font-semibold text-brand-subtleGray block">${targetPet.breed} • ${targetPet.area}</span>
+            ${
+              targetPet.status === 'adoption' && targetPet.adoptionType === 'group'
+                ? `
+                  <span class="text-[11px] font-bold text-emerald-700 block truncate">
+                    تبني جماعي (${targetPet.groupCount || targetPet.groupMembers?.length || 2} حيوانات): ${(targetPet.groupMembers || []).map((m) => m.name).join('، ')}
+                  </span>
+                  <span class="text-[10px] font-bold text-brand-subtleGray block truncate">
+                    ${targetPet.mustAdoptTogether ? '⚠️ يُشترط تبنيهم معاً' : '✅ متاح منفرداً أو معاً'} • 📍 ${targetPet.area}، ${targetPet.city}
+                  </span>
+                `
+                : `<span class="text-xs font-semibold text-brand-subtleGray block">${targetPet.breed} • ${targetPet.area}</span>`
+            }
           </div>
-          <span class="text-xs font-bold px-2 py-0.5 rounded-lg ${isMating ? 'bg-brand-orange/15 text-brand-orange' : 'bg-emerald-50 text-emerald-800'}">
-            ${isMating ? 'تزاوج ❤️' : 'تبني 🏠'}
+          <span class="text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${isMating ? 'bg-brand-orange/15 text-brand-orange' : 'bg-emerald-50 text-emerald-800'}">
+            ${isMating ? 'تزاوج ❤️' : targetPet.adoptionType === 'group' ? 'جماعي 🏠' : 'تبني 🏠'}
           </span>
         </div>
 

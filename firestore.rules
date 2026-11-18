@@ -1,0 +1,644 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Helpers
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOptionalString(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isOptionalNumber(data, key, minVal, maxVal) {
+      return !(key in data) || (data[key] is number && data[key] >= minVal && data[key] <= maxVal);
+    }
+
+    function isOptionalBool(data, key) {
+      return !(key in data) || data[key] is bool;
+    }
+
+    // Validation Blueprints
+    function isValidUserPublicProfile(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'name',
+          'showPhoneInProfile',
+          'notificationsEnabled',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'name',
+          'avatar',
+          'city',
+          'governorate',
+          'showPhoneInProfile',
+          'notificationsEnabled',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && isOptionalString(data, 'avatar', 1000)
+        && isOptionalString(data, 'city', 100)
+        && isOptionalString(data, 'governorate', 100)
+        && data.showPhoneInProfile is bool
+        && data.notificationsEnabled is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'phone', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'phone', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.email is string && data.email.size() <= 254
+        && data.phone is string && data.phone.size() <= 32
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPet(data, petId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'ownerName',
+          'ownerShowPhone',
+          'ownerPrivacy',
+          'name',
+          'species',
+          'gender',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'ownerName',
+          'ownerShowPhone',
+          'ownerPrivacy',
+          'name',
+          'species',
+          'breed',
+          'hybridBreed',
+          'color',
+          'gender',
+          'ageYears',
+          'ageMonths',
+          'status',
+          'vaccinationStatus',
+          'healthStatus',
+          'healthNotes',
+          'city',
+          'governorate',
+          'photosCount',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == petId
+        && isValidId(data.ownerId)
+        && data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100
+        && data.ownerShowPhone is bool
+        && data.ownerPrivacy in ['public', 'limited_until_approved', 'private']
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && data.species in ['cat', 'dog', 'bird']
+        && data.gender in ['male', 'female']
+        && data.status in ['mating', 'adoption', 'not_available']
+        && isOptionalString(data, 'breed', 100)
+        && isOptionalString(data, 'hybridBreed', 100)
+        && isOptionalString(data, 'color', 60)
+        && isOptionalNumber(data, 'ageYears', 0, 40)
+        && isOptionalNumber(data, 'ageMonths', 0, 11)
+        && (!('vaccinationStatus' in data) || data.vaccinationStatus in ['fully_vaccinated', 'partially_vaccinated', 'not_vaccinated'])
+        && isOptionalString(data, 'healthStatus', 40)
+        && isOptionalString(data, 'healthNotes', 600)
+        && isOptionalString(data, 'city', 100)
+        && isOptionalString(data, 'governorate', 100)
+        && isOptionalNumber(data, 'photosCount', 0, 10)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidContactRequest(data, requestId) {
+      return data.keys().hasAll([
+          'id',
+          'senderId',
+          'senderName',
+          'receiverOwnerId',
+          'receiverPetId',
+          'receiverPetName',
+          'message',
+          'type',
+          'status',
+          'celebratedBySender',
+          'celebratedByReceiver',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'senderId',
+          'senderName',
+          'receiverOwnerId',
+          'receiverPetId',
+          'receiverPetName',
+          'senderPetId',
+          'senderPetName',
+          'message',
+          'type',
+          'status',
+          'celebratedBySender',
+          'celebratedByReceiver',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == requestId
+        && isValidId(data.senderId)
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100
+        && isValidId(data.receiverOwnerId)
+        && isValidId(data.receiverPetId)
+        && data.receiverPetName is string && data.receiverPetName.size() >= 1 && data.receiverPetName.size() <= 100
+        && isOptionalString(data, 'senderPetId', 128)
+        && isOptionalString(data, 'senderPetName', 100)
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 1000
+        && data.type in ['mating', 'adoption']
+        && data.status in ['pending', 'accepted', 'rejected']
+        && data.celebratedBySender is bool
+        && data.celebratedByReceiver is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidConversation(data, conversationId) {
+      return data.keys().hasAll([
+          'id',
+          'requestId',
+          'participantA',
+          'participantB',
+          'petId',
+          'petName',
+          'petType',
+          'lastMessage',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'requestId',
+          'participantA',
+          'participantB',
+          'petId',
+          'petName',
+          'petType',
+          'lastMessage',
+          'isPinnedByA',
+          'isPinnedByB',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == conversationId
+        && isValidId(data.requestId)
+        && isValidId(data.participantA)
+        && isValidId(data.participantB)
+        && data.participantA != data.participantB
+        && isValidId(data.petId)
+        && data.petName is string && data.petName.size() >= 1 && data.petName.size() <= 100
+        && data.petType in ['mating', 'adoption']
+        && data.lastMessage is string && data.lastMessage.size() <= 1000
+        && isOptionalBool(data, 'isPinnedByA')
+        && isOptionalBool(data, 'isPinnedByB')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data, messageId, conversationId) {
+      return data.keys().hasAll([
+          'id',
+          'conversationId',
+          'senderId',
+          'senderName',
+          'type',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'conversationId',
+          'senderId',
+          'senderName',
+          'type',
+          'text',
+          'createdAt'
+        ])
+        && isValidId(data.id)
+        && data.id == messageId
+        && isValidId(data.conversationId)
+        && data.conversationId == conversationId
+        && isValidId(data.senderId)
+        && data.senderId == request.auth.uid
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100
+        && data.type in ['text', 'image', 'file', 'audio', 'sticker']
+        && isOptionalString(data, 'text', 2000)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidUserNotification(data, notificationId, userId) {
+      return data.keys().hasAll([
+          'id',
+          'userId',
+          'type',
+          'title',
+          'body',
+          'read',
+          'celebrated',
+          'targetTab',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'userId',
+          'type',
+          'title',
+          'body',
+          'read',
+          'celebrated',
+          'targetTab',
+          'targetRequestId',
+          'targetConversationId',
+          'targetPetId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == notificationId
+        && isValidId(data.userId)
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.type in ['contact_request', 'mating_approved', 'adoption_approved', 'new_message', 'system']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.body is string && data.body.size() >= 1 && data.body.size() <= 500
+        && data.read is bool
+        && data.celebrated is bool
+        && data.targetTab in ['mating', 'adoption', 'chat', 'profile']
+        && isOptionalString(data, 'targetRequestId', 128)
+        && isOptionalString(data, 'targetConversationId', 128)
+        && isOptionalString(data, 'targetPetId', 128)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBlockedUser(data, blockedUserId) {
+      return data.keys().hasAll(['userId', 'userName', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'userName', 'petName', 'createdAt'])
+        && isValidId(data.userId)
+        && data.userId == blockedUserId
+        && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100
+        && isOptionalString(data, 'petName', 80)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidReport(data, reportId) {
+      return data.keys().hasAll([
+          'id',
+          'reporterId',
+          'targetUserId',
+          'targetUserName',
+          'targetType',
+          'reason',
+          'reasonLabel',
+          'details',
+          'status',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'reporterId',
+          'targetUserId',
+          'targetUserName',
+          'targetType',
+          'reason',
+          'reasonLabel',
+          'details',
+          'status',
+          'createdAt'
+        ])
+        && isValidId(data.id)
+        && data.id == reportId
+        && isValidId(data.reporterId)
+        && data.reporterId == request.auth.uid
+        && isValidId(data.targetUserId)
+        && data.targetUserName is string && data.targetUserName.size() >= 1 && data.targetUserName.size() <= 100
+        && data.targetType in ['pet', 'chat', 'request']
+        && data.reason in ['inappropriate_content', 'fraud_or_misleading', 'unsafe_animal_care', 'spam_or_harassment', 'other']
+        && data.reasonLabel is string && data.reasonLabel.size() >= 1 && data.reasonLabel.size() <= 120
+        && data.details is string && data.details.size() <= 1000
+        && data.status == 'pending_review'
+        && data.createdAt is timestamp;
+    }
+
+    // Users Collection (Public Non-PII Profile)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn();
+      allow list: if false;
+      allow create: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidUserPublicProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidUserPublicProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name',
+            'avatar',
+            'city',
+            'governorate',
+            'showPhoneInProfile',
+            'notificationsEnabled',
+            'updatedAt'
+          ])
+        );
+      allow delete: if false;
+
+      // Isolated PII Subcollection
+      match /private/{docId} {
+        allow get: if isOwner(userId) && docId == 'info';
+        allow list: if false;
+        allow create: if isVerifiedOwner(userId)
+          && docId == 'info'
+          && isValidUserPrivateInfo(incoming(), userId)
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedOwner(userId)
+          && docId == 'info'
+          && isValidUserPrivateInfo(incoming(), userId)
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'phone', 'updatedAt']);
+        allow delete: if false;
+      }
+
+      // User Notifications Subcollection
+      match /notifications/{notificationId} {
+        allow get: if isOwner(userId) && isValidId(notificationId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+        allow create: if isVerifiedOwner(userId)
+          && isValidId(notificationId)
+          && isValidUserNotification(incoming(), notificationId, userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedOwner(userId)
+          && isValidId(notificationId)
+          && isValidUserNotification(incoming(), notificationId, userId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().type == existing().type
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            (incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt'])) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['celebrated', 'updatedAt']) && existing().celebrated == false) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['read', 'celebrated', 'updatedAt']) && existing().celebrated == false)
+          );
+        allow delete: if isOwner(userId) && isValidId(notificationId);
+      }
+
+      // Blocked Users Subcollection
+      match /blockedUsers/{blockedUserId} {
+        allow get: if isOwner(userId) && isValidId(blockedUserId);
+        allow list: if isOwner(userId);
+        allow create: if isVerifiedOwner(userId)
+          && isValidId(blockedUserId)
+          && blockedUserId != userId
+          && isValidBlockedUser(incoming(), blockedUserId)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if isVerifiedOwner(userId) && isValidId(blockedUserId);
+      }
+    }
+
+    // Pets Collection
+    match /pets/{petId} {
+      allow get: if isValidId(petId)
+        && isSignedIn()
+        && (existing().status in ['mating', 'adoption'] || existing().ownerId == request.auth.uid);
+      allow list: if isSignedIn()
+        && (existing().status in ['mating', 'adoption'] || existing().ownerId == request.auth.uid);
+      allow create: if isVerifiedUser()
+        && isValidId(petId)
+        && isValidPet(incoming(), petId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(petId)
+        && isValidPet(incoming(), petId)
+        && existing().ownerId == request.auth.uid
+        && incoming().ownerId == existing().ownerId
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'ownerName',
+            'ownerShowPhone',
+            'ownerPrivacy',
+            'name',
+            'species',
+            'breed',
+            'hybridBreed',
+            'color',
+            'gender',
+            'ageYears',
+            'ageMonths',
+            'status',
+            'vaccinationStatus',
+            'healthStatus',
+            'healthNotes',
+            'city',
+            'governorate',
+            'photosCount',
+            'updatedAt'
+          ])
+        );
+      allow delete: if isVerifiedUser()
+        && isValidId(petId)
+        && existing().ownerId == request.auth.uid;
+    }
+
+    // Contact Requests Collection (with Terminal State Locking)
+    match /contactRequests/{requestId} {
+      allow get: if isValidId(requestId)
+        && isSignedIn()
+        && (existing().senderId == request.auth.uid || existing().receiverOwnerId == request.auth.uid);
+      allow list: if isSignedIn()
+        && (existing().senderId == request.auth.uid || existing().receiverOwnerId == request.auth.uid);
+      allow create: if isVerifiedUser()
+        && isValidId(requestId)
+        && isValidContactRequest(incoming(), requestId)
+        && incoming().senderId == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().celebratedBySender == false
+        && incoming().celebratedByReceiver == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/pets/$(incoming().receiverPetId));
+      allow update: if isVerifiedUser()
+        && isValidId(requestId)
+        && isValidContactRequest(incoming(), requestId)
+        && incoming().id == existing().id
+        && incoming().senderId == existing().senderId
+        && incoming().receiverOwnerId == existing().receiverOwnerId
+        && incoming().receiverPetId == existing().receiverPetId
+        && incoming().type == existing().type
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Receiver approves or rejects a pending request
+          (
+            existing().status == 'pending'
+            && existing().receiverOwnerId == request.auth.uid
+            && incoming().status in ['accepted', 'rejected']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          ) ||
+          // Sender marks one-time celebration after approval
+          (
+            existing().status == 'accepted'
+            && existing().senderId == request.auth.uid
+            && existing().celebratedBySender == false
+            && incoming().celebratedBySender == true
+            && incoming().diff(existing()).affectedKeys().hasOnly(['celebratedBySender', 'updatedAt'])
+          ) ||
+          // Receiver marks one-time celebration after approval
+          (
+            existing().status == 'accepted'
+            && existing().receiverOwnerId == request.auth.uid
+            && existing().celebratedByReceiver == false
+            && incoming().celebratedByReceiver == true
+            && incoming().diff(existing()).affectedKeys().hasOnly(['celebratedByReceiver', 'updatedAt'])
+          )
+        );
+      allow delete: if false;
+    }
+
+    // Conversations & Messages (Master Gate Pattern)
+    match /conversations/{conversationId} {
+      allow get: if isValidId(conversationId)
+        && isSignedIn()
+        && (existing().participantA == request.auth.uid || existing().participantB == request.auth.uid);
+      allow list: if isSignedIn()
+        && (existing().participantA == request.auth.uid || existing().participantB == request.auth.uid);
+      allow create: if isVerifiedUser()
+        && isValidId(conversationId)
+        && isValidConversation(incoming(), conversationId)
+        && (incoming().participantA == request.auth.uid || incoming().participantB == request.auth.uid)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/contactRequests/$(incoming().requestId));
+      allow update: if isVerifiedUser()
+        && isValidId(conversationId)
+        && isValidConversation(incoming(), conversationId)
+        && (existing().participantA == request.auth.uid || existing().participantB == request.auth.uid)
+        && incoming().id == existing().id
+        && incoming().requestId == existing().requestId
+        && incoming().participantA == existing().participantA
+        && incoming().participantB == existing().participantB
+        && incoming().petId == existing().petId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: New message summary update
+          (incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt'])) ||
+          // Action: Participant A toggles pin
+          (existing().participantA == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['isPinnedByA', 'updatedAt'])) ||
+          // Action: Participant B toggles pin
+          (existing().participantB == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['isPinnedByB', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser()
+        && isValidId(conversationId)
+        && (existing().participantA == request.auth.uid || existing().participantB == request.auth.uid);
+
+      match /messages/{messageId} {
+        allow get: if isValidId(conversationId)
+          && isValidId(messageId)
+          && isSignedIn()
+          && (
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantA == request.auth.uid ||
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantB == request.auth.uid
+          );
+        allow list: if isValidId(conversationId)
+          && isSignedIn()
+          && (
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantA == request.auth.uid ||
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantB == request.auth.uid
+          );
+        allow create: if isVerifiedUser()
+          && isValidId(conversationId)
+          && isValidId(messageId)
+          && isValidChatMessage(incoming(), messageId, conversationId)
+          && incoming().createdAt == request.time
+          && (
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantA == request.auth.uid ||
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantB == request.auth.uid
+          );
+        allow update, delete: if false;
+      }
+    }
+
+    // Moderation Reports
+    match /reports/{reportId} {
+      allow get: if isValidId(reportId)
+        && isSignedIn()
+        && existing().reporterId == request.auth.uid;
+      allow list: if isSignedIn() && existing().reporterId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(reportId)
+        && isValidReport(incoming(), reportId)
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}

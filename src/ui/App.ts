@@ -10,16 +10,45 @@ import { renderProfileView, attachProfileEvents } from './views/ProfileView.ts';
 import { renderPetDetailModal, attachPetDetailModalEvents } from './modals/PetDetailModal.ts';
 import { renderContactRequestModal, attachContactRequestModalEvents } from './modals/ContactRequestModal.ts';
 import { renderAddPetModal, attachAddPetModalEvents } from './modals/AddPetModal.ts';
-import { renderOnboardingView, attachOnboardingEvents } from './views/OnboardingView.ts';
+import {
+  renderOnboardingView,
+  attachOnboardingEvents,
+  renderOwnerEditView,
+  attachOwnerEditEvents,
+} from './views/OnboardingView.ts';
 import { renderFilterModal, attachFilterModalEvents } from './modals/FilterModal.ts';
 import { renderContactView, attachContactEvents } from './views/ContactView.ts';
 import { renderSavedPetsView, attachSavedPetsEvents } from './views/SavedPetsView.ts';
+import { renderGroupAdoptionModal, attachGroupAdoptionModalEvents } from './modals/GroupAdoptionModal.ts';
+import { renderNotificationsModal, attachNotificationsModalEvents } from './modals/NotificationsModal.ts';
+import {
+  renderBlockConfirmModal,
+  attachBlockConfirmModalEvents,
+  renderReportModal,
+  attachReportModalEvents,
+  renderReportSubmittedToast,
+  attachReportToastEvents,
+  attachThreeDotsMenuEvents,
+  closeAllThreeDotsDropdowns,
+} from './components/BlockMenu.ts';
+import {
+  renderDeleteConversationConfirmModal,
+  attachDeleteConversationModalEvents,
+} from './views/ChatView.ts';
 
 export class MeowApp {
   private container: HTMLElement;
 
   constructor(container: HTMLElement) {
     this.container = container;
+    if (typeof document !== 'undefined') {
+      document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement | null;
+        if (target && !target.closest('.meow-more-menu-container')) {
+          closeAllThreeDotsDropdowns();
+        }
+      });
+    }
     state.subscribe(() => {
       this.render();
     });
@@ -35,7 +64,7 @@ export class MeowApp {
     // 1. If user is in the onboarding / registration flow, show the exact sequential registration screens
     if (onboardingStep !== 'completed') {
       this.container.innerHTML = `
-        <div class="min-h-full flex flex-col justify-center bg-warm-bg dark:bg-warm-darkBg text-warm-text dark:text-white transition-colors duration-200">
+        <div class="min-h-[100dvh] flex flex-col justify-center bg-[#FFF9E9] text-[#3E2723]">
           ${renderOnboardingView()}
         </div>
       `;
@@ -94,10 +123,17 @@ export class MeowApp {
         <!-- Modals & Sub-views -->
         ${renderContactRequestModal(selectedPetRequest)}
         ${isAddPetOpen ? renderAddPetModal(editingPet) : ''}
+        ${state.isEditOwnerModalVisible() ? renderOwnerEditView() : ''}
         ${renderFilterModal()}
         ${state.isSavedPetsVisible() ? renderSavedPetsView() : ''}
         ${renderPetDetailModal(selectedPetDetail)}
         ${state.isContactOpen() ? renderContactView() : ''}
+        ${renderGroupAdoptionModal()}
+        ${renderBlockConfirmModal()}
+        ${renderDeleteConversationConfirmModal()}
+        ${renderReportModal()}
+        ${renderNotificationsModal()}
+        ${renderReportSubmittedToast()}
       </div>
     `;
 
@@ -134,9 +170,17 @@ export class MeowApp {
     if (selectedPetDetail) attachPetDetailModalEvents(selectedPetDetail);
     if (selectedPetRequest) attachContactRequestModalEvents(selectedPetRequest);
     if (isAddPetOpen) attachAddPetModalEvents(editingPet);
+    if (state.isEditOwnerModalVisible()) attachOwnerEditEvents();
     if (state.getIsFilterModalOpen()) attachFilterModalEvents(() => this.render());
     if (state.isSavedPetsVisible()) attachSavedPetsEvents();
     if (state.isContactOpen()) attachContactEvents();
+    attachThreeDotsMenuEvents();
+    attachGroupAdoptionModalEvents();
+    if (state.getPendingBlockTarget()) attachBlockConfirmModalEvents();
+    if (state.getPendingDeleteConversation()) attachDeleteConversationModalEvents();
+    if (state.getPendingReportTarget()) attachReportModalEvents();
+    if (state.isNotificationsOpen()) attachNotificationsModalEvents();
+    if (state.getLastSubmittedReportNotice()) attachReportToastEvents();
   }
 }
 

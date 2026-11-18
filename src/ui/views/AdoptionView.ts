@@ -1,10 +1,14 @@
 import { state } from '../../state.ts';
 import { getViewMode } from '../components/Header.ts';
+import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
 
 export function renderAdoptionView(): string {
   const filters = state.getAdoptionFilters();
   const pets = state.getFilteredAdoptionPets();
+  const matchSummary = state.getAdoptionMatchSummary();
   const viewMode = getViewMode();
+  const currentUserId = state.getUser().id;
+  const loadingState = state.getFilteringLoadingState();
 
   return `
     <main class="w-full max-w-md mx-auto px-4 pt-2 pb-24 flex-1 space-y-4">
@@ -57,10 +61,10 @@ export function renderAdoptionView(): string {
           <button
             data-adopt-type="all"
             type="button"
-            class="adopt-type-btn text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap font-baloo ${
+            class="adopt-type-btn text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap font-baloo ${
               filters.adoptionType === 'all'
                 ? 'bg-brand-orange text-white shadow-soft'
-                : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/70 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
+                : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/80 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
             }"
           >
             الكل (${pets.length})
@@ -68,10 +72,10 @@ export function renderAdoptionView(): string {
           <button
             data-adopt-type="individual"
             type="button"
-            class="adopt-type-btn text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap font-baloo ${
+            class="adopt-type-btn text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap font-baloo ${
               filters.adoptionType === 'individual'
                 ? 'bg-brand-orange text-white shadow-soft'
-                : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/70 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
+                : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/80 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
             }"
           >
             🐾 تبني فردي
@@ -79,10 +83,10 @@ export function renderAdoptionView(): string {
           <button
             data-adopt-type="group"
             type="button"
-            class="adopt-type-btn text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap font-baloo ${
+            class="adopt-type-btn text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap font-baloo ${
               filters.adoptionType === 'group'
                 ? 'bg-brand-orange text-white shadow-soft'
-                : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/70 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
+                : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/80 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
             }"
           >
             👨‍👩‍👧 مجموعات وعائلات
@@ -97,14 +101,40 @@ export function renderAdoptionView(): string {
             type="text"
             id="adoption-search-input"
             value="${filters.breed || ''}"
-            placeholder="ابحث بالسلالة أو المدينة..."
+            placeholder="ابحث بالسلالة أو المدينة أو المحافظة..."
             class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl py-2 px-3 pr-8 text-xs sm:text-sm font-bold text-brand-dark dark:text-white placeholder-brand-subtleGray focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
           />
           <i class="fa-solid fa-magnifying-glass absolute right-2.5 top-3 text-xs text-brand-subtleGray"></i>
         </div>
       </div>
 
-      <!-- Adoption Grid (Exact Reference Screenshot 1: 2-column cards, heart save button, badge without star, no compatibility %) -->
+      ${
+        matchSummary.hasFilters && !matchSummary.hasExactMatch && pets.length > 0
+          ? `
+            <div id="adoption-ranked-fallback-notice" class="bg-[#fff5ea] border border-[#e67e22]/45 rounded-2xl px-4 py-2.5 text-right font-baloo">
+              <p class="text-xs font-black text-[#1a1612] m-0">
+                عرض حالات التبني المتاحة من الأقرب لفلترك والموقع الجغرافي إلى الأقل
+              </p>
+              <p class="text-[11px] font-bold text-[#786555] m-0">
+                لم يتوفر تطابق كامل لكل الخيارات المحددة، لذلك تظهر أقرب الحالات المناسبة أولاً
+              </p>
+            </div>
+          `
+          : ''
+      }
+
+      ${
+        loadingState.active
+          ? `
+            <div id="adoption-loading-indicator" class="bg-[#fff5ea] border border-[#e67e22]/40 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-xs font-black text-[#786555] font-baloo shadow-2xs animate-fade-in">
+              <span class="w-4 h-4 rounded-full border-2 border-[#e67e22] border-t-transparent animate-spin shrink-0"></span>
+              <span>${loadingState.label || 'جاري تحميل حالات التبني...'}</span>
+            </div>
+          `
+          : ''
+      }
+
+      <!-- Adoption Grid (Original Stitch Layout: 2-column bg-brand-lightCream cards, h-44 photo, centered name/age & breed) -->
       ${
         pets.length === 0
           ? `
@@ -119,124 +149,415 @@ export function renderAdoptionView(): string {
           </div>
           `
           : `
-          <div class="${viewMode === 'grid' ? 'grid grid-cols-2 gap-3 sm:gap-3.5' : 'flex flex-col gap-3.5'}" data-purpose="pet-listings-grid">
+          <div class="${viewMode === 'grid' ? 'grid grid-cols-2 gap-4' : 'flex flex-col gap-4'}" data-purpose="pet-listings-grid">
             ${pets
               .map((pet) => {
                 const isGroup = pet.adoptionType === 'group';
                 const isSaved = state.isPetSaved(pet.id);
+                const groupMembers = isGroup && pet.groupMembers ? pet.groupMembers : [];
+                const groupCount = pet.groupCount || groupMembers.length || 2;
+                const primaryPhoto =
+                  isGroup && groupMembers[0]?.individualPhotos?.[0]
+                    ? groupMembers[0].individualPhotos[0]
+                    : pet.photos[0];
+                const memberThumbs = isGroup
+                  ? groupMembers
+                      .map((m) => ({
+                        name: m.name,
+                        photo: m.individualPhotos?.[0] || '',
+                      }))
+                      .filter((t) => Boolean(t.photo))
+                      .slice(0, 4)
+                  : [];
+                const locationLabel =
+                  pet.area && pet.area !== pet.city
+                    ? `${pet.area}، ${pet.city}`
+                    : pet.city || pet.governorate;
+                const ageDisplay = pet.ageYears > 0 ? pet.ageYears : `${pet.ageMonths}ش`;
 
                 if (viewMode === 'grid') {
+                  if (isGroup) {
+                    const memberSummaryText =
+                      groupMembers.length > 0
+                        ? groupMembers
+                            .map((m) => {
+                              const ageText =
+                                m.ageYears > 0
+                                  ? `${m.ageYears} سنة`
+                                  : m.ageMonths > 0
+                                  ? `${m.ageMonths} شهر`
+                                  : '';
+                              return `${m.name} (${m.breed} • ${m.gender === 'male' ? 'ذكر' : 'أنثى'}${
+                                ageText ? ` • ${ageText}` : ''
+                              })`;
+                            })
+                            .join(' | ')
+                        : `${groupCount} حيوانات`;
+
+                    return `
+                      <article
+                        class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                        data-pet-detail-id="${pet.id}"
+                        data-pet-type="${pet.species || 'cat'}"
+                      >
+                        <!-- Group Adoption Primary Image & Thumbnails Strip -->
+                        <div class="relative w-full h-44 rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
+                          <div class="absolute inset-0 overflow-hidden rounded-t-3xl">
+                            <img
+                              src="${primaryPhoto}"
+                              alt="تبني جماعي: ${pet.name}"
+                              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 pet-card-img"
+                              loading="lazy"
+                            />
+                            <div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 via-black/35 to-transparent pointer-events-none"></div>
+                          </div>
+
+                          <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
+                          <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
+                            <button
+                              type="button"
+                              aria-label="حفظ الأليف"
+                              class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                              data-pet-save-id="${pet.id}"
+                              title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
+                            >
+                              <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                            </button>
+                            ${
+                              pet.ownerId !== currentUserId
+                                ? renderThreeDotsMenu({
+                                    userId: pet.ownerId,
+                                    userName: pet.ownerName,
+                                    userAvatar: pet.ownerAvatar,
+                                    petName: pet.name,
+                                    petId: pet.id,
+                                    reportTargetType: 'pet',
+                                    buttonClass:
+                                      'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                    dropdownAlign: 'left',
+                                  })
+                                : ''
+                            }
+                          </div>
+
+                          <!-- Clear Group Adoption Status Badge -->
+                          <div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-[10px] sm:text-[11px] font-bold shadow-sm font-baloo pointer-events-none z-20 flex items-center gap-1">
+                            <i class="fa-solid fa-people-roof text-[9px]"></i>
+                            <span>تبني جماعي (${groupCount})</span>
+                          </div>
+
+                          <!-- Individual Animal Thumbnails + Adoption Rule Pill -->
+                          <div class="absolute bottom-2 inset-x-2 flex flex-col gap-1 z-10 pointer-events-none">
+                            ${
+                              memberThumbs.length > 0
+                                ? `
+                                  <div class="flex items-center gap-1">
+                                    ${memberThumbs
+                                      .map(
+                                        (t) => `
+                                          <img
+                                            src="${t.photo}"
+                                            alt="${t.name}"
+                                            class="w-7 h-7 rounded-lg object-cover border border-white/90 shadow-sm shrink-0"
+                                          />
+                                        `
+                                      )
+                                      .join('')}
+                                    ${
+                                      groupCount > memberThumbs.length
+                                        ? `<span class="w-7 h-7 rounded-lg bg-black/65 text-white text-[10px] font-black flex items-center justify-center border border-white/60 shrink-0">+${groupCount - memberThumbs.length}</span>`
+                                        : ''
+                                    }
+                                  </div>
+                                `
+                                : ''
+                            }
+                            <div class="bg-brand-dark/80 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-lg text-center truncate">
+                              ${pet.mustAdoptTogether ? 'يُشترط التبني معاً' : 'متاح التبني منفرداً أو معاً'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Group Card Info Summary (Distinct Members + Single Shared Location) -->
+                        <div class="p-3 text-center flex flex-col justify-center items-center gap-0.5">
+                          <h2 class="text-base sm:text-lg font-black text-brand-dark dark:text-white tracking-tight leading-tight font-baloo max-w-full truncate">
+                            ${pet.name}
+                          </h2>
+                          <p class="text-[11px] font-extrabold text-brand-subtleGray dark:text-[#D1C7BD] mt-0.5 line-clamp-2 leading-snug">
+                            ${memberSummaryText}
+                          </p>
+                          ${
+                            locationLabel
+                              ? `
+                                <p class="text-[10px] font-bold text-brand-orange flex items-center justify-center gap-1 max-w-full truncate m-0">
+                                  <i class="fa-solid fa-location-dot text-[9px] shrink-0"></i>
+                                  <span class="truncate">${locationLabel}</span>
+                                </p>
+                              `
+                              : ''
+                          }
+                        </div>
+                      </article>
+                    `;
+                  }
+
                   return `
                     <article
-                      class="pet-card bg-white dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder overflow-hidden shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                      class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                       data-pet-detail-id="${pet.id}"
                       data-pet-type="${pet.species || 'cat'}"
                     >
-                      <!-- Pet Image Container with Heart Save Button & Status Badge (NO STAR) -->
-                      <div class="relative w-full aspect-[4/4.5] sm:aspect-[4/4.2] overflow-hidden bg-brand-peachBorder/30 dark:bg-[#342A24]">
-                        <img
-                          src="${pet.photos[0]}"
-                          alt="صورة ${pet.name}"
-                          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 pet-card-img"
-                          loading="lazy"
-                        />
-
-                        <!-- Heart Save Button -->
-                        <button
-                          type="button"
-                          aria-label="حفظ الأليف"
-                          class="toggle-save-pet-btn absolute top-2.5 left-2.5 w-8 h-8 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/60 transition-all cursor-pointer z-10 active:scale-85"
-                          data-pet-save-id="${pet.id}"
-                          title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
-                        >
-                          <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-sm transition-transform"></i>
-                        </button>
-
-                        <!-- Status Badge: ONLY text with NO star icon -->
-                        <div class="absolute top-2.5 right-2.5 bg-brand-orange text-white px-3 py-1 rounded-xl text-xs font-black shadow-sm font-baloo pointer-events-none">
-                          <span>${isGroup ? `عائلة (${pet.groupCount || 2})` : 'للتبني'}</span>
+                      <!-- Pet Image Container with Heart Save Button + 3-Dots Menu & Status Badge -->
+                      <div class="relative w-full h-44 rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
+                        <div class="absolute inset-0 overflow-hidden rounded-t-3xl">
+                          <img
+                            src="${pet.photos[0]}"
+                            alt="صورة ${pet.name}"
+                            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 pet-card-img"
+                            loading="lazy"
+                          />
                         </div>
 
-                        <!-- Group Adoption Requirement Pill if Group -->
-                        ${
-                          isGroup
-                            ? `
-                            <div class="absolute bottom-2 right-2 left-2 bg-brand-dark/75 backdrop-blur-md text-white text-[9px] font-bold px-1.5 py-0.5 rounded-lg text-center truncate">
-                              ${pet.mustAdoptTogether ? '⚠️ يجب تبني المجموعة كاملة' : '✅ يمكن التبني المستقل'}
-                            </div>
-                            `
-                            : ''
-                        }
+                        <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
+                        <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
+                          <button
+                            type="button"
+                            aria-label="حفظ الأليف"
+                            class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                            data-pet-save-id="${pet.id}"
+                            title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
+                          >
+                            <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                          </button>
+                          ${
+                            pet.ownerId !== currentUserId
+                              ? renderThreeDotsMenu({
+                                  userId: pet.ownerId,
+                                  userName: pet.ownerName,
+                                  userAvatar: pet.ownerAvatar,
+                                  petName: pet.name,
+                                  petId: pet.id,
+                                  reportTargetType: 'pet',
+                                  buttonClass:
+                                    'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                  dropdownAlign: 'left',
+                                })
+                              : ''
+                          }
+                        </div>
+
+                        <!-- Status Badge: Original rounded-xl style -->
+                        <div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm font-baloo pointer-events-none z-20">
+                          <span>للتبني</span>
+                        </div>
                       </div>
 
-                      <!-- Pet Info Content matching Screenshot 1 -->
-                      <div class="p-3 text-right flex flex-col justify-between flex-1">
-                        <div>
-                          <h2 class="text-base sm:text-lg font-black text-brand-dark dark:text-white tracking-tight leading-tight font-baloo truncate">
-                            ${pet.name}, ${pet.ageYears > 0 ? pet.ageYears : `${pet.ageMonths}ش`}
+                      <!-- Pet Info Content matching original Stitch design -->
+                      <div class="p-3 text-center flex flex-col justify-center items-center">
+                        <h2 class="text-lg font-black text-brand-dark dark:text-white tracking-tight leading-tight font-baloo max-w-full truncate">
+                          ${pet.name}, ${ageDisplay}
+                        </h2>
+                        <p class="text-xs uppercase font-extrabold text-brand-subtleGray dark:text-[#A89F91] tracking-wider mt-0.5 max-w-full truncate">
+                          ${pet.breed}
+                        </p>
+                      </div>
+                    </article>
+                  `;
+                }
+
+                // Single column / Full card view: Group adoption keeps distinct member info & thumbnails
+                if (isGroup) {
+                  return `
+                    <article
+                      class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                      data-pet-detail-id="${pet.id}"
+                      data-pet-type="${pet.species || 'cat'}"
+                    >
+                      <div class="relative w-full aspect-[4/4.3] sm:aspect-[4/4] rounded-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
+                        <div class="absolute inset-0 overflow-hidden rounded-3xl">
+                          <img
+                            src="${primaryPhoto}"
+                            alt="تبني جماعي: ${pet.name}"
+                            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            loading="lazy"
+                          />
+                          <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent pointer-events-none"></div>
+                        </div>
+
+                        <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
+                        <div class="absolute top-3 left-3 flex items-center gap-2 z-30">
+                          <button
+                            type="button"
+                            aria-label="حفظ الأليف"
+                            class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                            data-pet-save-id="${pet.id}"
+                            title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
+                          >
+                            <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                          </button>
+                          ${
+                            pet.ownerId !== currentUserId
+                              ? renderThreeDotsMenu({
+                                  userId: pet.ownerId,
+                                  userName: pet.ownerName,
+                                  userAvatar: pet.ownerAvatar,
+                                  petName: pet.name,
+                                  petId: pet.id,
+                                  reportTargetType: 'pet',
+                                  buttonClass:
+                                    'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                  dropdownAlign: 'left',
+                                })
+                              : ''
+                          }
+                        </div>
+
+                        <!-- Group Adoption Badge -->
+                        <div class="absolute top-3 right-3 bg-brand-orange/95 backdrop-blur-sm text-white px-3 py-1 rounded-xl text-xs font-bold shadow-sm font-baloo pointer-events-none z-20 flex items-center gap-1.5">
+                          <i class="fa-solid fa-people-roof text-xs"></i>
+                          <span>تبني جماعي • ${groupCount} حيوانات</span>
+                        </div>
+
+                        <!-- Bottom Overlaid External Group Summary -->
+                        <div class="absolute bottom-0 inset-x-0 p-4 sm:p-5 text-right flex flex-col gap-2 z-20 text-white">
+                          <div class="flex items-center justify-between gap-2 flex-wrap">
+                            <span class="px-3 py-1 rounded-xl text-[11px] font-bold font-baloo ${
+                              pet.mustAdoptTogether
+                                ? 'bg-brand-orange/90 text-white'
+                                : 'bg-emerald-600/90 text-white'
+                            }">
+                              ${pet.mustAdoptTogether ? 'يُشترط تبني المجموعة كاملة معاً' : 'يمكن تبني كل حيوان منفرداً أو معاً'}
+                            </span>
+                            ${
+                              locationLabel
+                                ? `
+                                  <span class="text-xs font-bold text-white/95 flex items-center gap-1">
+                                    <i class="fa-solid fa-location-dot text-brand-orange text-[11px]"></i>
+                                    <span>${locationLabel}</span>
+                                  </span>
+                                `
+                                : ''
+                            }
+                          </div>
+
+                          <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight font-baloo drop-shadow-md m-0">
+                            ${pet.name}
                           </h2>
-                          <p class="text-xs font-bold text-brand-subtleGray dark:text-[#A89F91] mt-0.5 truncate">
-                            ${pet.breed}
-                          </p>
+
+                          <!-- Individual Animals Mini Cards (Fixed single-row horizontal layout matching تيمور وبندق) -->
+                          ${
+                            groupMembers.length > 0
+                              ? `
+                                <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5">
+                                  ${groupMembers
+                                    .map((m) => {
+                                      const mAge =
+                                        m.ageYears > 0
+                                          ? `${m.ageYears} سنة`
+                                          : m.ageMonths > 0
+                                          ? `${m.ageMonths} شهر`
+                                          : '';
+                                      return `
+                                        <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-2xl bg-black/55 backdrop-blur-md border border-white/25 shrink-0 max-w-[190px]">
+                                          <img
+                                            src="${m.individualPhotos?.[0] || primaryPhoto}"
+                                            alt="${m.name}"
+                                            class="w-7 h-7 rounded-xl object-cover border border-white/80 shrink-0"
+                                          />
+                                          <div class="min-w-0 text-right">
+                                            <div class="text-xs font-black text-white font-baloo leading-tight truncate">
+                                              ${m.name} (${m.gender === 'male' ? 'ذكر' : 'أنثى'})
+                                            </div>
+                                            <div class="text-[10px] font-bold text-white/85 truncate">
+                                              ${m.breed}${mAge ? ` • ${mAge}` : ''}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      `;
+                                    })
+                                    .join('')}
+                                </div>
+                              `
+                              : ''
+                          }
                         </div>
                       </div>
                     </article>
                   `;
                 }
 
-                // Single column / Full card view matching Reference Screenshot (Info over photo with gradient)
+                // Single column / Full card view
                 return `
                   <article
-                    class="pet-card bg-white dark:bg-[#27201B] rounded-[32px] border border-brand-peachBorder dark:border-warm-darkBorder overflow-hidden shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                    class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                     data-pet-detail-id="${pet.id}"
                     data-pet-type="${pet.species || 'cat'}"
                   >
-                    <!-- Photo filling card with Gradient & Superimposed Info matching Reference Screenshot -->
-                    <div class="relative w-full aspect-[4/4.3] sm:aspect-[4/4] overflow-hidden bg-brand-peachBorder/30 dark:bg-[#342A24]">
-                      <img
-                        src="${pet.photos[0]}"
-                        alt="صورة ${pet.name}"
-                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        loading="lazy"
-                      />
+                    <!-- Photo filling card with Gradient & Superimposed Info -->
+                    <div class="relative w-full aspect-[4/4.3] sm:aspect-[4/4] rounded-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
+                      <div class="absolute inset-0 overflow-hidden rounded-3xl">
+                        <img
+                          src="${pet.photos[0]}"
+                          alt="صورة ${pet.name}"
+                          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading="lazy"
+                        />
 
-                      <!-- Gradient Overlay from bottom up (prominent behind text, fading to top) -->
-                      <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent pointer-events-none"></div>
+                        <!-- Gradient Overlay from bottom up -->
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent pointer-events-none"></div>
+                      </div>
 
-                      <!-- Heart Save Button -->
-                      <button
-                        type="button"
-                        aria-label="حفظ الأليف"
-                        class="toggle-save-pet-btn absolute top-3.5 left-3.5 w-10 h-10 rounded-full bg-black/45 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/65 transition-all cursor-pointer z-20 active:scale-90 shadow-md"
-                        data-pet-save-id="${pet.id}"
-                        title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
-                      >
-                        <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
-                      </button>
+                      <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
+                      <div class="absolute top-3 left-3 flex items-center gap-2 z-30">
+                        <button
+                          type="button"
+                          aria-label="حفظ الأليف"
+                          class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                          data-pet-save-id="${pet.id}"
+                          title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
+                        >
+                          <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                        </button>
+                        ${
+                          pet.ownerId !== currentUserId
+                            ? renderThreeDotsMenu({
+                                userId: pet.ownerId,
+                                userName: pet.ownerName,
+                                userAvatar: pet.ownerAvatar,
+                                petName: pet.name,
+                                petId: pet.id,
+                                reportTargetType: 'pet',
+                                buttonClass:
+                                  'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                dropdownAlign: 'left',
+                              })
+                            : ''
+                        }
+                      </div>
 
-                      <!-- Status Badge (NO STAR) -->
-                      <div class="absolute top-3.5 right-3.5 bg-brand-orange text-white px-4 py-1.5 rounded-2xl text-xs sm:text-sm font-black shadow-md font-baloo pointer-events-none z-20">
-                        <span>${isGroup ? `عائلة (${pet.groupCount || 2})` : 'للتبني'}</span>
+                      <!-- Status Badge -->
+                      <div class="absolute top-3 right-3 bg-brand-orange/95 backdrop-blur-sm text-white px-3 py-1 rounded-xl text-xs font-bold shadow-sm font-baloo pointer-events-none z-20">
+                        <span>للتبني</span>
                       </div>
 
                       <!-- Basic Info Overlaid on Image with Gradient: Name, Age, Location, Breed & Traits -->
                       <div class="absolute bottom-0 inset-x-0 p-4 sm:p-5 text-right flex flex-col gap-1.5 z-20 text-white">
                         <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight font-baloo drop-shadow-md m-0">
-                          ${pet.name}, ${pet.ageYears > 0 ? pet.ageYears : `${pet.ageMonths}ش`}
+                          ${pet.name}, ${ageDisplay}
                         </h2>
                         <p class="text-xs sm:text-sm font-bold text-white/95 drop-shadow-sm m-0 font-baloo flex items-center gap-1.5">
-                          <span>${pet.area}، ${pet.city}</span>
+                          <span>${pet.area && pet.area !== pet.city ? `${pet.area}، ${pet.city}` : pet.city || pet.governorate}</span>
                           <span class="opacity-70">•</span>
                           <span>${pet.breed}</span>
                         </p>
 
-                        <!-- Traits Chips on Photo (e.g. ذكي, مرح) -->
+                        <!-- Traits Chips on Photo -->
                         <div class="flex items-center gap-2 flex-wrap pt-1.5">
                           ${pet.personality
                             .slice(0, 3)
                             .map(
                               (trait) => `
-                              <span class="px-3.5 py-1 rounded-full bg-white/25 backdrop-blur-md border border-white/30 text-white text-xs font-black shadow-2xs font-baloo">
+                              <span class="px-3 py-1 rounded-xl bg-white/25 backdrop-blur-md border border-white/30 text-white text-xs font-bold shadow-2xs font-baloo">
                                 ${trait}
                               </span>
                             `
@@ -274,15 +595,27 @@ export function attachAdoptionEvents(): void {
   typeButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const type = btn.getAttribute('data-adopt-type') as any;
-      state.setAdoptionFilters({ adoptionType: type });
+      state.applyAdoptionFiltersWithLoading({ adoptionType: type }, 'جاري تحديث حالات التبني...');
     });
   });
 
-  // Search Input
+  // Search Input (preserves input focus & cursor across re-render)
   const searchInput = document.getElementById('adoption-search-input') as HTMLInputElement;
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
-      state.setAdoptionFilters({ breed: (e.target as HTMLInputElement).value });
+      const inputEl = e.target as HTMLInputElement;
+      const val = inputEl.value;
+      const caret = inputEl.selectionStart ?? val.length;
+      state.setAdoptionFilters({ breed: val });
+      const restored = document.getElementById('adoption-search-input') as HTMLInputElement | null;
+      if (restored) {
+        restored.focus();
+        try {
+          restored.setSelectionRange(caret, caret);
+        } catch {
+          // Ignore selection errors on unsupported input types
+        }
+      }
     });
   }
 
@@ -294,8 +627,12 @@ export function attachAdoptionEvents(): void {
     });
   }
 
-  // Toggle Save Pet (Heart button)
-  const saveTriggers = document.querySelectorAll<HTMLElement>('.toggle-save-pet-btn');
+  const gridScope = document.querySelector<HTMLElement>('[data-purpose="pet-listings-grid"]');
+
+  // Toggle Save Pet (Heart button) - Scoped strictly to grid/list container
+  const saveTriggers = gridScope
+    ? gridScope.querySelectorAll<HTMLElement>('.toggle-save-pet-btn')
+    : [];
   saveTriggers.forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -306,10 +643,15 @@ export function attachAdoptionEvents(): void {
     });
   });
 
-  // View Details (clicks on card)
-  const detailTriggers = document.querySelectorAll<HTMLElement>('[data-pet-detail-id]');
+  // View Details (clicks on card) - Scoped strictly to grid/list container
+  const detailTriggers = gridScope
+    ? gridScope.querySelectorAll<HTMLElement>('[data-pet-detail-id]')
+    : [];
   detailTriggers.forEach((trigger) => {
-    trigger.addEventListener('click', () => {
+    trigger.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('.toggle-save-pet-btn, .meow-more-menu-container')) {
+        return;
+      }
       const petId = trigger.getAttribute('data-pet-detail-id');
       const pet = state.getFilteredAdoptionPets().find((p) => p.id === petId);
       if (pet) {

@@ -10,6 +10,7 @@ export function renderTabBar(): string {
     return '';
   }
   const pendingRequestsCount = state.getPendingRequestsCount();
+  const unreadChatBadgeCount = pendingRequestsCount + state.getUnreadChatMessagesCount();
 
   const tabs: {
     id: MainTab;
@@ -85,7 +86,7 @@ export function renderTabBar(): string {
   ];
 
   return `
-    <nav aria-label="الشريط السفلي" class="fixed left-0 right-0 max-w-md mx-auto px-4 sm:px-6 z-50 pointer-events-none" style="bottom: 1.25rem;">
+    <nav aria-label="الشريط السفلي" class="fixed left-0 right-0 max-w-md mx-auto px-4 sm:px-6 z-50 pointer-events-none" style="bottom: max(1rem, env(safe-area-inset-bottom));">
       <div class="bg-white/95 dark:bg-[#27201B]/95 backdrop-blur-md border border-brand-peachBorder dark:border-warm-darkBorder rounded-full py-2 shadow-nav flex items-center pointer-events-auto px-2 justify-between">
         ${tabs
           .map((tab) => {
@@ -97,10 +98,10 @@ export function renderTabBar(): string {
                 class="tab-btn relative flex items-center justify-center p-1 rounded-full text-brand-subtleGray dark:text-[#A89F91] hover:text-brand-orange transition-all group cursor-pointer"
                 type="button"
               >
-                <!-- Pending Badge for Chat -->
+                <!-- Pending & Unread Badge for Chat -->
                 ${
-                  tab.id === 'chat' && pendingRequestsCount > 0
-                    ? `<span class="absolute top-0 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-sm z-10 animate-bounce">${pendingRequestsCount}</span>`
+                  tab.id === 'chat' && unreadChatBadgeCount > 0
+                    ? `<span class="absolute top-0 right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-sm z-10 animate-bounce">${unreadChatBadgeCount}</span>`
                     : ''
                 }
 

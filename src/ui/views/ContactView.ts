@@ -11,10 +11,10 @@ interface StoredContactMessage {
 
 export function renderContactView(): string {
   return `
-    <div id="contact-us-view" class="fixed inset-0 z-50 bg-[#FFF9E9] text-[#2A2521] w-full min-h-screen overflow-y-auto flex flex-col font-baloo animate-fade-in" dir="rtl">
+    <div id="contact-us-view" class="fixed inset-0 z-50 bg-[#FFF9E9] text-[#2A2521] w-full min-h-[100dvh] overflow-y-auto flex flex-col font-baloo animate-fade-in" dir="rtl">
       
       <!-- Top Bar: Natural Meow Aesthetic -->
-      <header class="sticky top-0 z-40 w-full max-w-md mx-auto px-5 py-4 flex items-center gap-3 bg-[#FFF9E9]/95 backdrop-blur-md border-b border-brand-peachBorder/70">
+      <header class="sticky top-0 z-40 w-full max-w-md mx-auto px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] flex items-center gap-3 bg-[#FFF9E9]/95 backdrop-blur-md border-b border-brand-peachBorder/70">
         <button
           id="contact-back-btn"
           type="button"

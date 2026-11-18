@@ -20,16 +20,36 @@ export function renderHeader(): string {
   const isBrowseTab = currentTab === 'mating' || currentTab === 'adoption';
   const filterState = currentTab === 'mating' ? state.getMatingFilters() : state.getAdoptionFilters();
   const selectedSpecies = filterState.species || 'all';
+  const unreadNotificationsCount = state.getUnreadNotificationsCount();
+
+  const bellButtonHtml = `
+    <button
+      id="header-notifications-btn"
+      aria-label="الإشعارات"
+      class="relative w-11 h-11 rounded-full bg-white/95 dark:bg-[#342A24] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder text-brand-dark dark:text-white flex items-center justify-center shadow-sm hover:border-brand-orange hover:text-brand-orange transition-all cursor-pointer active:scale-95 shrink-0"
+      type="button"
+      title="الإشعارات"
+    >
+      <span class="material-symbols-outlined text-2xl">notifications</span>
+      ${
+        unreadNotificationsCount > 0
+          ? `<span class="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-sm border-2 border-[#FFF9E9]">${
+              unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount
+            }</span>`
+          : ''
+      }
+    </button>
+  `;
 
   return `
     <header class="sticky top-0 z-40 w-full bg-[#FFF9E9]/95 dark:bg-[#27201B]/95 backdrop-blur-md border-b border-brand-peachBorder/40 dark:border-warm-darkBorder shadow-sm" id="main-header">
-      <div class="max-w-md mx-auto px-5 pt-3 pb-3 flex flex-col gap-3.5">
+      <div class="max-w-md mx-auto px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex flex-col gap-3.5">
         
-        <!-- Row 1: Review/View Switcher (Right in RTL) & Meow Logo (Left in RTL) - Enlarged & Swapped -->
+        <!-- Row 1: Review/View Switcher + Notifications Bell & Meow Logo -->
         <div class="flex items-center justify-between w-full">
           
-          <!-- One side (Right in RTL): Review/View Switcher -->
-          <div class="flex items-center">
+          <!-- One side (Right in RTL): View Switcher / Settings + Notifications Bell -->
+          <div class="flex items-center gap-2">
             ${
               isBrowseTab
                 ? `
@@ -57,20 +77,22 @@ export function renderHeader(): string {
                     <i class="fa-solid fa-list-ul text-base"></i>
                   </button>
                 </div>
+                ${bellButtonHtml}
                 `
                 : currentTab === 'profile'
                 ? `
                 <button
                   id="profile-menu-dots-btn"
                   aria-label="الإعدادات"
-                  class="w-11 h-11 rounded-2xl bg-white/95 dark:bg-[#342A24] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder text-warm-text dark:text-white flex items-center justify-center shadow-sm hover:border-brand-orange hover:text-brand-orange transition-all cursor-pointer active:scale-95"
+                  class="w-11 h-11 rounded-full bg-white/95 dark:bg-[#342A24] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder text-warm-text dark:text-white flex items-center justify-center shadow-sm hover:border-brand-orange hover:text-brand-orange transition-all cursor-pointer active:scale-95"
                   type="button"
                   title="الإعدادات"
                 >
                   <span class="material-symbols-outlined text-2xl">settings</span>
                 </button>
+                ${bellButtonHtml}
                 `
-                : '<div class="w-12"></div>'
+                : bellButtonHtml
             }
           </div>
 
@@ -184,6 +206,14 @@ export function attachHeaderEvents(): void {
   if (filterBtn) {
     filterBtn.addEventListener('click', () => {
       state.setFilterModalOpen(true);
+    });
+  }
+
+  // Notifications Bell Button -> Open Notification Center
+  const notifBtn = document.getElementById('header-notifications-btn');
+  if (notifBtn) {
+    notifBtn.addEventListener('click', () => {
+      state.setNotificationsOpen(true);
     });
   }
 

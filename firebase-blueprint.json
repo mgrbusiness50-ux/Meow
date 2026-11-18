@@ -1,0 +1,590 @@
+{
+  "entities": {
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Public non-PII profile attributes and notification/privacy preferences for a Meow user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "avatar": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "governorate": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "showPhoneInProfile": {
+          "type": "boolean"
+        },
+        "notificationsEnabled": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "name", "showPhoneInProfile", "notificationsEnabled", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII (email and phone) accessible only to the owning authenticated user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "phone", "updatedAt"]
+    },
+    "PetProfile": {
+      "title": "PetProfile",
+      "description": "Pet listing owned by a user for mating, individual/group adoption, or private storage.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "ownerShowPhone": {
+          "type": "boolean"
+        },
+        "ownerPrivacy": {
+          "type": "string",
+          "enum": ["public", "limited_until_approved", "private"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "species": {
+          "type": "string",
+          "enum": ["cat", "dog", "bird"]
+        },
+        "breed": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "hybridBreed": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["male", "female"]
+        },
+        "ageYears": {
+          "type": "number"
+        },
+        "ageMonths": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["mating", "adoption", "not_available"]
+        },
+        "vaccinationStatus": {
+          "type": "string",
+          "enum": ["fully_vaccinated", "partially_vaccinated", "not_vaccinated"]
+        },
+        "healthStatus": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "healthNotes": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "governorate": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "photosCount": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "ownerName",
+        "ownerShowPhone",
+        "ownerPrivacy",
+        "name",
+        "species",
+        "gender",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ContactRequestDoc": {
+      "title": "ContactRequestDoc",
+      "description": "Mating or adoption contact request between sender and receiver pet owner.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "receiverOwnerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "receiverPetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "receiverPetName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "senderPetId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "senderPetName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "type": {
+          "type": "string",
+          "enum": ["mating", "adoption"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "accepted", "rejected"]
+        },
+        "celebratedBySender": {
+          "type": "boolean"
+        },
+        "celebratedByReceiver": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "senderId",
+        "senderName",
+        "receiverOwnerId",
+        "receiverPetId",
+        "receiverPetName",
+        "message",
+        "type",
+        "status",
+        "celebratedBySender",
+        "celebratedByReceiver",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ConversationDoc": {
+      "title": "ConversationDoc",
+      "description": "Two-participant conversation created after accepting a request.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "participantA": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "participantB": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "petId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "petName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "petType": {
+          "type": "string",
+          "enum": ["mating", "adoption"]
+        },
+        "lastMessage": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "isPinnedByA": {
+          "type": "boolean"
+        },
+        "isPinnedByB": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "requestId",
+        "participantA",
+        "participantB",
+        "petId",
+        "petName",
+        "petType",
+        "lastMessage",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatMessageDoc": {
+      "title": "ChatMessageDoc",
+      "description": "Message inside a two-participant conversation.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "conversationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "type": {
+          "type": "string",
+          "enum": ["text", "image", "file", "audio", "sticker"]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "conversationId", "senderId", "senderName", "type", "createdAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "Real-time persisted user notification for incoming requests, approvals, and messages.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["contact_request", "mating_approved", "adoption_approved", "new_message", "system"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "read": {
+          "type": "boolean"
+        },
+        "celebrated": {
+          "type": "boolean"
+        },
+        "targetTab": {
+          "type": "string",
+          "enum": ["mating", "adoption", "chat", "profile"]
+        },
+        "targetRequestId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "targetConversationId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "targetPetId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "type", "title", "body", "read", "celebrated", "targetTab", "createdAt", "updatedAt"]
+    },
+    "BlockedUserDoc": {
+      "title": "BlockedUserDoc",
+      "description": "Blocked user entry owned by the blocking user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "petName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "userName", "createdAt"]
+    },
+    "ReportDoc": {
+      "title": "ReportDoc",
+      "description": "Safety report submitted by an authenticated user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reporterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetUserName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "targetType": {
+          "type": "string",
+          "enum": ["pet", "chat", "request"]
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["inappropriate_content", "fraud_or_misleading", "unsafe_animal_care", "spam_or_harassment", "other"]
+        },
+        "reasonLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending_review"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "reporterId",
+        "targetUserId",
+        "targetUserName",
+        "targetType",
+        "reason",
+        "reasonLabel",
+        "details",
+        "status",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Public non-PII user profile and preferences."
+    },
+    "/users/{userId}/private/info": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Owner-only PII document holding verified email and phone number."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/UserNotification" },
+      "description": "Owner-scoped notifications for mating approvals, requests, and messages."
+    },
+    "/users/{userId}/blockedUsers/{blockedUserId}": {
+      "schema": { "$ref": "#/entities/BlockedUserDoc" },
+      "description": "Owner-managed block list."
+    },
+    "/pets/{petId}": {
+      "schema": { "$ref": "#/entities/PetProfile" },
+      "description": "Pet profiles listed by verified users."
+    },
+    "/contactRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/ContactRequestDoc" },
+      "description": "Contact requests between pet owners for mating or adoption."
+    },
+    "/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/ConversationDoc" },
+      "description": "Accepted chat conversations between two participants."
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessageDoc" },
+      "description": "Messages belonging to a conversation, gated by parent participant check."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/ReportDoc" },
+      "description": "User-submitted moderation reports."
+    }
+  }
+}
