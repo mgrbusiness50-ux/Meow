@@ -39,10 +39,10 @@ export function renderSavedPetsView(): string {
       </header>
 
       <!-- Main Content Container -->
-      <main class="w-full max-w-md mx-auto px-4 pt-4 pb-20 flex-1 flex flex-col">
+      <div class="w-full max-w-md mx-auto px-4 pt-4 pb-[max(5rem,calc(2.5rem+env(safe-area-inset-bottom)))] flex-1 flex flex-col min-w-0">
         
         <!-- The 4 Required Tabs: 1. التزاوج, 2. التبني, 3. العيادات (مقفولة), 4. المتجر (مقفول) -->
-        <div class="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-white/90 dark:bg-[#1F1A16] border-2 border-brand-peachBorder/70 dark:border-[#3A3027] shadow-2xs mb-5">
+        <div class="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-white/90 dark:bg-[#1F1A16] border-2 border-brand-peachBorder/70 dark:border-[#3A3027] shadow-sm mb-5">
           
           <!-- 1. التزاوج -->
           <button
@@ -139,7 +139,7 @@ export function renderSavedPetsView(): string {
             `
         }
 
-      </main>
+      </div>
     </div>
   `;
 }
@@ -169,7 +169,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
   const currentUserId = state.getUser().id;
 
   return `
-    <div class="grid grid-cols-2 gap-3.5 sm:gap-4">
+    <div class="grid grid-cols-2 gap-3 sm:gap-4 min-w-0">
       ${pets
         .map((pet) => {
           const isGroup = pet.status === 'adoption' && pet.adoptionType === 'group';
@@ -182,7 +182,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
           if (isGroup) {
             return `
               <div
-                class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card"
+                class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card min-w-0"
                 data-pet-detail-id="${pet.id}"
               >
                 <div class="relative w-full aspect-[4/4.2] rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#241E1A]">
@@ -196,11 +196,11 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                     <div class="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/75 to-transparent pointer-events-none"></div>
                   </div>
 
-                  <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
+                  <div class="absolute top-2 left-2 flex items-center gap-1.5 z-30">
                     <button
                       type="button"
                       aria-label="إزالة من المحفوظات"
-                      class="remove-saved-pet-btn w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
+                      class="remove-saved-pet-btn w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
                       data-pet-save-id="${pet.id}"
                       title="إزالة من المحفوظات"
                     >
@@ -216,7 +216,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                             petId: pet.id,
                             reportTargetType: 'pet',
                             buttonClass:
-                              'w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
+                              'w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
                             dropdownAlign: 'left',
                           })
                         : ''
@@ -245,7 +245,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                   </div>
                 </div>
 
-                <div class="p-3 text-right flex flex-col justify-between flex-1">
+                <div class="p-3 text-right flex flex-col justify-between flex-1 min-w-0">
                   <div>
                     <h4 class="text-sm sm:text-base font-black text-brand-dark dark:text-white truncate font-baloo leading-tight">
                       ${pet.name}
@@ -264,7 +264,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
 
           return `
             <div
-              class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card"
+              class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card min-w-0"
               data-pet-detail-id="${pet.id}"
             >
               <!-- Pet Photo & Save Heart Button -->
@@ -279,11 +279,11 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                 </div>
 
                 <!-- Top-left actions: Heart Remove + 3-Dots Menu -->
-                <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
+                <div class="absolute top-2 left-2 flex items-center gap-1.5 z-30">
                   <button
                     type="button"
                     aria-label="إزالة من المحفوظات"
-                    class="remove-saved-pet-btn w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
+                    class="remove-saved-pet-btn w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
                     data-pet-save-id="${pet.id}"
                     title="إزالة من المحفوظات"
                   >
@@ -299,7 +299,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                           petId: pet.id,
                           reportTargetType: 'pet',
                           buttonClass:
-                            'w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
+                            'w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
                           dropdownAlign: 'left',
                         })
                       : ''
@@ -313,7 +313,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
               </div>
 
               <!-- Pet Info Block -->
-              <div class="p-3 text-right flex flex-col justify-between flex-1">
+              <div class="p-3 text-right flex flex-col justify-between flex-1 min-w-0">
                 <div>
                   <h4 class="text-base sm:text-lg font-black text-brand-dark dark:text-white truncate font-baloo leading-tight">
                     ${pet.name}, ${pet.ageYears}

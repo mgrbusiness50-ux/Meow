@@ -86,8 +86,8 @@ export function renderTabBar(): string {
   ];
 
   return `
-    <nav aria-label="الشريط السفلي" class="fixed left-0 right-0 max-w-md mx-auto px-4 sm:px-6 z-50 pointer-events-none" style="bottom: max(1rem, env(safe-area-inset-bottom));">
-      <div class="bg-white/95 dark:bg-[#27201B]/95 backdrop-blur-md border border-brand-peachBorder dark:border-warm-darkBorder rounded-full py-2 shadow-nav flex items-center pointer-events-auto px-2 justify-between">
+    <nav aria-label="الشريط السفلي" class="fixed left-0 right-0 max-w-md mx-auto px-2.5 min-[360px]:px-4 sm:px-6 z-50 pointer-events-none" style="bottom: max(0.75rem, env(safe-area-inset-bottom));">
+      <div class="bg-white/95 dark:bg-[#27201B]/95 backdrop-blur-md border border-brand-peachBorder dark:border-warm-darkBorder rounded-full py-1.5 sm:py-2 shadow-nav flex items-center pointer-events-auto px-1.5 sm:px-2 justify-between gap-0.5">
         ${tabs
           .map((tab) => {
             const isActive = currentTab === tab.id;
@@ -95,24 +95,24 @@ export function renderTabBar(): string {
               <button
                 data-tab-id="${tab.id}"
                 aria-label="${tab.label}"
-                class="tab-btn relative flex items-center justify-center p-1 rounded-full text-brand-subtleGray dark:text-[#A89F91] hover:text-brand-orange transition-all group cursor-pointer"
+                class="tab-btn relative flex items-center justify-center p-0.5 sm:p-1 rounded-full text-brand-subtleGray dark:text-[#A89F91] hover:text-brand-orange transition-all group cursor-pointer min-w-0 shrink"
                 type="button"
               >
                 <!-- Pending & Unread Badge for Chat -->
                 ${
                   tab.id === 'chat' && unreadChatBadgeCount > 0
-                    ? `<span class="absolute top-0 right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-sm z-10 animate-bounce">${unreadChatBadgeCount}</span>`
+                    ? `<span class="absolute top-0 right-0.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-sm z-10 animate-bounce">${unreadChatBadgeCount}</span>`
                     : ''
                 }
 
                 <!-- Lock badge for Clinic and Store -->
                 ${
                   tab.isLocked
-                    ? `<span class="absolute -top-1 right-1 px-1 rounded-full bg-brand-cream dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder text-[8px] font-black text-brand-orange leading-tight shadow-2xs">قريباً</span>`
+                    ? `<span class="absolute -top-1 right-0.5 px-1 rounded-full bg-brand-cream dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder text-[8px] font-black text-brand-orange leading-tight shadow-sm">قريباً</span>`
                     : ''
                 }
 
-                <div class="w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+                <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all ${
                   isActive
                     ? 'bg-gradient-to-tr from-brand-orange to-brand-accent text-white shadow-soft'
                     : 'hover:bg-brand-peachBorder/20 dark:hover:bg-[#342A24] text-brand-subtleGray dark:text-[#A89F91] hover:text-brand-orange'

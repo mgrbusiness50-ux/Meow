@@ -19,7 +19,7 @@ export function renderContactView(): string {
           id="contact-back-btn"
           type="button"
           aria-label="رجوع"
-          class="w-11 h-11 rounded-full bg-white border-2 border-brand-peachBorder text-brand-dark flex items-center justify-center hover:bg-brand-orange hover:text-white transition-all cursor-pointer active:scale-90 shadow-2xs shrink-0"
+          class="w-11 h-11 rounded-full bg-white border-2 border-brand-peachBorder text-brand-dark flex items-center justify-center hover:bg-brand-orange hover:text-white transition-all cursor-pointer active:scale-90 shadow-sm shrink-0"
         >
           <i class="fa-solid fa-arrow-right text-base"></i>
         </button>
@@ -29,7 +29,7 @@ export function renderContactView(): string {
       </header>
 
       <!-- Main Content Container: Clean & Light Natural Meow Colors -->
-      <main class="w-full max-w-md mx-auto px-5 pt-8 pb-16 flex-1 flex flex-col items-center text-center">
+      <div class="w-full max-w-md mx-auto px-4 sm:px-5 pt-8 pb-[max(4rem,calc(2rem+env(safe-area-inset-bottom)))] flex-1 flex flex-col items-center text-center min-w-0">
         
         <!-- Centered Warm Message Icon Card -->
         <div class="w-24 h-24 rounded-3xl bg-white border-2 border-brand-peachBorder flex items-center justify-center shadow-card mb-6 relative group">
@@ -40,7 +40,7 @@ export function renderContactView(): string {
               <line x1="8" y1="13" x2="14" y2="13"></line>
             </svg>
           </div>
-          <span class="absolute -bottom-1 -left-1 w-6 h-6 rounded-full bg-brand-orange text-white text-[11px] font-black flex items-center justify-center shadow-xs">
+          <span class="absolute -bottom-1 -left-1 w-6 h-6 rounded-full bg-brand-orange text-white text-[11px] font-black flex items-center justify-center shadow-sm">
             🐾
           </span>
         </div>
@@ -66,7 +66,7 @@ export function renderContactView(): string {
               id="contact-subject"
               required
               placeholder="ما هو موضوع رسالتك؟"
-              class="w-full h-14 px-4 rounded-2xl bg-white border-2 border-brand-peachBorder text-brand-dark placeholder-brand-subtleGray text-sm font-bold focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all font-baloo shadow-2xs"
+              class="w-full h-14 px-4 rounded-2xl bg-white border-2 border-brand-peachBorder text-brand-dark placeholder-brand-subtleGray text-sm font-bold focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all font-baloo shadow-sm"
             />
           </div>
 
@@ -80,7 +80,7 @@ export function renderContactView(): string {
               required
               rows="5"
               placeholder="...صف مشكلتك أو ملاحظاتك"
-              class="w-full p-4 rounded-2xl bg-white border-2 border-brand-peachBorder text-brand-dark placeholder-brand-subtleGray text-sm font-bold focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all font-baloo resize-none leading-relaxed shadow-2xs"
+              class="w-full p-4 rounded-2xl bg-white border-2 border-brand-peachBorder text-brand-dark placeholder-brand-subtleGray text-sm font-bold focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all font-baloo resize-none leading-relaxed shadow-sm"
             ></textarea>
           </div>
 
@@ -97,12 +97,12 @@ export function renderContactView(): string {
           </div>
         </form>
 
-      </main>
+      </div>
 
       <!-- Toast Notification Alert (Hidden by default) -->
       <div
         id="contact-toast"
-        class="hidden fixed bottom-6 inset-x-4 max-w-sm mx-auto bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl z-50 text-right animate-slide-up"
+        class="hidden fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] inset-x-4 max-w-sm mx-auto bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl z-50 text-right animate-slide-up"
       >
         <div class="flex items-center gap-3">
           <i class="fa-solid fa-circle-check text-2xl shrink-0"></i>

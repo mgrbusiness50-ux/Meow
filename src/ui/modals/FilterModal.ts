@@ -16,6 +16,7 @@ import {
   SearchableOption,
   SearchableSelectController,
 } from '../components/SearchableSelect.ts';
+import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
 
 function nodesToOptions(nodes: GeoNode[], allLabel: string): SearchableOption[] {
   return [
@@ -137,38 +138,43 @@ export function renderFilterModal(): string {
 
   return `
     <!-- Filter Modal matching Meow Pet Registration Form Design -->
-    <div id="filter-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in" dir="rtl">
+    <div id="filter-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
       <div
         id="filter-modal-card"
-        class="bg-[#FFF9E9] text-[#2d221b] w-full max-w-md rounded-[36px] border-2 border-[#d6c7b2] shadow-2xl max-h-[92vh] overflow-y-auto transform transition-all animate-scale-up"
+        class="bg-[#FFF9E9] text-[#2d221b] w-full max-w-md rounded-t-[32px] rounded-b-none sm:rounded-[36px] border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl max-h-[92dvh] overflow-y-auto overscroll-contain transform transition-all animate-slide-up"
       >
-        <!-- Sticky Header -->
-        <div class="sticky top-0 z-30 bg-[#FFF9E9]/95 backdrop-blur-md px-5 py-4 border-b border-[#d6c7b2]/70 flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="text-xl">🐾</span>
-            <h2 class="text-xl font-black font-baloo text-[#1a1612] m-0">تصفية البحث</h2>
+        <!-- Drag Handle + Sticky Header -->
+        <div class="sticky top-0 z-30 bg-[#FFF9E9]/95 backdrop-blur-md border-b border-[#d6c7b2]/70">
+          <div id="filter-drag-handle" class="pt-2.5 pb-1 flex justify-center sm:hidden cursor-grab active:cursor-grabbing">
+            <div class="w-12 h-1.5 rounded-full bg-[#d6c7b2]/80"></div>
           </div>
+          <div class="px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">🐾</span>
+              <h2 class="text-xl font-black font-baloo text-[#1a1612] m-0">تصفية البحث</h2>
+            </div>
 
-          <div class="flex items-center gap-2">
-            <button
-              id="reset-filter-btn"
-              type="button"
-              class="text-xs font-black text-[#e67e22] hover:bg-[#fff5ea] cursor-pointer px-3 py-1.5 rounded-full bg-[#fffefc] border border-[#d6c7b2] font-baloo transition active:scale-95"
-            >
-              إعادة ضبط
-            </button>
-            <button
-              id="close-filter-btn"
-              type="button"
-              aria-label="إغلاق الفلتر"
-              class="w-9 h-9 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white hover:border-[#e67e22] transition-all cursor-pointer active:scale-90"
-            >
-              <i class="fa-solid fa-xmark text-sm"></i>
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                id="reset-filter-btn"
+                type="button"
+                class="h-10 text-xs font-black text-[#e67e22] hover:bg-[#fff5ea] cursor-pointer px-3.5 rounded-full bg-[#fffefc] border border-[#d6c7b2] font-baloo transition active:scale-95 flex items-center"
+              >
+                إعادة ضبط
+              </button>
+              <button
+                id="close-filter-btn"
+                type="button"
+                aria-label="إغلاق الفلتر"
+                class="w-10 h-10 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white hover:border-[#e67e22] transition-all cursor-pointer active:scale-90"
+              >
+                <i class="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
           </div>
         </div>
 
-        <form id="meow-filter-form" class="p-5 pb-7 space-y-5 text-right font-baloo" onsubmit="return false;">
+        <form id="meow-filter-form" class="p-4 sm:p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] space-y-5 text-right font-baloo" onsubmit="return false;">
 
           ${
             isMatingTab
@@ -265,43 +271,43 @@ export function renderFilterModal(): string {
           <!-- 1. عندك ايه (قطة / كلب / الكل) -->
           <div class="space-y-2">
             <label class="block text-base font-bold text-[#2d221b]">عندك ايه</label>
-            <div class="grid grid-cols-3 gap-2.5">
+            <div class="grid grid-cols-3 gap-2 sm:gap-2.5">
               <button
                 type="button"
                 data-filter-species="all"
-                class="filter-species-btn h-16 relative flex items-center justify-center gap-1.5 px-3 rounded-[28px] border-2 ${
+                class="filter-species-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-[28px] border-2 ${
                   selectedSpecies === 'all'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="font-black">الكل</span>
+                <span class="font-black truncate">الكل</span>
               </button>
 
               <button
                 type="button"
                 data-filter-species="cat"
-                class="filter-species-btn h-16 relative flex items-center justify-center gap-2 px-3 rounded-[28px] border-2 ${
+                class="filter-species-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-[28px] border-2 ${
                   selectedSpecies === 'cat'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="text-xl">🐱</span>
-                <span class="font-black">قطة</span>
+                <span class="text-lg sm:text-xl">🐱</span>
+                <span class="font-black truncate">قطة</span>
               </button>
 
               <button
                 type="button"
                 data-filter-species="dog"
-                class="filter-species-btn h-16 relative flex items-center justify-center gap-2 px-3 rounded-[28px] border-2 ${
+                class="filter-species-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-[28px] border-2 ${
                   selectedSpecies === 'dog'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="text-xl">🐶</span>
-                <span class="font-black">كلب</span>
+                <span class="text-lg sm:text-xl">🐶</span>
+                <span class="font-black truncate">كلب</span>
               </button>
             </div>
           </div>
@@ -382,41 +388,41 @@ export function renderFilterModal(): string {
           <!-- 5. الجنس -->
           <div class="space-y-2">
             <label class="block text-base font-bold text-[#2d221b]">الجنس</label>
-            <div class="grid grid-cols-3 gap-2.5">
+            <div class="grid grid-cols-3 gap-2 sm:gap-2.5">
               <button
                 type="button"
                 data-filter-gender="all"
-                class="filter-gender-btn h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
+                class="filter-gender-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
                   selectedGender === 'all'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98] px-3"
+                } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
               >
-                <span class="font-black">الكل</span>
+                <span class="font-black truncate">الكل</span>
               </button>
 
               <button
                 type="button"
                 data-filter-gender="male"
-                class="filter-gender-btn h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
+                class="filter-gender-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
                   selectedGender === 'male'
                     ? 'border-[#3b82f6] bg-[#eff6ff] text-[#2563eb]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } text-lg font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] px-3"
+                } text-base sm:text-lg font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
               >
-                <span class="font-black">ذكر</span>
+                <span class="font-black truncate">ذكر</span>
               </button>
 
               <button
                 type="button"
                 data-filter-gender="female"
-                class="filter-gender-btn h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
+                class="filter-gender-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
                   selectedGender === 'female'
                     ? 'border-[#ec4899] bg-[#fce7f3] text-[#db2777]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } text-lg font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] px-3"
+                } text-base sm:text-lg font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
               >
-                <span class="font-black">انثى</span>
+                <span class="font-black truncate">انثى</span>
               </button>
             </div>
           </div>
@@ -424,42 +430,42 @@ export function renderFilterModal(): string {
           <!-- 6. حالة التطعيم -->
           <div class="space-y-2">
             <label class="block text-base font-black text-[#2d221b]">حالة التطعيم</label>
-            <div class="grid grid-cols-3 gap-2.5 h-16">
+            <div class="grid grid-cols-3 gap-2 sm:gap-2.5 h-16">
               <button
                 type="button"
                 data-filter-vaccine="all"
-                class="filter-vaccine-btn h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
+                class="filter-vaccine-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-[28px] border-2 ${
                   selectedVaccination === 'all'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2"
+                } cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-1.5 sm:px-2"
               >
-                <span class="font-black">الكل</span>
+                <span class="font-black truncate">الكل</span>
               </button>
 
               <button
                 type="button"
                 data-filter-vaccine="fully_vaccinated"
-                class="filter-vaccine-btn h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
+                class="filter-vaccine-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-[28px] border-2 ${
                   selectedVaccination === 'fully_vaccinated'
                     ? 'border-[#10b981] bg-[#ecfdf5] text-[#059669]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2"
+                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-1.5 sm:px-2"
               >
-                <i class="fa-solid fa-check"></i>
-                <span class="font-black">مطعم</span>
+                <i class="fa-solid fa-check shrink-0"></i>
+                <span class="font-black truncate">مطعم</span>
               </button>
 
               <button
                 type="button"
                 data-filter-vaccine="not_vaccinated"
-                class="filter-vaccine-btn h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 ${
+                class="filter-vaccine-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 rounded-[28px] border-2 ${
                   selectedVaccination === 'not_vaccinated'
                     ? 'border-brand-orange bg-[#fff5ea] text-brand-orange'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="font-black">غير مطعم</span>
+                <span class="font-black truncate">غير مطعم</span>
               </button>
             </div>
           </div>
@@ -563,6 +569,16 @@ export function attachFilterModalEvents(onApply?: () => void): void {
     state.setFilterModalOpen(false);
   };
 
+  const modalCard = document.getElementById('filter-modal-card');
+  if (modalCard) {
+    attachSheetDragToDismiss(modalCard, {
+      backdropEl: backdrop,
+      handleSelector: '#filter-drag-handle',
+      scrollContainerSelector: '#filter-modal-card',
+      onClose: close,
+    });
+  }
+
   if (closeBtn) closeBtn.addEventListener('click', close);
   if (backdrop) {
     backdrop.addEventListener('click', (e) => {
@@ -592,11 +608,11 @@ export function attachFilterModalEvents(onApply?: () => void): void {
     tempSpecies = species;
     speciesBtns.forEach((b) => {
       const isMatch = b.getAttribute('data-filter-species') === tempSpecies;
-      b.className = `filter-species-btn h-16 relative flex items-center justify-center gap-2 px-3 rounded-[28px] border-2 ${
+      b.className = `filter-species-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-[28px] border-2 ${
         isMatch
           ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
           : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-      } text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]`;
+      } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]`;
     });
   };
 
@@ -612,7 +628,7 @@ export function attachFilterModalEvents(onApply?: () => void): void {
           activeCls = 'border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold';
         else activeCls = 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold';
       }
-      b.className = `filter-gender-btn h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${activeCls} text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98] px-3`;
+      b.className = `filter-gender-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${activeCls} text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3`;
     });
   };
 
@@ -629,7 +645,7 @@ export function attachFilterModalEvents(onApply?: () => void): void {
           activeCls = 'border-brand-orange bg-[#fff5ea] text-brand-orange font-bold';
         else activeCls = 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold';
       }
-      b.className = `filter-vaccine-btn h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${activeCls} cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2`;
+      b.className = `filter-vaccine-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-[28px] border-2 ${activeCls} cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-1.5 sm:px-2`;
     });
   };
 

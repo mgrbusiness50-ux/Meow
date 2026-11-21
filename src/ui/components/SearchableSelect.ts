@@ -51,7 +51,7 @@ export function renderSearchableSelect(config: {
   const isPlaceholder = !selectedOption || selectedOption.value === '';
 
   return `
-    <div class="relative w-full searchable-select-root" data-ss-id="${id}">
+    <div class="relative w-full min-w-0 searchable-select-root" data-ss-id="${id}">
       <input type="hidden" id="${id}" value="${escapeHtml(value)}" />
       <button
         type="button"
@@ -59,7 +59,7 @@ export function renderSearchableSelect(config: {
         ${disabled ? 'disabled' : ''}
         aria-haspopup="listbox"
         aria-expanded="false"
-        class="ss-trigger w-full ${heightClass} py-3 pr-4 pl-10 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black ${textAlignClass} ${
+        class="ss-trigger w-full ${heightClass} py-3 pr-3 sm:pr-4 pl-9 sm:pl-10 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-sm sm:text-base font-black ${textAlignClass} ${
           isPlaceholder && value === '' ? 'text-[#786555]' : 'text-[#1a1612]'
         } focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm flex items-center justify-center truncate ${
           disabled ? 'opacity-55 cursor-not-allowed bg-[#faf6ed]' : 'cursor-pointer hover:border-[#e67e22]/70'
@@ -67,8 +67,8 @@ export function renderSearchableSelect(config: {
       >
         <span class="ss-label truncate block w-full">${escapeHtml(displayLabel)}</span>
       </button>
-      <div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
-        <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+      <div class="pointer-events-none absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+        <svg class="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 20 20">
           <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
         </svg>
       </div>
@@ -76,7 +76,7 @@ export function renderSearchableSelect(config: {
       <!-- Anchored Searchable Popover -->
       <div
         id="${id}-panel"
-        class="ss-panel hidden absolute top-full mt-2 inset-x-0 z-50 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] shadow-xl p-2.5 text-right"
+        class="ss-panel hidden absolute top-full mt-2 right-0 min-w-[min(220px,calc(100vw-2.25rem))] w-full max-w-[calc(100vw-2rem)] z-50 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] shadow-xl p-2.5 text-right"
       >
         <div class="relative mb-2">
           <input
@@ -84,14 +84,14 @@ export function renderSearchableSelect(config: {
             id="${id}-search"
             placeholder="${escapeHtml(searchPlaceholder)}"
             autocomplete="off"
-            class="ss-search w-full h-10 pr-9 pl-3 bg-[#FFF9E9]/80 border border-[#d6c7b2] rounded-2xl text-sm font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:border-[#e67e22]"
+            class="ss-search w-full h-11 pr-9 pl-3 bg-[#FFF9E9]/80 border border-[#d6c7b2] rounded-2xl text-sm font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:border-[#e67e22]"
           />
           <i class="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#786555]"></i>
         </div>
         <div
           id="${id}-list"
           role="listbox"
-          class="ss-list max-h-48 overflow-y-auto space-y-1 pl-0.5"
+          class="ss-list max-h-52 overflow-y-auto overscroll-contain space-y-1 pl-0.5"
         >
           ${renderOptionsListHtml(options, value)}
         </div>

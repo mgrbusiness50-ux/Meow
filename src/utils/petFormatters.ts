@@ -2,15 +2,11 @@ import { Pet } from '../types.ts';
 import { resolveLocationLineage } from '../data/egyptLocations.ts';
 
 export function formatPetSpecies(species: Pet['species']): string {
-  if (species === 'cat') return 'قطة 🐱';
-  if (species === 'dog') return 'كلب 🐶';
-  return 'طائر 🐦';
+  return species === 'dog' ? 'كلب 🐶' : 'قطة 🐱';
 }
 
 export function formatPetSpeciesShort(species: Pet['species']): string {
-  if (species === 'cat') return 'قطة';
-  if (species === 'dog') return 'كلب';
-  return 'طائر';
+  return species === 'dog' ? 'كلب' : 'قطة';
 }
 
 export function formatPetAgeFull(ageYears: number, ageMonths: number): string {

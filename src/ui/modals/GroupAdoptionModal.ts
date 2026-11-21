@@ -1,5 +1,6 @@
 import { state } from '../../state.ts';
 import { AdoptionPublishMode, Pet } from '../../types.ts';
+import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
 
 interface GroupDraft {
   activeSessionKey: string | null;
@@ -143,8 +144,9 @@ export function renderGroupAdoptionModal(): string {
 
     if (confirmMode === 'separate') {
       return `
-        <div id="group-choice-backdrop" class="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" dir="rtl">
-          <div class="bg-[#FFF9E9] w-full max-w-sm rounded-[32px] p-6 border-2 border-[#d6c7b2] shadow-2xl space-y-4 text-right animate-scale-up font-baloo text-[#2d221b]">
+        <div id="group-choice-backdrop" class="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+          <div id="group-choice-sheet" class="bg-[#FFF9E9] w-full max-w-md sm:max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[32px] px-5 sm:px-6 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl space-y-4 text-right animate-slide-up sm:animate-scale-up font-baloo text-[#2d221b] max-h-[92dvh] overflow-y-auto overscroll-contain">
+            <div id="group-choice-drag-handle" class="w-12 h-1.5 rounded-full bg-[#d6c7b2] mx-auto mb-1 sm:hidden cursor-grab active:cursor-grabbing"></div>
             <div class="flex items-center justify-between gap-2 pb-3 border-b border-[#d6c7b2]/60">
               <div class="flex items-center gap-2.5">
                 <div class="w-11 h-11 rounded-2xl bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center text-xl shrink-0">
@@ -159,9 +161,9 @@ export function renderGroupAdoptionModal(): string {
                 id="close-group-choice-btn"
                 type="button"
                 aria-label="إغلاق"
-                class="w-9 h-9 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white transition cursor-pointer"
+                class="w-10 h-10 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white transition cursor-pointer shrink-0 active:scale-90"
               >
-                <i class="fa-solid fa-xmark text-sm"></i>
+                <i class="fa-solid fa-xmark text-base"></i>
               </button>
             </div>
 
@@ -209,8 +211,9 @@ export function renderGroupAdoptionModal(): string {
     }
 
     return `
-      <div id="group-choice-backdrop" class="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" dir="rtl">
-        <div class="bg-[#FFF9E9] w-full max-w-sm rounded-[32px] p-6 border-2 border-[#d6c7b2] shadow-2xl space-y-4 text-right animate-scale-up font-baloo text-[#2d221b]">
+      <div id="group-choice-backdrop" class="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+        <div id="group-choice-sheet" class="bg-[#FFF9E9] w-full max-w-md sm:max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[32px] px-5 sm:px-6 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl space-y-4 text-right animate-slide-up sm:animate-scale-up font-baloo text-[#2d221b] max-h-[92dvh] overflow-y-auto overscroll-contain">
+          <div id="group-choice-drag-handle" class="w-12 h-1.5 rounded-full bg-[#d6c7b2] mx-auto mb-1 sm:hidden cursor-grab active:cursor-grabbing"></div>
           <div class="flex items-center justify-between gap-2 pb-3 border-b border-[#d6c7b2]/60">
             <div class="flex items-center gap-2.5">
               <div class="w-11 h-11 rounded-2xl bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center text-xl shrink-0">
@@ -225,9 +228,9 @@ export function renderGroupAdoptionModal(): string {
               id="close-group-choice-btn"
               type="button"
               aria-label="إغلاق"
-              class="w-9 h-9 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white transition cursor-pointer"
+              class="w-10 h-10 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white transition cursor-pointer shrink-0 active:scale-90"
             >
-              <i class="fa-solid fa-xmark text-sm"></i>
+              <i class="fa-solid fa-xmark text-base"></i>
             </button>
           </div>
 
@@ -312,30 +315,33 @@ export function renderGroupAdoptionModal(): string {
     const totalAdsCount = isBoth ? 1 + selectedPets.length : 1;
 
     return `
-      <div id="group-editor-backdrop" class="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in" dir="rtl">
-        <div class="bg-[#FFF9E9] text-[#2d221b] w-full max-w-md rounded-[36px] border-2 border-[#d6c7b2] shadow-2xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-up font-baloo">
+      <div id="group-editor-backdrop" class="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+        <div id="group-editor-sheet" class="bg-[#FFF9E9] text-[#2d221b] w-full max-w-md rounded-t-[32px] rounded-b-none sm:rounded-[36px] border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl max-h-[92dvh] flex flex-col overflow-hidden animate-slide-up sm:animate-scale-up font-baloo">
 
-          <div class="px-5 py-4 border-b border-[#d6c7b2]/70 bg-[#FFF9E9]/95 flex items-center justify-between shrink-0">
-            <div class="flex items-center gap-2.5">
-              <div class="w-10 h-10 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center text-lg">
-                <i class="fa-solid fa-clipboard-check"></i>
+          <div id="group-editor-drag-handle" class="px-5 pt-2.5 pb-3.5 border-b border-[#d6c7b2]/70 bg-[#FFF9E9]/95 flex flex-col shrink-0">
+            <div class="w-12 h-1.5 rounded-full bg-[#d6c7b2] mx-auto mb-2.5 sm:hidden cursor-grab active:cursor-grabbing"></div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5">
+                <div class="w-10 h-10 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center text-lg">
+                  <i class="fa-solid fa-clipboard-check"></i>
+                </div>
+                <div>
+                  <h3 class="text-base sm:text-lg font-black text-[#1a1612] m-0">تأكيد إنشاء الإعلانات</h3>
+                  <p class="text-xs font-bold text-[#786555] m-0">مراجعة ملخص الإعلانات قبل النشر النهائي</p>
+                </div>
               </div>
-              <div>
-                <h3 class="text-base sm:text-lg font-black text-[#1a1612] m-0">تأكيد إنشاء الإعلانات</h3>
-                <p class="text-xs font-bold text-[#786555] m-0">مراجعة ملخص الإعلانات قبل النشر النهائي</p>
-              </div>
+              <button
+                id="close-group-editor-btn"
+                type="button"
+                aria-label="إغلاق"
+                class="w-10 h-10 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white transition cursor-pointer shrink-0 active:scale-90"
+              >
+                <i class="fa-solid fa-xmark text-base"></i>
+              </button>
             </div>
-            <button
-              id="close-group-editor-btn"
-              type="button"
-              aria-label="إغلاق"
-              class="w-9 h-9 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white transition cursor-pointer"
-            >
-              <i class="fa-solid fa-xmark text-sm"></i>
-            </button>
           </div>
 
-          <div class="p-5 overflow-y-auto space-y-4 flex-1 text-right">
+          <div id="group-editor-scroll" class="p-5 overflow-y-auto overscroll-contain space-y-4 flex-1 text-right">
             <div class="p-4 rounded-3xl bg-[#fffefc] border-2 border-[#d6c7b2] space-y-3">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-sm font-black text-[#1a1612]">ملخص الإعلانات التي سيتم إنشاؤها:</span>
@@ -387,11 +393,11 @@ export function renderGroupAdoptionModal(): string {
             </div>
           </div>
 
-          <div class="p-4 px-5 border-t border-[#d6c7b2]/70 bg-[#FFF9E9] grid grid-cols-2 gap-2.5 shrink-0">
+          <div class="pt-4 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-4 border-t border-[#d6c7b2]/70 bg-[#FFF9E9] grid grid-cols-2 gap-2.5 shrink-0">
             <button
               id="confirm-publish-group-adoption-btn"
               type="button"
-              class="h-13 py-3 px-4 rounded-full bg-brand-orange hover:bg-brand-accent text-white font-black text-sm shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+              class="h-[52px] py-3 px-4 rounded-full bg-brand-orange hover:bg-brand-accent text-white font-black text-sm shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
             >
               <i class="fa-solid fa-check"></i>
               <span>تأكيد ونشر الإعلانات</span>
@@ -399,7 +405,7 @@ export function renderGroupAdoptionModal(): string {
             <button
               id="back-to-group-editor-btn"
               type="button"
-              class="h-13 py-3 px-4 rounded-full bg-[#fffefc] hover:bg-[#faf6ed] border-2 border-[#d6c7b2] text-[#2d221b] font-black text-sm transition cursor-pointer active:scale-95"
+              class="h-[52px] py-3 px-4 rounded-full bg-[#fffefc] hover:bg-[#faf6ed] border-2 border-[#d6c7b2] text-[#2d221b] font-black text-sm transition cursor-pointer active:scale-95"
             >
               تعديل البيانات
             </button>
@@ -410,32 +416,35 @@ export function renderGroupAdoptionModal(): string {
   }
 
   return `
-    <div id="group-editor-backdrop" class="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in" dir="rtl">
-      <div class="bg-[#FFF9E9] text-[#2d221b] w-full max-w-md rounded-[36px] border-2 border-[#d6c7b2] shadow-2xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-up font-baloo">
+    <div id="group-editor-backdrop" class="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+      <div id="group-editor-sheet" class="bg-[#FFF9E9] text-[#2d221b] w-full max-w-md rounded-t-[32px] rounded-b-none sm:rounded-[36px] border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl max-h-[92dvh] flex flex-col overflow-hidden animate-slide-up sm:animate-scale-up font-baloo">
 
         <!-- Sticky Header -->
-        <div class="px-5 py-4 border-b border-[#d6c7b2]/70 bg-[#FFF9E9]/95 flex items-center justify-between shrink-0">
-          <div class="flex items-center gap-2.5">
-            <div class="w-10 h-10 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center text-lg">
-              <i class="fa-solid fa-people-roof"></i>
+        <div id="group-editor-drag-handle" class="px-5 pt-2.5 pb-3.5 border-b border-[#d6c7b2]/70 bg-[#FFF9E9]/95 flex flex-col shrink-0">
+          <div class="w-12 h-1.5 rounded-full bg-[#d6c7b2] mx-auto mb-2.5 sm:hidden cursor-grab active:cursor-grabbing"></div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-10 h-10 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center text-lg shrink-0">
+                <i class="fa-solid fa-people-roof"></i>
+              </div>
+              <div class="min-w-0">
+                <h3 class="text-base sm:text-lg font-black text-[#1a1612] m-0 truncate">إعداد إعلان التبني الجماعي</h3>
+                <p class="text-xs font-bold text-[#786555] m-0">صور منفصلة لكل حيوان أولاً، ثم صور جماعية اختيارية</p>
+              </div>
             </div>
-            <div>
-              <h3 class="text-base sm:text-lg font-black text-[#1a1612] m-0">إعداد إعلان التبني الجماعي</h3>
-              <p class="text-xs font-bold text-[#786555] m-0">صور منفصلة لكل حيوان أولاً، ثم صور جماعية اختيارية</p>
-            </div>
+            <button
+              id="close-group-editor-btn"
+              type="button"
+              aria-label="إغلاق"
+              class="w-10 h-10 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white transition cursor-pointer shrink-0 active:scale-90"
+            >
+              <i class="fa-solid fa-xmark text-base"></i>
+            </button>
           </div>
-          <button
-            id="close-group-editor-btn"
-            type="button"
-            aria-label="إغلاق"
-            class="w-9 h-9 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:bg-[#e67e22] hover:text-white transition cursor-pointer"
-          >
-            <i class="fa-solid fa-xmark text-sm"></i>
-          </button>
         </div>
 
         <!-- Scrollable Body -->
-        <div class="p-5 overflow-y-auto space-y-5 flex-1 text-right">
+        <div id="group-editor-scroll" class="p-5 overflow-y-auto overscroll-contain space-y-5 flex-1 text-right">
 
           <!-- Publishing Mode Selector (إعلان جماعي فقط / الاثنان معاً) -->
           <div class="space-y-2">
@@ -539,7 +548,7 @@ export function renderGroupAdoptionModal(): string {
                 const petPhotos = draft.memberPhotosByPetId[pet.id] || [];
                 const canAddMore = totalPhotos < 10;
                 return `
-                  <div class="p-3.5 rounded-[24px] bg-[#fffefc] border-2 border-[#d6c7b2] space-y-2.5 shadow-2xs">
+                  <div class="p-3.5 rounded-[24px] bg-[#fffefc] border-2 border-[#d6c7b2] space-y-2.5 shadow-sm">
                     <div class="flex items-center justify-between gap-2">
                       <div class="flex items-center gap-2">
                         <span class="text-base">${pet.species === 'dog' ? '🐶' : '🐱'}</span>
@@ -567,7 +576,7 @@ export function renderGroupAdoptionModal(): string {
                                       type="button"
                                       data-remove-member-photo="${pet.id}"
                                       data-photo-index="${idx}"
-                                      class="remove-member-photo-btn absolute top-1 left-1 w-5 h-5 rounded-full bg-black/70 text-white text-[10px] flex items-center justify-center cursor-pointer"
+                                      class="remove-member-photo-btn absolute top-1 left-1 w-7 h-7 rounded-full bg-black/70 text-white text-sm flex items-center justify-center cursor-pointer active:scale-90"
                                       aria-label="حذف الصورة"
                                     >
                                       ×
@@ -604,7 +613,7 @@ export function renderGroupAdoptionModal(): string {
           </div>
 
           <!-- 3. Optional Collective Photos (Shared) -->
-          <div class="p-3.5 rounded-[24px] bg-[#fffefc] border-2 border-[#d6c7b2] space-y-2.5 shadow-2xs">
+          <div class="p-3.5 rounded-[24px] bg-[#fffefc] border-2 border-[#d6c7b2] space-y-2.5 shadow-sm">
             <div class="flex items-center justify-between gap-2">
               <div>
                 <span class="text-sm font-black text-[#1a1612] block">3. صور جماعية معاً (اختياري)</span>
@@ -624,7 +633,7 @@ export function renderGroupAdoptionModal(): string {
                       <button
                         type="button"
                         data-remove-shared-photo="${idx}"
-                        class="remove-shared-photo-btn absolute top-1 left-1 w-5 h-5 rounded-full bg-black/70 text-white text-[10px] flex items-center justify-center cursor-pointer"
+                        class="remove-shared-photo-btn absolute top-1 left-1 w-7 h-7 rounded-full bg-black/70 text-white text-sm flex items-center justify-center cursor-pointer active:scale-90"
                         aria-label="حذف الصورة الجماعية"
                       >
                         ×
@@ -695,7 +704,7 @@ export function renderGroupAdoptionModal(): string {
         </div>
 
         <!-- Footer Buttons -->
-        <div class="p-4 px-5 border-t border-[#d6c7b2]/70 bg-[#FFF9E9] space-y-2 shrink-0">
+        <div class="pt-4 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-4 border-t border-[#d6c7b2]/70 bg-[#FFF9E9] space-y-2 shrink-0">
           <button
             id="save-group-adoption-btn"
             type="button"
@@ -753,6 +762,15 @@ export function attachGroupAdoptionModalEvents(): void {
         if (e.target === choiceBackdrop) closeModal();
       });
     }
+    const choiceSheet = document.getElementById('group-choice-sheet');
+    if (choiceSheet) {
+      attachSheetDragToDismiss(choiceSheet, {
+        backdropEl: choiceBackdrop,
+        handleSelector: '#group-choice-drag-handle',
+        scrollContainerSelector: '#group-choice-sheet',
+        onClose: closeModal,
+      });
+    }
     if (groupBtn) {
       groupBtn.addEventListener('click', () => {
         resetDraft();
@@ -799,6 +817,7 @@ export function attachGroupAdoptionModalEvents(): void {
 
   const closeBtn = document.getElementById('close-group-editor-btn');
   const backdrop = document.getElementById('group-editor-backdrop');
+  const editorSheet = document.getElementById('group-editor-sheet');
   const closeEditor = () => {
     resetDraft();
     state.closeGroupAdoptionEditor();
@@ -807,6 +826,14 @@ export function attachGroupAdoptionModalEvents(): void {
   if (backdrop) {
     backdrop.addEventListener('click', (e) => {
       if (e.target === backdrop) closeEditor();
+    });
+  }
+  if (editorSheet) {
+    attachSheetDragToDismiss(editorSheet, {
+      backdropEl: backdrop,
+      handleSelector: '#group-editor-drag-handle',
+      scrollContainerSelector: '#group-editor-scroll',
+      onClose: closeEditor,
     });
   }
 

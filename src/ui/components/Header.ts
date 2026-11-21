@@ -43,13 +43,13 @@ export function renderHeader(): string {
 
   return `
     <header class="sticky top-0 z-40 w-full bg-[#FFF9E9]/95 dark:bg-[#27201B]/95 backdrop-blur-md border-b border-brand-peachBorder/40 dark:border-warm-darkBorder shadow-sm" id="main-header">
-      <div class="max-w-md mx-auto px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex flex-col gap-3.5">
+      <div class="max-w-md mx-auto px-3.5 min-[360px]:px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex flex-col gap-3">
         
         <!-- Row 1: Review/View Switcher + Notifications Bell & Meow Logo -->
-        <div class="flex items-center justify-between w-full">
+        <div class="flex items-center justify-between w-full gap-2 min-w-0">
           
           <!-- One side (Right in RTL): View Switcher / Settings + Notifications Bell -->
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 shrink-0">
             ${
               isBrowseTab
                 ? `
@@ -97,12 +97,11 @@ export function renderHeader(): string {
           </div>
 
           <!-- Opposite side (Left in RTL): Brand Logo - Noticeably Enlarged -->
-          <div class="cursor-pointer flex items-center transition-transform active:scale-95" id="header-logo-container">
+          <div class="cursor-pointer flex items-center transition-transform active:scale-95 shrink-0" id="header-logo-container">
             <img
               alt="Meow Brand Logo"
-              class="w-auto object-contain drop-shadow-md"
+              class="h-16 min-[360px]:h-20 sm:h-[84px] w-auto object-contain drop-shadow-md"
               src="${MEOW_LOGO_URL}"
-              style="height: 84px; max-height: 92px;"
             />
           </div>
 
@@ -112,12 +111,12 @@ export function renderHeader(): string {
         ${
           isBrowseTab
             ? `
-            <div class="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-0.5">
+            <div class="flex items-center gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar py-0.5" data-no-ptr="true">
               <!-- Filter Button: ONLY filter icon in square box, no text -->
               <div class="relative shrink-0">
                 <button
                   aria-label="تصفية"
-                  class="h-12 w-12 rounded-2xl border-2 border-brand-peachBorder dark:border-warm-darkBorder bg-white dark:bg-[#342A24] flex items-center justify-center text-brand-orange font-bold shadow-sm transition hover:bg-brand-peachBorder/20 dark:hover:bg-[#3D312A] cursor-pointer"
+                  class="h-11 w-11 sm:h-12 sm:w-12 rounded-2xl border-2 border-brand-peachBorder dark:border-warm-darkBorder bg-white dark:bg-[#342A24] flex items-center justify-center text-brand-orange font-bold shadow-sm transition hover:bg-brand-peachBorder/20 dark:hover:bg-[#3D312A] cursor-pointer"
                   id="filter-toggle-btn"
                   type="button"
                   title="تصفية وفلاتر"
@@ -129,11 +128,11 @@ export function renderHeader(): string {
               <!-- 1. Category: All (الكل) - الأول دائماً -->
               <button
                 data-species-tab="all"
-                class="category-species-btn h-12 px-6 rounded-2xl ${
+                class="category-species-btn h-11 sm:h-12 px-4 sm:px-6 rounded-2xl ${
                   selectedSpecies === 'all'
                     ? 'bg-brand-orange text-white font-black shadow-soft border-2 border-brand-orange'
                     : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-[#D1C7BD] font-black hover:bg-white/80 dark:hover:bg-[#3D312A]'
-                } text-base flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
+                } text-sm sm:text-base flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
                 type="button"
               >
                 <span>الكل</span>
@@ -142,11 +141,11 @@ export function renderHeader(): string {
               <!-- 2. Category: Cats (قطط) - الثاني -->
               <button
                 data-species-tab="cat"
-                class="category-species-btn h-12 px-6 rounded-2xl ${
+                class="category-species-btn h-11 sm:h-12 px-4 sm:px-6 rounded-2xl ${
                   selectedSpecies === 'cat'
                     ? 'bg-brand-orange text-white font-black shadow-soft border-2 border-brand-orange'
                     : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-[#D1C7BD] font-black hover:bg-white/80 dark:hover:bg-[#3D312A]'
-                } text-base flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
+                } text-sm sm:text-base flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
                 type="button"
               >
                 <span>قطط</span>
@@ -155,11 +154,11 @@ export function renderHeader(): string {
               <!-- 3. Category: Dogs (كلاب) - الثالث -->
               <button
                 data-species-tab="dog"
-                class="category-species-btn h-12 px-6 rounded-2xl ${
+                class="category-species-btn h-11 sm:h-12 px-4 sm:px-6 rounded-2xl ${
                   selectedSpecies === 'dog'
                     ? 'bg-brand-orange text-white font-black shadow-soft border-2 border-brand-orange'
                     : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-[#D1C7BD] font-black hover:bg-white/80 dark:hover:bg-[#3D312A]'
-                } text-base flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
+                } text-sm sm:text-base flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
                 type="button"
               >
                 <span>كلاب</span>

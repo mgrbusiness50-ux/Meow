@@ -47,6 +47,7 @@ import {
   syncPetToFirestore,
   deletePetFromFirestore,
   syncNotificationToFirestore,
+  deleteNotificationFromFirestore,
   syncContactRequestToFirestore,
   markMatingCelebratedInFirestore,
   syncConversationToFirestore,
@@ -59,6 +60,43 @@ import {
   requestBrowserNotificationPermission,
   showSystemNotification,
 } from './services/notificationService.ts';
+import type { Session } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
+import { isSupabaseConfigured } from './services/supabaseClient.ts';
+import {
+  SupabaseAccountBundleResult,
+  SupabaseBasicResult,
+  SupabaseUserAccountBundle,
+  clearSupabasePasswordRecoveryState,
+  fetchSupabaseUserAccountBundle,
+  getCurrentSupabaseSession,
+  handleSupabaseAuthCallbackUrl,
+  isSupabaseAuthCallbackUrl,
+  isSupabasePasswordRecoveryActive,
+  saveSupabaseUserAccountBundle,
+  signOutFromSupabase,
+  subscribeToSupabaseAuthChanges,
+  updateSupabaseAccountPreferences,
+} from './services/supabaseAuthService.ts';
+
+const DEFAULT_USER_AVATAR_FALLBACK =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Ccircle cx='60' cy='60' r='60' fill='%23F7E1C3'/%3E%3Ccircle cx='42' cy='46' r='8' fill='%23E67E22'/%3E%3Ccircle cx='60' cy='38' r='8' fill='%23E67E22'/%3E%3Ccircle cx='78' cy='46' r='8' fill='%23E67E22'/%3E%3Cpath d='M60 54c-13 0-23 9-23 20 0 9 9 15 23 15s23-6 23-15c0-11-10-20-23-20z' fill='%23E67E22'/%3E%3C/svg%3E";
+
+function createUnauthenticatedUserProfile(notificationsEnabled = true): UserProfile {
+  return {
+    id: '',
+    name: '',
+    avatar: '',
+    email: '',
+    phone: '',
+    city: '',
+    privacyMode: 'private',
+    showPhoneOnlyAfterApproval: false,
+    showPhoneInProfile: false,
+    notificationsEnabled,
+  };
+}
 
 type Listener = () => void;
 
@@ -73,7 +111,7 @@ export type OnboardingStep =
 
 class AppStateManager {
   private user: UserProfile = { ...CURRENT_USER };
-  private userPets: Pet[] = [...INITIAL_USER_PETS];
+  private userPets: Pet[] = INITIAL_USER_PETS.map((p) => ({ ...p }));
   private userGroupAdoptionListing: Pet | null = null;
   private pendingGroupChoicePetId: string | null = null;
   private isGroupAdoptionEditorOpen: boolean = false;
@@ -127,6 +165,18 @@ class AppStateManager {
       ? (() => {
           try {
             const parsed = JSON.parse(localStorage.getItem('meow_read_notification_ids_v1') || '[]');
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        })()
+      : []
+  );
+  private dismissedNotificationIds: Set<string> = new Set(
+    typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+      ? (() => {
+          try {
+            const parsed = JSON.parse(localStorage.getItem('meow_dismissed_notification_ids_v1') || '[]');
             return Array.isArray(parsed) ? parsed : [];
           } catch {
             return [];
@@ -227,7 +277,11 @@ class AppStateManager {
       if (params.get('preview') === 'onboarding') {
         return 'splash';
       }
-      if (localStorage.getItem('meow_onboarding_done') === 'true') {
+      if (
+        !isSupabaseConfigured() &&
+        typeof localStorage !== 'undefined' &&
+        localStorage.getItem('meow_onboarding_done') === 'true'
+      ) {
         return 'completed';
       }
     }
@@ -237,6 +291,31 @@ class AppStateManager {
   private authenticatedGoogleAccount: GoogleAuthAccount | null = null;
   private termsAcceptedInOnboarding: boolean = false;
   private ownerDetailsCompleted: boolean = false;
+
+  // 4.1 SUPABASE AUTH & ACCOUNT SESSION STATE
+  private supabaseSession: Session | null = null;
+  private supabaseAuthUserId: string | null = null;
+  private isSupabaseAuthReady: boolean = !isSupabaseConfigured();
+  private isSupabaseProfileLoading: boolean = false;
+  private supabaseAccountBundle: SupabaseUserAccountBundle | null = null;
+  private supabaseAuthError: string | null = null;
+  private isSupabasePasswordRecoveryState: boolean = false;
+  private rawSupabaseAvatarUrl: string = '';
+  private supabaseAuthUnsub: (() => void) | null = null;
+  private activeSupabaseAuthVersion: number = 0;
+  private inFlightSupabaseProfileFetch: {
+    userId: string;
+    version: number;
+    promise: Promise<SupabaseAccountBundleResult>;
+  } | null = null;
+  private loadedSupabaseUserId: string | null = null;
+  private pendingSplashAdvance: boolean = false;
+  private isSigningOutSupabase: boolean = false;
+  private supabaseAccountWriteQueue: Promise<unknown> = Promise.resolve();
+  private activeDeepLinkAuthPromise: Promise<boolean> | null = null;
+  private activeDeepLinkUrl: string | null = null;
+  private deepLinkInitChecked: boolean = false;
+  private handledDeepLinkUrls: Set<string> = new Set();
 
   // Calm filtering/search loading state
   private isFilteringLoading: boolean = false;
@@ -296,17 +375,30 @@ class AppStateManager {
   private listeners: Set<Listener> = new Set();
 
   constructor() {
+    const useSupabaseAuthSession = isSupabaseConfigured() && !this.isOnboardingPreviewSession;
+    if (this.isOnboardingPreviewSession) {
+      this.isSupabaseAuthReady = true;
+    }
+
+    if (useSupabaseAuthSession) {
+      this.user = createUnauthenticatedUserProfile(this.notificationsEnabled);
+      this.onboardingStep = 'splash';
+      this.isSupabaseAuthReady = false;
+    }
+
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-      this.loadPersistedOwnerProfile();
-      const storedShowPhone = localStorage.getItem('meow_show_phone_in_profile') === 'true';
-      this.user.showPhoneInProfile = storedShowPhone;
-      this.user.privacyMode = storedShowPhone ? 'public' : 'private';
-      this.user.showPhoneOnlyAfterApproval = storedShowPhone;
-      this.user.notificationsEnabled = this.notificationsEnabled;
-      this.userPets.forEach((p) => {
-        p.ownerShowPhone = storedShowPhone;
-        p.ownerPrivacy = this.user.privacyMode;
-      });
+      if (!useSupabaseAuthSession) {
+        this.loadPersistedOwnerProfile();
+        const storedShowPhone = localStorage.getItem('meow_show_phone_in_profile') === 'true';
+        this.user.showPhoneInProfile = storedShowPhone;
+        this.user.privacyMode = storedShowPhone ? 'public' : 'private';
+        this.user.showPhoneOnlyAfterApproval = storedShowPhone;
+        this.user.notificationsEnabled = this.notificationsEnabled;
+        this.userPets.forEach((p) => {
+          p.ownerShowPhone = storedShowPhone;
+          p.ownerPrivacy = this.user.privacyMode;
+        });
+      }
       this.restoreProcessedRequestStatuses();
       this.loadPersistedNotifications();
       this.reconcileNotificationsWithState(true);
@@ -458,6 +550,18 @@ class AppStateManager {
     }
   }
 
+  private persistDismissedNotificationIds(): void {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(
+        'meow_dismissed_notification_ids_v1',
+        JSON.stringify(Array.from(this.dismissedNotificationIds).slice(-300))
+      );
+    } catch {
+      // Ignore storage write error
+    }
+  }
+
   private isRequestAlreadyHandled(requestId?: string): boolean {
     if (!requestId) return false;
     const saved = this.processedRequestStatuses[requestId];
@@ -516,11 +620,15 @@ class AppStateManager {
       if (raw) {
         const parsed = JSON.parse(raw) as AppNotification[];
         if (Array.isArray(parsed)) {
-          this.notifications = parsed.map((n) => {
-            const read = Boolean(n.read || this.readNotificationIds.has(n.id) || this.isRequestAlreadyHandled(n.targetRequestId));
-            if (read) this.readNotificationIds.add(n.id);
-            return { ...n, read };
-          });
+          this.notifications = parsed
+            .filter((n) => n && n.id && !this.dismissedNotificationIds.has(n.id))
+            .map((n) => {
+              const read = Boolean(
+                n.read || this.readNotificationIds.has(n.id) || this.isRequestAlreadyHandled(n.targetRequestId)
+              );
+              if (read) this.readNotificationIds.add(n.id);
+              return { ...n, read };
+            });
           this.persistReadNotificationIds();
           return;
         }
@@ -535,6 +643,10 @@ class AppStateManager {
     const initialReq = this.contactRequests[0];
     if (!initialReq) return;
     const seedId = `notif_seed_${initialReq.id}`;
+    if (this.dismissedNotificationIds.has(seedId)) {
+      this.notifications = [];
+      return;
+    }
     const alreadyRead = Boolean(
       this.readNotificationIds.has(seedId) ||
         this.isRequestAlreadyHandled(initialReq.id)
@@ -569,7 +681,7 @@ class AppStateManager {
 
   private initRealtimeSync(): void {
     if (typeof window === 'undefined') return;
-    void testFirestoreConnection();
+
     void initNotificationService((payload) => {
       if (payload.notificationId) {
         this.openNotification(payload.notificationId);
@@ -590,6 +702,12 @@ class AppStateManager {
       }
     }) as EventListener);
 
+    if (isSupabaseConfigured()) {
+      this.initSupabaseAuthSync();
+      return;
+    }
+
+    void testFirestoreConnection();
     subscribeToAuthSession(
       () => {
         void loadUserPreferencesFromFirestore()
@@ -630,8 +748,13 @@ class AppStateManager {
         this.firestoreNotificationsUnsub = subscribeUserNotifications((remoteItems) => {
           if (remoteItems.length === 0) return;
           const byId = new Map<string, AppNotification>();
-          this.notifications.forEach((n) => byId.set(n.id, n));
+          this.notifications.forEach((n) => {
+            if (!this.dismissedNotificationIds.has(n.id)) {
+              byId.set(n.id, n);
+            }
+          });
           remoteItems.forEach((remote) => {
+            if (this.dismissedNotificationIds.has(remote.id)) return;
             const existing = byId.get(remote.id);
             const resolvedRead = Boolean(
               remote.read ||
@@ -673,6 +796,731 @@ class AppStateManager {
         }
       }
     );
+  }
+
+  private initSupabaseAuthSync(): void {
+    if (this.supabaseAuthUnsub) {
+      this.supabaseAuthUnsub();
+      this.supabaseAuthUnsub = null;
+    }
+
+    this.supabaseAuthUnsub = subscribeToSupabaseAuthChanges((payload) => {
+      void this.handleSupabaseAuthUpdate({
+        event: payload.event,
+        session: payload.session,
+        isPasswordRecovery: payload.isPasswordRecovery,
+        source: 'auth_change',
+      });
+    });
+
+    void this.verifyInitialSupabaseSession();
+  }
+
+  private async verifyInitialSupabaseSession(): Promise<void> {
+    if (!this.deepLinkInitChecked) {
+      let launchUrl: string | undefined;
+      try {
+        if (Capacitor.isNativePlatform()) {
+          const launch = await CapApp.getLaunchUrl();
+          launchUrl = launch?.url;
+        }
+      } catch (err) {
+        console.warn('Capacitor getLaunchUrl auth check skipped:', err);
+      } finally {
+        this.deepLinkInitChecked = true;
+      }
+
+      if (launchUrl && isSupabaseAuthCallbackUrl(launchUrl)) {
+        const handled = await this.handleAuthDeepLinkUrl(launchUrl);
+        if (handled || this.supabaseAuthError) {
+          return;
+        }
+      }
+    }
+
+    if (this.activeDeepLinkAuthPromise) {
+      const handled = await this.activeDeepLinkAuthPromise.catch(() => false);
+      if (handled || this.supabaseAuthError) {
+        return;
+      }
+    }
+
+    const result = await getCurrentSupabaseSession();
+    if (!result.configured) {
+      this.isSupabaseAuthReady = true;
+      this.isSupabaseProfileLoading = false;
+      this.notify();
+      return;
+    }
+
+    if (this.activeDeepLinkAuthPromise) {
+      const handled = await this.activeDeepLinkAuthPromise.catch(() => false);
+      if (handled || this.supabaseAuthError) {
+        return;
+      }
+    }
+
+    if (result.errorMessage && !result.session) {
+      this.activeSupabaseAuthVersion += 1;
+      this.clearLocalSupabaseSessionState({
+        errorMessage: result.errorMessage,
+        markReady: true,
+        preserveOnboardingSubstep: true,
+      });
+      this.notify();
+      return;
+    }
+
+    await this.handleSupabaseAuthUpdate({
+      event: result.session ? 'INITIAL_SESSION' : 'SIGNED_OUT',
+      session: result.session,
+      isPasswordRecovery: result.isPasswordRecovery,
+      source: 'initial_check',
+    });
+  }
+
+  private async handleSupabaseAuthUpdate(params: {
+    event: string;
+    session: Session | null;
+    isPasswordRecovery: boolean;
+    source: 'initial_check' | 'auth_change';
+  }): Promise<void> {
+    const { event, session, isPasswordRecovery } = params;
+
+    if (!session || !session.user?.id) {
+      // Avoid flashing signed-out or marking ready while native cold-start deep link / active callback is running
+      if (
+        this.activeDeepLinkAuthPromise ||
+        (params.source === 'auth_change' &&
+          event === 'INITIAL_SESSION' &&
+          !this.deepLinkInitChecked &&
+          Capacitor.isNativePlatform())
+      ) {
+        return;
+      }
+      this.activeSupabaseAuthVersion += 1;
+      this.inFlightSupabaseProfileFetch = null;
+      this.clearLocalSupabaseSessionState({
+        errorMessage: null,
+        markReady: true,
+        preserveOnboardingSubstep: event !== 'SIGNED_OUT' && !this.isSigningOutSupabase,
+      });
+      if (!this.isOnboardingPreviewSession && this.isSigningOutSupabase) {
+        this.onboardingStep = 'auth_method';
+      } else if (!this.isOnboardingPreviewSession && this.pendingSplashAdvance && this.onboardingStep === 'splash') {
+        this.pendingSplashAdvance = false;
+        this.onboardingStep = 'welcome';
+      }
+      this.notify();
+      return;
+    }
+
+    const userId = session.user.id;
+    this.supabaseSession = session;
+    this.supabaseAuthUserId = userId;
+    this.isSupabasePasswordRecoveryState = Boolean(isPasswordRecovery || isSupabasePasswordRecoveryActive());
+
+    if (
+      event === 'TOKEN_REFRESHED' &&
+      this.loadedSupabaseUserId === userId &&
+      this.supabaseAccountBundle?.exists
+    ) {
+      this.isSupabaseAuthReady = true;
+      this.notify();
+      return;
+    }
+
+    if (
+      (event === 'INITIAL_SESSION' || params.source === 'initial_check') &&
+      this.loadedSupabaseUserId === userId &&
+      this.supabaseAccountBundle?.exists &&
+      !this.supabaseAuthError
+    ) {
+      this.isSupabaseAuthReady = true;
+      this.isSupabaseProfileLoading = false;
+      this.notify();
+      return;
+    }
+
+    await this.loadSupabaseAccountForUser(userId, {
+      session,
+      isPasswordRecovery: this.isSupabasePasswordRecoveryState,
+      forceReload: event === 'USER_UPDATED' || event === 'SIGNED_IN',
+    });
+  }
+
+  private async loadSupabaseAccountForUser(
+    userId: string,
+    opts?: {
+      session?: Session | null;
+      isPasswordRecovery?: boolean;
+      forceReload?: boolean;
+    }
+  ): Promise<SupabaseAccountBundleResult> {
+    if (
+      !opts?.forceReload &&
+      this.inFlightSupabaseProfileFetch &&
+      this.inFlightSupabaseProfileFetch.userId === userId
+    ) {
+      return this.inFlightSupabaseProfileFetch.promise;
+    }
+
+    const version = ++this.activeSupabaseAuthVersion;
+    this.isSupabaseProfileLoading = true;
+    this.supabaseAuthError = null;
+    this.notify();
+
+    const fetchPromise = (async (): Promise<SupabaseAccountBundleResult> => {
+      const res = await fetchSupabaseUserAccountBundle(userId);
+      if (version !== this.activeSupabaseAuthVersion) {
+        return res;
+      }
+
+      this.isSupabaseProfileLoading = false;
+      this.isSupabaseAuthReady = true;
+
+      if (!res.success || !res.bundle || !res.bundle.exists || !res.bundle.profile) {
+        this.loadedSupabaseUserId = null;
+        this.supabaseAccountBundle = res.bundle ?? null;
+        this.supabaseAuthError =
+          res.errorMessage || 'تعذر تحميل بيانات الحساب من قاعدة البيانات.';
+        const sessionUser = opts?.session?.user ?? this.supabaseSession?.user ?? null;
+        this.user = {
+          ...createUnauthenticatedUserProfile(this.notificationsEnabled),
+          id: userId,
+          email: sessionUser?.email || '',
+          name:
+            (sessionUser?.user_metadata?.full_name as string | undefined) ||
+            (sessionUser?.user_metadata?.name as string | undefined) ||
+            '',
+        };
+        const inRecovery = Boolean(opts?.isPasswordRecovery || this.isSupabasePasswordRecoveryState);
+        if (!this.isOnboardingPreviewSession) {
+          if (inRecovery) {
+            this.onboardingStep = 'auth_method';
+          } else if (this.onboardingStep === 'completed') {
+            this.onboardingStep = 'splash';
+          }
+        }
+        this.notify();
+        return res;
+      }
+
+      this.loadedSupabaseUserId = userId;
+      this.supabaseAccountBundle = res.bundle;
+      this.supabaseAuthError = null;
+      this.applySupabaseAccountBundle(res.bundle, {
+        isPasswordRecovery: Boolean(opts?.isPasswordRecovery),
+      });
+      this.notify();
+      return res;
+    })();
+
+    this.inFlightSupabaseProfileFetch = { userId, version, promise: fetchPromise };
+    try {
+      return await fetchPromise;
+    } finally {
+      if (this.inFlightSupabaseProfileFetch?.version === version) {
+        this.inFlightSupabaseProfileFetch = null;
+      }
+    }
+  }
+
+  private applySupabaseAccountBundle(
+    bundle: SupabaseUserAccountBundle,
+    opts?: { isPasswordRecovery?: boolean }
+  ): void {
+    const profile = bundle.profile;
+    if (!profile) return;
+
+    this.rawSupabaseAvatarUrl = bundle.rawProfile?.avatar_url || profile.avatar || '';
+    const runtimeAvatar = this.rawSupabaseAvatarUrl || DEFAULT_USER_AVATAR_FALLBACK;
+    const showPhone = Boolean(profile.showPhoneInProfile);
+    const notifEnabled = profile.notificationsEnabled !== false;
+
+    this.user = {
+      ...profile,
+      avatar: runtimeAvatar,
+      showPhoneInProfile: showPhone,
+      privacyMode: showPhone ? 'public' : 'private',
+      showPhoneOnlyAfterApproval: showPhone,
+      notificationsEnabled: notifEnabled,
+    };
+
+    this.notificationsEnabled = notifEnabled;
+    this.isAdviceDismissed = Boolean(bundle.adviceDismissed);
+    this.termsAcceptedInOnboarding = true;
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('meow_show_phone_in_profile', showPhone ? 'true' : 'false');
+      localStorage.setItem('meow_notifications_enabled', notifEnabled ? 'true' : 'false');
+      if (this.isAdviceDismissed) {
+        localStorage.setItem('meow_advice_dismissed', 'true');
+      } else {
+        localStorage.removeItem('meow_advice_dismissed');
+      }
+    }
+
+    this.syncOwnedPetsMetadataWithUser(this.user.id);
+
+    const hasCompletedOwnerFields = Boolean(
+      (this.user.name || '').trim() &&
+        (this.user.city || '').trim() &&
+        (this.user.phone || '').trim() &&
+        (this.user.gender === 'male' || this.user.gender === 'female')
+    );
+
+    if (!this.isOnboardingPreviewSession) {
+      this.pendingSplashAdvance = false;
+      const inRecovery = Boolean(opts?.isPasswordRecovery || this.isSupabasePasswordRecoveryState);
+      if (inRecovery) {
+        this.ownerDetailsCompleted = Boolean(bundle.onboardingDone || hasCompletedOwnerFields);
+        this.onboardingStep = 'auth_method';
+      } else if (bundle.onboardingDone) {
+        this.ownerDetailsCompleted = true;
+        this.onboardingStep = 'completed';
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('meow_onboarding_done', 'true');
+        }
+      } else {
+        this.ownerDetailsCompleted = hasCompletedOwnerFields;
+        if (
+          this.onboardingStep === 'splash' ||
+          this.onboardingStep === 'welcome' ||
+          this.onboardingStep === 'auth_method' ||
+          this.onboardingStep === 'completed'
+        ) {
+          this.onboardingStep = hasCompletedOwnerFields ? 'has_pet' : 'owner_details';
+        }
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('meow_onboarding_done');
+        }
+      }
+    }
+
+    this.recalculateAllCompatibilities();
+  }
+
+  private syncOwnedPetsMetadataWithUser(ownerId: string): void {
+    const resolvedOwnerId = ownerId || 'user_me';
+    const showPhone = Boolean(this.user.showPhoneInProfile);
+    const privacyMode: PrivacySetting = showPhone ? 'public' : 'private';
+
+    this.userPets = this.userPets.map((pet) => ({
+      ...pet,
+      ownerId: resolvedOwnerId,
+      ownerName: this.user.name || pet.ownerName,
+      ownerAvatar: this.user.avatar || pet.ownerAvatar,
+      ownerPhone: this.user.phone,
+      ownerPrivacy: privacyMode,
+      ownerShowPhone: showPhone,
+    }));
+
+    if (this.userGroupAdoptionListing) {
+      this.userGroupAdoptionListing = {
+        ...this.userGroupAdoptionListing,
+        ownerId: resolvedOwnerId,
+        ownerName: this.user.name || this.userGroupAdoptionListing.ownerName,
+        ownerAvatar: this.user.avatar || this.userGroupAdoptionListing.ownerAvatar,
+        ownerPhone: this.user.phone,
+        ownerPrivacy: privacyMode,
+        ownerShowPhone: showPhone,
+      };
+    }
+
+    if (this.selectedPetForDetail && this.userPets.some((p) => p.id === this.selectedPetForDetail?.id)) {
+      this.selectedPetForDetail = {
+        ...this.selectedPetForDetail,
+        ownerId: resolvedOwnerId,
+        ownerName: this.user.name || this.selectedPetForDetail.ownerName,
+        ownerAvatar: this.user.avatar || this.selectedPetForDetail.ownerAvatar,
+        ownerPhone: this.user.phone,
+        ownerPrivacy: privacyMode,
+        ownerShowPhone: showPhone,
+      };
+    }
+  }
+
+  private clearLocalSupabaseSessionState(opts?: {
+    errorMessage?: string | null;
+    markReady?: boolean;
+    preserveOnboardingSubstep?: boolean;
+  }): void {
+    this.supabaseSession = null;
+    this.supabaseAuthUserId = null;
+    this.supabaseAccountBundle = null;
+    this.loadedSupabaseUserId = null;
+    this.isSupabaseProfileLoading = false;
+    this.isSupabasePasswordRecoveryState = false;
+    this.rawSupabaseAvatarUrl = '';
+    this.supabaseAuthError = opts?.errorMessage ?? null;
+    if (opts?.markReady) {
+      this.isSupabaseAuthReady = true;
+    }
+
+    this.authenticatedGoogleAccount = null;
+    this.ownerDetailsCompleted = false;
+    this.termsAcceptedInOnboarding = false;
+
+    if (!this.isOnboardingPreviewSession) {
+      this.user = createUnauthenticatedUserProfile(this.notificationsEnabled);
+      this.syncOwnedPetsMetadataWithUser('');
+
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('meow_onboarding_done');
+        localStorage.removeItem('meow_owner_profile_v1');
+      }
+
+      const preAuthSteps: OnboardingStep[] = ['splash', 'welcome', 'auth_method'];
+      if (!opts?.preserveOnboardingSubstep || !preAuthSteps.includes(this.onboardingStep)) {
+        this.onboardingStep = 'splash';
+      }
+    }
+  }
+
+  private getPersistableSupabaseUserProfile(): UserProfile {
+    return {
+      ...this.user,
+      id: this.supabaseAuthUserId || this.user.id,
+      avatar:
+        this.user.avatar === DEFAULT_USER_AVATAR_FALLBACK
+          ? this.rawSupabaseAvatarUrl || ''
+          : this.user.avatar || this.rawSupabaseAvatarUrl || '',
+    };
+  }
+
+  private enqueueSupabaseAccountWrite(
+    task: (expectedVersion: number) => Promise<SupabaseAccountBundleResult | null>
+  ): Promise<SupabaseAccountBundleResult | null> {
+    const versionAtSchedule = this.activeSupabaseAuthVersion;
+    const run = async (): Promise<SupabaseAccountBundleResult | null> => {
+      if (
+        versionAtSchedule !== this.activeSupabaseAuthVersion ||
+        !isSupabaseConfigured() ||
+        !this.isSupabaseAuthenticated() ||
+        this.isOnboardingPreviewSession
+      ) {
+        return null;
+      }
+      return task(versionAtSchedule);
+    };
+    const next = this.supabaseAccountWriteQueue.then(run, run);
+    this.supabaseAccountWriteQueue = next.catch(() => null);
+    return next;
+  }
+
+  private async persistSupabaseAccountBundle(extra?: {
+    adviceDismissed?: boolean;
+    onboardingDone?: boolean;
+  }): Promise<SupabaseAccountBundleResult | null> {
+    if (!isSupabaseConfigured() || !this.isSupabaseAuthenticated() || this.isOnboardingPreviewSession) {
+      return null;
+    }
+    const profileSnapshot = this.getPersistableSupabaseUserProfile();
+    return this.enqueueSupabaseAccountWrite(async (expectedVersion) => {
+      const res = await saveSupabaseUserAccountBundle(profileSnapshot, extra);
+      if (expectedVersion !== this.activeSupabaseAuthVersion) return res;
+      if (res.success && res.bundle) {
+        this.supabaseAccountBundle = res.bundle;
+        this.supabaseAuthError = null;
+      } else if (!res.success && res.errorMessage) {
+        this.supabaseAuthError = res.errorMessage;
+        this.notify();
+      }
+      return res;
+    });
+  }
+
+  private async persistSupabasePreferences(prefs: {
+    showPhoneInProfile?: boolean;
+    notificationsEnabled?: boolean;
+    adviceDismissed?: boolean;
+    onboardingDone?: boolean;
+  }): Promise<SupabaseAccountBundleResult | null> {
+    if (!isSupabaseConfigured() || !this.isSupabaseAuthenticated() || this.isOnboardingPreviewSession) {
+      return null;
+    }
+    return this.enqueueSupabaseAccountWrite(async (expectedVersion) => {
+      const res = await updateSupabaseAccountPreferences(prefs);
+      if (expectedVersion !== this.activeSupabaseAuthVersion) return res;
+      if (res.success && res.bundle) {
+        this.supabaseAccountBundle = res.bundle;
+        this.supabaseAuthError = null;
+      } else if (!res.success && res.errorMessage) {
+        this.supabaseAuthError = res.errorMessage;
+        this.notify();
+      }
+      return res;
+    });
+  }
+
+  // Public Supabase Auth & Account State Getters & Actions
+  public getSupabaseSession(): Session | null {
+    return this.supabaseSession;
+  }
+
+  public getSupabaseUserId(): string | null {
+    return this.supabaseAuthUserId;
+  }
+
+  public getIsSupabaseAuthReady(): boolean {
+    return this.isSupabaseAuthReady;
+  }
+
+  public getIsSupabaseProfileLoading(): boolean {
+    return this.isSupabaseProfileLoading;
+  }
+
+  public getSupabaseAccountBundle(): SupabaseUserAccountBundle | null {
+    return this.supabaseAccountBundle;
+  }
+
+  public getSupabaseAuthError(): string | null {
+    return this.supabaseAuthError;
+  }
+
+  public isSupabasePasswordRecovery(): boolean {
+    return this.isSupabasePasswordRecoveryState;
+  }
+
+  public isSupabaseAuthenticated(): boolean {
+    return Boolean(this.supabaseSession && this.supabaseAuthUserId);
+  }
+
+  public async retrySupabaseAccountLoad(): Promise<boolean> {
+    if (!isSupabaseConfigured()) return false;
+    const sessionRes = await getCurrentSupabaseSession();
+    if (!sessionRes.session || !sessionRes.user?.id) {
+      this.clearLocalSupabaseSessionState({
+        errorMessage: sessionRes.errorMessage ?? null,
+        markReady: true,
+        preserveOnboardingSubstep: true,
+      });
+      this.notify();
+      return false;
+    }
+    this.supabaseSession = sessionRes.session;
+    this.supabaseAuthUserId = sessionRes.user.id;
+    this.isSupabasePasswordRecoveryState = Boolean(
+      sessionRes.isPasswordRecovery || isSupabasePasswordRecoveryActive()
+    );
+    const bundleRes = await this.loadSupabaseAccountForUser(sessionRes.user.id, {
+      session: sessionRes.session,
+      isPasswordRecovery: this.isSupabasePasswordRecoveryState,
+      forceReload: true,
+    });
+    return Boolean(bundleRes.success && bundleRes.bundle?.exists);
+  }
+
+  public async refreshSupabaseAccount(): Promise<SupabaseAccountBundleResult> {
+    if (!this.supabaseAuthUserId) {
+      return {
+        success: false,
+        bundle: null,
+        errorMessage: 'لا توجد جلسة مصادقة نشطة حاليًا.',
+      };
+    }
+    return this.loadSupabaseAccountForUser(this.supabaseAuthUserId, {
+      session: this.supabaseSession,
+      isPasswordRecovery: this.isSupabasePasswordRecoveryState,
+      forceReload: true,
+    });
+  }
+
+  public async handleDirectSupabaseAuthSuccess(
+    session: Session,
+    opts?: { isPasswordRecovery?: boolean }
+  ): Promise<SupabaseAccountBundleResult> {
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        bundle: null,
+        errorMessage: 'لم يتم استلام جلسة مستخدم صالحة من Supabase.',
+      };
+    }
+
+    const userId = session.user.id;
+    const recovery = Boolean(opts?.isPasswordRecovery || isSupabasePasswordRecoveryActive());
+    this.supabaseSession = session;
+    this.supabaseAuthUserId = userId;
+    this.isSupabasePasswordRecoveryState = recovery;
+    this.isSupabaseAuthReady = true;
+    this.termsAcceptedInOnboarding = true;
+
+    if (
+      this.loadedSupabaseUserId === userId &&
+      this.supabaseAccountBundle?.exists &&
+      this.supabaseAccountBundle.profile &&
+      !this.supabaseAuthError
+    ) {
+      this.applySupabaseAccountBundle(this.supabaseAccountBundle, {
+        isPasswordRecovery: recovery,
+      });
+      this.notify();
+      return {
+        success: true,
+        bundle: this.supabaseAccountBundle,
+      };
+    }
+
+    return this.loadSupabaseAccountForUser(userId, {
+      session,
+      isPasswordRecovery: recovery,
+    });
+  }
+
+  public async handleAuthDeepLinkUrl(url: string): Promise<boolean> {
+    const trimmedUrl = (url || '').trim();
+    if (
+      !trimmedUrl ||
+      this.isOnboardingPreviewSession ||
+      !isSupabaseConfigured() ||
+      !isSupabaseAuthCallbackUrl(trimmedUrl)
+    ) {
+      return false;
+    }
+
+    if (this.activeDeepLinkAuthPromise) {
+      if (this.activeDeepLinkUrl === trimmedUrl) {
+        return this.activeDeepLinkAuthPromise;
+      }
+      await this.activeDeepLinkAuthPromise.catch(() => false);
+    }
+
+    if (this.handledDeepLinkUrls.has(trimmedUrl)) {
+      return true;
+    }
+
+    const runPromise = (async (): Promise<boolean> => {
+      const cbRes = await handleSupabaseAuthCallbackUrl(trimmedUrl);
+      if (!cbRes.handled) {
+        return false;
+      }
+
+      if (!cbRes.success || !cbRes.session) {
+        this.isSupabaseAuthReady = true;
+        this.isSupabaseProfileLoading = false;
+        this.pendingSplashAdvance = false;
+        this.supabaseAuthError =
+          cbRes.errorMessage || 'تعذر التحقق من رابط المصادقة. يرجى طلب رابط جديد.';
+        if (!this.isOnboardingPreviewSession && !this.isSupabaseAuthenticated()) {
+          this.onboardingStep = 'auth_method';
+        }
+        this.notify();
+        return false;
+      }
+
+      this.handledDeepLinkUrls.add(trimmedUrl);
+      this.supabaseAuthError = null;
+      const accountRes = await this.handleDirectSupabaseAuthSuccess(cbRes.session, {
+        isPasswordRecovery: cbRes.isPasswordRecovery,
+      });
+      return Boolean(accountRes.success);
+    })();
+
+    this.activeDeepLinkUrl = trimmedUrl;
+    this.activeDeepLinkAuthPromise = runPromise;
+    try {
+      return await runPromise;
+    } finally {
+      if (this.activeDeepLinkAuthPromise === runPromise) {
+        this.activeDeepLinkAuthPromise = null;
+        this.activeDeepLinkUrl = null;
+      }
+    }
+  }
+
+  public async completePasswordRecoveryFlow(sessionOverride?: Session | null): Promise<void> {
+    this.activeSupabaseAuthVersion += 1;
+    this.inFlightSupabaseProfileFetch = null;
+    this.isSupabasePasswordRecoveryState = false;
+    clearSupabasePasswordRecoveryState();
+
+    if (sessionOverride?.user?.id) {
+      this.supabaseSession = sessionOverride;
+      this.supabaseAuthUserId = sessionOverride.user.id;
+    } else if (!this.supabaseSession || !this.supabaseAuthUserId) {
+      const sessionRes = await getCurrentSupabaseSession();
+      if (sessionRes.session?.user?.id) {
+        this.supabaseSession = sessionRes.session;
+        this.supabaseAuthUserId = sessionRes.session.user.id;
+      }
+    }
+
+    if (!this.supabaseAuthUserId) {
+      this.onboardingStep = 'auth_method';
+      this.notify();
+      return;
+    }
+
+    if (this.supabaseAccountBundle?.exists && this.supabaseAccountBundle.profile) {
+      this.applySupabaseAccountBundle(this.supabaseAccountBundle, {
+        isPasswordRecovery: false,
+      });
+      this.notify();
+      return;
+    }
+
+    await this.loadSupabaseAccountForUser(this.supabaseAuthUserId, {
+      session: this.supabaseSession,
+      isPasswordRecovery: false,
+      forceReload: true,
+    });
+  }
+
+  public async signOutSupabaseAccount(): Promise<SupabaseBasicResult> {
+    if (this.isOnboardingPreviewSession) {
+      this.isSettingsDrawerOpen = false;
+      this.isEditOwnerModalOpen = false;
+      this.onboardingStep = 'auth_method';
+      this.notify();
+      return {
+        success: true,
+        message: 'تم تسجيل الخروج من وضع المعاينة.',
+      };
+    }
+
+    if (!isSupabaseConfigured()) {
+      this.clearLocalSupabaseSessionState({
+        errorMessage: null,
+        markReady: true,
+        preserveOnboardingSubstep: false,
+      });
+      this.onboardingStep = 'auth_method';
+      this.isSettingsDrawerOpen = false;
+      this.isEditOwnerModalOpen = false;
+      this.notify();
+      return {
+        success: true,
+        message: 'تم تسجيل الخروج بنجاح.',
+      };
+    }
+
+    this.isSigningOutSupabase = true;
+    try {
+      const result = await signOutFromSupabase();
+      if (!result.success) {
+        this.supabaseAuthError = result.errorMessage ?? 'تعذر تسجيل الخروج حاليًا.';
+        this.notify();
+        return result;
+      }
+
+      this.activeSupabaseAuthVersion += 1;
+      this.inFlightSupabaseProfileFetch = null;
+      this.handledDeepLinkUrls.clear();
+      this.clearLocalSupabaseSessionState({
+        errorMessage: null,
+        markReady: true,
+        preserveOnboardingSubstep: false,
+      });
+      this.onboardingStep = 'auth_method';
+      this.isSettingsDrawerOpen = false;
+      this.isEditOwnerModalOpen = false;
+      this.notify();
+      return result;
+    } finally {
+      this.isSigningOutSupabase = false;
+    }
   }
 
   public subscribe(listener: Listener): () => void {
@@ -729,9 +1577,13 @@ class AppStateManager {
     if (next) {
       void requestBrowserNotificationPermission();
     }
-    void syncUserProfileToFirestore(this.user).catch((err) =>
-      console.warn('Firestore profile notification pref sync skipped:', err)
-    );
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void this.persistSupabasePreferences({ notificationsEnabled: next });
+    } else if (!isSupabaseConfigured()) {
+      void syncUserProfileToFirestore(this.user).catch((err) =>
+        console.warn('Firestore profile notification pref sync skipped:', err)
+      );
+    }
     this.notify();
   }
 
@@ -830,6 +1682,28 @@ class AppStateManager {
 
   public markAllNotificationsRead(): void {
     this.markNotificationsReadWhere(() => true);
+  }
+
+  public dismissNotification(notificationId: string): void {
+    if (!notificationId) return;
+    this.dismissedNotificationIds.add(notificationId);
+    this.persistDismissedNotificationIds();
+    this.readNotificationIds.add(notificationId);
+    this.persistReadNotificationIds();
+    this.notifications = this.notifications.filter((n) => n.id !== notificationId);
+    this.persistNotifications();
+    void deleteNotificationFromFirestore(notificationId).catch((err) =>
+      console.warn('Firestore notification delete skipped:', err)
+    );
+    this.notify();
+  }
+
+  public refreshFeed(sourceTab?: 'mating' | 'adoption' | 'chat'): void {
+    if (sourceTab === 'mating' || sourceTab === 'adoption' || !sourceTab) {
+      this.recalculateAllCompatibilities();
+    }
+    this.reconcileNotificationsWithState(true);
+    this.notify();
   }
 
   public openNotification(notificationId: string): void {
@@ -1006,6 +1880,73 @@ class AppStateManager {
     return true;
   }
 
+  private buildResolvedOwnerSnapshot(
+    baseProfile: UserProfile,
+    name: string,
+    cityOrLoc: string,
+    phone: string,
+    gender?: 'male' | 'female',
+    governorate?: string,
+    extraLoc?: {
+      governorateId?: string;
+      markazId?: string;
+      cityId?: string;
+      villageId?: string;
+      markaz?: string;
+      village?: string;
+    }
+  ): {
+    profile: UserProfile;
+    resolvedGov: string;
+    resolvedMarkaz: string;
+    resolvedCity: string;
+    resolvedVillage: string;
+  } {
+    const lineage = resolveLocationLineage({
+      governorateId: extraLoc?.governorateId,
+      markazId: extraLoc?.markazId,
+      cityId: extraLoc?.cityId,
+      villageId: extraLoc?.villageId,
+      governorate: governorate ?? baseProfile.governorate,
+      markaz: extraLoc?.markaz,
+      city: cityOrLoc,
+      village: extraLoc?.village,
+    });
+    const resolvedGov = lineage.governorate?.name || governorate || baseProfile.governorate || '';
+    const resolvedMarkaz = lineage.markaz?.name || extraLoc?.markaz || '';
+    const resolvedCity = lineage.city?.name || cityOrLoc;
+    const resolvedVillage = lineage.village?.name || extraLoc?.village || '';
+    const resolvedCoords = lineage.deepest
+      ? { lat: lineage.deepest.lat, lng: lineage.deepest.lng }
+      : resolveLocationCoordinates({ governorate: resolvedGov, city: resolvedCity });
+
+    const nextProfile: UserProfile = {
+      ...baseProfile,
+      name,
+      city: resolvedCity,
+      ...(resolvedGov ? { governorate: resolvedGov } : {}),
+      markaz: resolvedMarkaz || undefined,
+      village: resolvedVillage || undefined,
+      governorateId: lineage.governorate?.id || extraLoc?.governorateId || baseProfile.governorateId,
+      markazId: lineage.markaz?.id || extraLoc?.markazId,
+      cityId: lineage.city?.id || extraLoc?.cityId,
+      villageId: lineage.village?.id || extraLoc?.villageId,
+      locationId: lineage.deepest?.id || baseProfile.locationId,
+      lat: resolvedCoords ? resolvedCoords.lat : baseProfile.lat,
+      lng: resolvedCoords ? resolvedCoords.lng : baseProfile.lng,
+      phone,
+      ...(gender === 'male' || gender === 'female' ? { gender } : {}),
+    };
+
+    return {
+      profile: nextProfile,
+      resolvedGov,
+      resolvedMarkaz,
+      resolvedCity,
+      resolvedVillage,
+    };
+  }
+
   public setOwnerDetailsCompleted(
     name: string,
     cityOrLoc: string,
@@ -1021,38 +1962,16 @@ class AppStateManager {
       village?: string;
     }
   ): void {
-    const lineage = resolveLocationLineage({
-      governorateId: extraLoc?.governorateId,
-      markazId: extraLoc?.markazId,
-      cityId: extraLoc?.cityId,
-      villageId: extraLoc?.villageId,
+    const resolved = this.buildResolvedOwnerSnapshot(
+      this.user,
+      name,
+      cityOrLoc,
+      phone,
+      gender,
       governorate,
-      markaz: extraLoc?.markaz,
-      city: cityOrLoc,
-      village: extraLoc?.village,
-    });
-    const resolvedGov = lineage.governorate?.name || governorate;
-    const resolvedMarkaz = lineage.markaz?.name || extraLoc?.markaz || '';
-    const resolvedCity = lineage.city?.name || cityOrLoc;
-    const resolvedVillage = lineage.village?.name || extraLoc?.village || '';
-    const resolvedCoords = lineage.deepest
-      ? { lat: lineage.deepest.lat, lng: lineage.deepest.lng }
-      : resolveLocationCoordinates({ governorate: resolvedGov, city: resolvedCity });
-
-    this.user.name = name;
-    this.user.gender = gender;
-    this.user.city = resolvedCity;
-    this.user.governorate = resolvedGov;
-    this.user.markaz = resolvedMarkaz || undefined;
-    this.user.village = resolvedVillage || undefined;
-    this.user.governorateId = lineage.governorate?.id || extraLoc?.governorateId;
-    this.user.markazId = lineage.markaz?.id || extraLoc?.markazId;
-    this.user.cityId = lineage.city?.id || extraLoc?.cityId;
-    this.user.villageId = lineage.village?.id || extraLoc?.villageId;
-    this.user.locationId = lineage.deepest?.id;
-    this.user.lat = resolvedCoords?.lat;
-    this.user.lng = resolvedCoords?.lng;
-    this.user.phone = phone;
+      extraLoc
+    );
+    this.user = resolved.profile;
     this.ownerDetailsCompleted = true;
     this.persistOwnerProfileToLocalStorage();
 
@@ -1061,11 +1980,11 @@ class AppStateManager {
       p.ownerName = name;
       p.ownerPhone = phone;
       if (gender) {
-        p.area = resolvedVillage || resolvedCity;
-        p.city = resolvedCity;
-        p.governorate = resolvedGov;
-        p.markaz = resolvedMarkaz || undefined;
-        p.village = resolvedVillage || undefined;
+        p.area = resolved.resolvedVillage || resolved.resolvedCity;
+        p.city = resolved.resolvedCity;
+        p.governorate = resolved.resolvedGov;
+        p.markaz = resolved.resolvedMarkaz || undefined;
+        p.village = resolved.resolvedVillage || undefined;
         p.governorateId = this.user.governorateId;
         p.markazId = this.user.markazId;
         p.cityId = this.user.cityId;
@@ -1078,13 +1997,177 @@ class AppStateManager {
 
     this.recalculateAllCompatibilities();
     this.onboardingStep = 'has_pet';
-    void syncUserProfileToFirestore(this.user).catch((err) =>
-      console.warn('Firestore profile sync skipped:', err)
-    );
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void this.persistSupabaseAccountBundle({
+        adviceDismissed: this.isAdviceDismissed,
+        onboardingDone: false,
+      });
+    } else if (!isSupabaseConfigured()) {
+      void syncUserProfileToFirestore(this.user).catch((err) =>
+        console.warn('Firestore profile sync skipped:', err)
+      );
+    }
     this.notify();
   }
 
+  public async saveOwnerDetailsAndAdvance(
+    name: string,
+    cityOrLoc: string,
+    phone: string,
+    gender: 'male' | 'female',
+    governorate: string,
+    extraLoc?: {
+      governorateId?: string;
+      markazId?: string;
+      cityId?: string;
+      villageId?: string;
+      markaz?: string;
+      village?: string;
+    }
+  ): Promise<{ success: boolean; errorMessage?: string }> {
+    if (this.isOnboardingPreviewSession || !isSupabaseConfigured()) {
+      this.setOwnerDetailsCompleted(name, cityOrLoc, phone, gender, governorate, extraLoc);
+      return { success: true };
+    }
+
+    if (!this.isSupabaseAuthenticated() || !this.supabaseAuthUserId) {
+      return {
+        success: false,
+        errorMessage: 'يرجى تسجيل الدخول بحساب مؤكد أولاً قبل حفظ بيانات المالك.',
+      };
+    }
+
+    const baseSnapshot = this.getPersistableSupabaseUserProfile();
+    const resolved = this.buildResolvedOwnerSnapshot(
+      baseSnapshot,
+      name,
+      cityOrLoc,
+      phone,
+      gender,
+      governorate,
+      extraLoc
+    );
+
+    const writeRes = await this.enqueueSupabaseAccountWrite(async (expectedVersion) => {
+      const res = await saveSupabaseUserAccountBundle(resolved.profile, {
+        adviceDismissed: this.isAdviceDismissed,
+        onboardingDone: false,
+      });
+      if (expectedVersion !== this.activeSupabaseAuthVersion) return res;
+      if (res.success && res.bundle) {
+        this.supabaseAccountBundle = res.bundle;
+        this.supabaseAuthError = null;
+      } else if (!res.success && res.errorMessage) {
+        this.supabaseAuthError = res.errorMessage;
+      }
+      return res;
+    });
+
+    if (!writeRes || !writeRes.success) {
+      this.notify();
+      return {
+        success: false,
+        errorMessage:
+          writeRes?.errorMessage ||
+          'تعذر حفظ بيانات المالك في قاعدة البيانات. يرجى المحاولة مرة أخرى.',
+      };
+    }
+
+    const hydratedProfile = writeRes.bundle?.profile;
+    this.user = {
+      ...(hydratedProfile || resolved.profile),
+      avatar:
+        this.rawSupabaseAvatarUrl ||
+        hydratedProfile?.avatar ||
+        this.user.avatar ||
+        DEFAULT_USER_AVATAR_FALLBACK,
+    };
+    this.ownerDetailsCompleted = true;
+    this.persistOwnerProfileToLocalStorage();
+    this.syncOwnedPetsMetadataWithUser(this.user.id);
+    this.userPets.forEach((p) => {
+      p.area = resolved.resolvedVillage || resolved.resolvedCity;
+      p.city = resolved.resolvedCity;
+      p.governorate = resolved.resolvedGov;
+      p.markaz = resolved.resolvedMarkaz || undefined;
+      p.village = resolved.resolvedVillage || undefined;
+      p.governorateId = this.user.governorateId;
+      p.markazId = this.user.markazId;
+      p.cityId = this.user.cityId;
+      p.villageId = this.user.villageId;
+      p.locationId = this.user.locationId;
+      p.lat = this.user.lat;
+      p.lng = this.user.lng;
+    });
+    this.recalculateAllCompatibilities();
+    this.onboardingStep = 'has_pet';
+    this.notify();
+    return { success: true };
+  }
+
+  public async completeOnboardingWithSupabase(): Promise<{
+    success: boolean;
+    errorMessage?: string;
+  }> {
+    if (this.isOnboardingPreviewSession || !isSupabaseConfigured()) {
+      this.setOnboardingStep('completed');
+      return { success: true };
+    }
+
+    if (!this.isSupabaseAuthenticated() || !this.supabaseAuthUserId) {
+      return {
+        success: false,
+        errorMessage: 'يرجى تسجيل الدخول أولاً قبل إتمام التسجيل.',
+      };
+    }
+
+    if (!this.ownerDetailsCompleted) {
+      return {
+        success: false,
+        errorMessage: 'يرجى استكمال وحفظ بيانات المالك أولاً قبل المتابعة.',
+      };
+    }
+
+    const res = await this.persistSupabasePreferences({ onboardingDone: true });
+    if (!res || !res.success) {
+      return {
+        success: false,
+        errorMessage:
+          res?.errorMessage ||
+          'تعذر تأكيد إتمام التسجيل في قاعدة البيانات. يرجى المحاولة مرة أخرى.',
+      };
+    }
+
+    this.onboardingStep = 'completed';
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('meow_onboarding_done', 'true');
+    }
+    this.notify();
+    return { success: true };
+  }
+
   public setOnboardingStep(step: OnboardingStep): void {
+    if (
+      step !== 'splash' &&
+      this.onboardingStep === 'splash' &&
+      isSupabaseConfigured() &&
+      !this.isOnboardingPreviewSession &&
+      !this.isSupabaseAuthReady
+    ) {
+      this.pendingSplashAdvance = true;
+      return;
+    }
+
+    if (
+      this.isSupabasePasswordRecoveryState &&
+      !this.isOnboardingPreviewSession &&
+      step !== 'auth_method' &&
+      step !== 'welcome' &&
+      step !== 'splash'
+    ) {
+      return;
+    }
+
     const order: OnboardingStep[] = [
       'splash',
       'welcome',
@@ -1096,11 +2179,14 @@ class AppStateManager {
     ];
     const currentIdx = order.indexOf(this.onboardingStep);
     const targetIdx = order.indexOf(step);
+    const hasAuthIdentity = Boolean(
+      this.authenticatedGoogleAccount || this.supabaseAuthUserId
+    );
 
     // Enforce forward prerequisites so required onboarding steps cannot be skipped
     if (targetIdx > currentIdx) {
       if (step === 'owner_details') {
-        if (!this.termsAcceptedInOnboarding || !this.authenticatedGoogleAccount) {
+        if (!this.termsAcceptedInOnboarding || !hasAuthIdentity) {
           return;
         }
       } else if (step === 'has_pet' || step === 'pet_details') {
@@ -1108,7 +2194,7 @@ class AppStateManager {
           return;
         }
       } else if (step === 'completed') {
-        const hasValidAuth = Boolean(this.termsAcceptedInOnboarding && this.authenticatedGoogleAccount);
+        const hasValidAuth = Boolean(this.termsAcceptedInOnboarding && hasAuthIdentity);
         if (!hasValidAuth || !this.ownerDetailsCompleted) {
           return;
         }
@@ -1119,13 +2205,22 @@ class AppStateManager {
       this.termsAcceptedInOnboarding = false;
     }
     this.onboardingStep = step;
-    if (step === 'completed' && !this.isOnboardingPreviewSession && typeof localStorage !== 'undefined') {
-      localStorage.setItem('meow_onboarding_done', 'true');
+    if (step === 'completed' && !this.isOnboardingPreviewSession) {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('meow_onboarding_done', 'true');
+      }
+      if (this.isSupabaseAuthenticated()) {
+        void this.persistSupabasePreferences({ onboardingDone: true });
+      }
     }
     this.notify();
   }
 
   public restartOnboarding(): void {
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void this.signOutSupabaseAccount();
+      return;
+    }
     this.onboardingStep = 'splash';
     this.authenticatedGoogleAccount = null;
     this.termsAcceptedInOnboarding = false;
@@ -1145,6 +2240,9 @@ class AppStateManager {
     this.isAdviceDismissed = true;
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('meow_advice_dismissed', 'true');
+    }
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void this.persistSupabasePreferences({ adviceDismissed: true });
     }
     this.notify();
   }
@@ -3485,14 +4583,18 @@ class AppStateManager {
       }
     }
 
-    void syncUserProfileToFirestore(this.user).catch((err) =>
-      console.warn('Firestore privacy sync skipped:', err)
-    );
-    this.userPets.forEach((p) => {
-      void syncPetToFirestore(p).catch((err) =>
-        console.warn('Firestore pet privacy sync skipped:', err)
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void this.persistSupabasePreferences({ showPhoneInProfile: next });
+    } else if (!isSupabaseConfigured()) {
+      void syncUserProfileToFirestore(this.user).catch((err) =>
+        console.warn('Firestore privacy sync skipped:', err)
       );
-    });
+      this.userPets.forEach((p) => {
+        void syncPetToFirestore(p).catch((err) =>
+          console.warn('Firestore pet privacy sync skipped:', err)
+        );
+      });
+    }
 
     this.notify();
   }
@@ -3525,6 +4627,9 @@ class AppStateManager {
     }
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('meow_show_phone_in_profile', show ? 'true' : 'false');
+    }
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void this.persistSupabasePreferences({ showPhoneInProfile: show });
     }
     this.notify();
   }
@@ -3622,10 +4727,126 @@ class AppStateManager {
 
     this.persistOwnerProfileToLocalStorage();
     this.recalculateAllCompatibilities();
-    void syncUserProfileToFirestore(this.user).catch((err) =>
-      console.warn('Firestore profile sync skipped:', err)
-    );
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void this.persistSupabaseAccountBundle({
+        adviceDismissed: this.isAdviceDismissed,
+        onboardingDone: this.onboardingStep === 'completed',
+      });
+    } else if (!isSupabaseConfigured()) {
+      void syncUserProfileToFirestore(this.user).catch((err) =>
+        console.warn('Firestore profile sync skipped:', err)
+      );
+    }
     this.notify();
+  }
+
+  public async saveOwnerEditWithSupabase(
+    name: string,
+    city: string,
+    phone: string,
+    gender?: 'male' | 'female',
+    governorate?: string,
+    extraLoc?: {
+      governorateId?: string;
+      markazId?: string;
+      cityId?: string;
+      villageId?: string;
+      markaz?: string;
+      village?: string;
+    }
+  ): Promise<{ success: boolean; errorMessage?: string }> {
+    if (this.isOnboardingPreviewSession || !isSupabaseConfigured() || !this.isSupabaseAuthenticated()) {
+      this.updateUserInfo(name, city, phone, gender, governorate, extraLoc);
+      return { success: true };
+    }
+
+    const baseSnapshot = this.getPersistableSupabaseUserProfile();
+    const resolved = this.buildResolvedOwnerSnapshot(
+      baseSnapshot,
+      name,
+      city,
+      phone,
+      gender,
+      governorate,
+      extraLoc
+    );
+
+    const writeRes = await this.enqueueSupabaseAccountWrite(async (expectedVersion) => {
+      const res = await saveSupabaseUserAccountBundle(resolved.profile, {
+        adviceDismissed: this.isAdviceDismissed,
+        onboardingDone: this.onboardingStep === 'completed',
+      });
+      if (expectedVersion !== this.activeSupabaseAuthVersion) return res;
+      if (res.success && res.bundle) {
+        this.supabaseAccountBundle = res.bundle;
+        this.supabaseAuthError = null;
+      } else if (!res.success && res.errorMessage) {
+        this.supabaseAuthError = res.errorMessage;
+      }
+      return res;
+    });
+
+    if (!writeRes || !writeRes.success) {
+      return {
+        success: false,
+        errorMessage:
+          writeRes?.errorMessage ||
+          'تعذر حفظ تعديلات بيانات المالك في قاعدة البيانات. يرجى المحاولة مرة أخرى.',
+      };
+    }
+
+    const hydratedProfile = writeRes.bundle?.profile;
+    this.user = {
+      ...(hydratedProfile || resolved.profile),
+      avatar:
+        this.rawSupabaseAvatarUrl ||
+        hydratedProfile?.avatar ||
+        this.user.avatar ||
+        DEFAULT_USER_AVATAR_FALLBACK,
+    };
+
+    this.userPets.forEach((p) => {
+      p.ownerName = name;
+      p.ownerPhone = phone;
+      if (extraLoc) {
+        p.area = resolved.resolvedVillage || resolved.resolvedCity;
+        p.city = resolved.resolvedCity;
+        p.governorate = resolved.resolvedGov || p.governorate;
+        p.markaz = resolved.resolvedMarkaz || undefined;
+        p.village = resolved.resolvedVillage || undefined;
+        p.governorateId = this.user.governorateId;
+        p.markazId = this.user.markazId;
+        p.cityId = this.user.cityId;
+        p.villageId = this.user.villageId;
+        p.locationId = this.user.locationId;
+        p.lat = this.user.lat;
+        p.lng = this.user.lng;
+      }
+    });
+    if (this.userGroupAdoptionListing) {
+      this.userGroupAdoptionListing.ownerName = name;
+      this.userGroupAdoptionListing.ownerPhone = phone;
+      if (extraLoc) {
+        this.userGroupAdoptionListing.area = resolved.resolvedVillage || resolved.resolvedCity;
+        this.userGroupAdoptionListing.city = resolved.resolvedCity;
+        this.userGroupAdoptionListing.governorate =
+          resolved.resolvedGov || this.userGroupAdoptionListing.governorate;
+        this.userGroupAdoptionListing.markaz = resolved.resolvedMarkaz || undefined;
+        this.userGroupAdoptionListing.village = resolved.resolvedVillage || undefined;
+        this.userGroupAdoptionListing.governorateId = this.user.governorateId;
+        this.userGroupAdoptionListing.markazId = this.user.markazId;
+        this.userGroupAdoptionListing.cityId = this.user.cityId;
+        this.userGroupAdoptionListing.villageId = this.user.villageId;
+        this.userGroupAdoptionListing.locationId = this.user.locationId;
+        this.userGroupAdoptionListing.lat = this.user.lat;
+        this.userGroupAdoptionListing.lng = this.user.lng;
+      }
+    }
+
+    this.persistOwnerProfileToLocalStorage();
+    this.recalculateAllCompatibilities();
+    this.notify();
+    return { success: true };
   }
 
   // Communication & Requests

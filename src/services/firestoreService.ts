@@ -349,6 +349,19 @@ export async function syncNotificationToFirestore(notification: AppNotification)
   }
 }
 
+export async function deleteNotificationFromFirestore(notificationId: string): Promise<void> {
+  const ctx = getVerifiedCurrentUser();
+  if (!ctx) return;
+  const uid = sanitizeId(ctx.user.uid);
+  const notifId = sanitizeId(notificationId);
+  const path = `users/${uid}/notifications/${notifId}`;
+  try {
+    await deleteDoc(doc(ctx.db, 'users', uid, 'notifications', notifId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 export function subscribeUserNotifications(
   onNotifications: (items: AppNotification[]) => void
 ): Unsubscribe {

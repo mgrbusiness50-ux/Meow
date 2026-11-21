@@ -1,6 +1,7 @@
 import { state } from '../../state.ts';
 import { getViewMode } from '../components/Header.ts';
 import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
+import { attachPullToRefresh, showMobileToast } from '../../utils/touchGestures.ts';
 
 export function renderMatingView(): string {
   const filters = state.getMatingFilters();
@@ -12,13 +13,13 @@ export function renderMatingView(): string {
   const loadingState = state.getFilteringLoadingState();
 
   return `
-    <div class="max-w-md mx-auto px-4 pt-2 pb-24 flex-1 space-y-4">
+    <div id="mating-view-root" class="max-w-md mx-auto px-3.5 min-[360px]:px-4 pt-2 pb-24 flex-1 space-y-4">
 
       <!-- Dismissible Meow Advice Message (Small message with X button) -->
       ${
         !state.getIsAdviceDismissed()
           ? `
-          <div id="meow-advice-banner" class="bg-amber-50/90 border border-brand-peachBorder/70 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 text-sm text-brand-dark/90 shadow-2xs transition-all">
+          <div id="meow-advice-banner" class="bg-amber-50/90 border border-brand-peachBorder/70 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-sm text-brand-dark/90 shadow-sm transition-all">
             <div class="flex items-center gap-2.5 min-w-0">
               <span class="text-lg text-brand-orange shrink-0">💡</span>
               <p class="m-0 font-bold text-xs sm:text-sm leading-normal">
@@ -27,12 +28,12 @@ export function renderMatingView(): string {
             </div>
             <button
               id="dismiss-advice-btn"
-              class="w-6 h-6 rounded-full flex items-center justify-center text-brand-subtleGray hover:text-brand-orange hover:bg-black/5 shrink-0 cursor-pointer transition active:scale-90"
+              class="w-9 h-9 rounded-full flex items-center justify-center text-brand-subtleGray hover:text-brand-orange hover:bg-black/5 shrink-0 cursor-pointer transition active:scale-90"
               type="button"
               aria-label="إغلاق الرسالة"
               title="إغلاق"
             >
-              <i class="fa-solid fa-xmark text-xs"></i>
+              <i class="fa-solid fa-xmark text-sm"></i>
             </button>
           </div>
           `
@@ -43,7 +44,7 @@ export function renderMatingView(): string {
       <div class="flex items-center justify-between gap-2 px-1">
         <div class="flex items-center gap-1.5 text-sm font-extrabold text-brand-dark">
           <span class="text-brand-orange text-lg">🐾</span>
-          <span class="text-sm font-black text-brand-orange px-2.5 py-1 rounded-xl bg-white border border-brand-peachBorder shadow-2xs">${pets.length} متاح</span>
+          <span class="text-sm font-black text-brand-orange px-2.5 py-1 rounded-xl bg-white border border-brand-peachBorder shadow-sm">${pets.length} متاح</span>
         </div>
         ${
           filters.recommendedMatchEnabled && refPet
@@ -93,7 +94,7 @@ export function renderMatingView(): string {
       ${
         loadingState.active
           ? `
-            <div id="mating-loading-indicator" class="bg-[#fff5ea] border border-[#e67e22]/40 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-xs font-black text-[#786555] font-baloo shadow-2xs animate-fade-in">
+            <div id="mating-loading-indicator" class="bg-[#fff5ea] border border-[#e67e22]/40 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-xs font-black text-[#786555] font-baloo shadow-sm animate-fade-in">
               <span class="w-4 h-4 rounded-full border-2 border-[#e67e22] border-t-transparent animate-spin shrink-0"></span>
               <span>${loadingState.label || 'جاري تحميل النتائج...'}</span>
             </div>
@@ -114,7 +115,7 @@ export function renderMatingView(): string {
           </div>
           `
           : `
-          <div class="${viewMode === 'grid' ? 'grid grid-cols-2 gap-4' : 'flex flex-col gap-4'}" data-purpose="pet-listings-grid">
+          <div class="${viewMode === 'grid' ? 'grid grid-cols-2 gap-3 sm:gap-4' : 'flex flex-col gap-4'}" data-purpose="pet-listings-grid">
             ${pets
               .map((pet) => {
                 const isSaved = state.isPetSaved(pet.id);
@@ -123,7 +124,7 @@ export function renderMatingView(): string {
                 if (viewMode === 'grid') {
                   return `
                     <article
-                      class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                      class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                       data-pet-detail-id="${pet.id}"
                       data-pet-type="${pet.species}"
                     >
@@ -173,7 +174,7 @@ export function renderMatingView(): string {
                         ${
                           filters.recommendedMatchEnabled && pet.compatibilityScore !== undefined
                             ? `
-                              <div class="absolute bottom-2 right-2 bg-emerald-600/90 backdrop-blur-xs text-white px-2.5 py-0.5 rounded-lg text-[11px] font-black font-baloo pointer-events-none shadow-sm">
+                              <div class="absolute bottom-2 right-2 bg-emerald-600/90 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-lg text-[11px] font-black font-baloo pointer-events-none shadow-sm">
                                 توافق ${pet.compatibilityScore}%
                               </div>
                             `
@@ -250,7 +251,7 @@ export function renderMatingView(): string {
                         </div>
                         ${
                           filters.recommendedMatchEnabled && pet.compatibilityScore !== undefined
-                            ? `<div class="bg-emerald-600/90 backdrop-blur-xs text-white px-3 py-1 rounded-xl text-xs font-bold shadow-sm font-baloo">توافق ${pet.compatibilityScore}%</div>`
+                            ? `<div class="bg-emerald-600/90 backdrop-blur-sm text-white px-3 py-1 rounded-xl text-xs font-bold shadow-sm font-baloo">توافق ${pet.compatibilityScore}%</div>`
                             : ''
                         }
                       </div>
@@ -272,7 +273,7 @@ export function renderMatingView(): string {
                             .slice(0, 3)
                             .map(
                               (trait) => `
-                              <span class="px-3 py-1 rounded-xl bg-white/25 backdrop-blur-md border border-white/30 text-white text-xs font-bold shadow-2xs font-baloo">
+                              <span class="px-3 py-1 rounded-xl bg-white/25 backdrop-blur-md border border-white/30 text-white text-xs font-bold shadow-sm font-baloo">
                                 ${trait}
                               </span>
                             `
@@ -397,6 +398,27 @@ export function attachMatingEvents(): void {
         state.setSelectedPetForRequest(pet);
       }
     });
+  });
+
+  attachPullToRefresh(document.getElementById('mating-view-root'), {
+    isBlocked: () =>
+      Boolean(
+        state.isNotificationsOpen() ||
+          state.isSettingsOpen() ||
+          state.getSelectedPetForDetail() ||
+          state.getSelectedPetForRequest() ||
+          state.isAddPetModalVisible() ||
+          state.getIsFilterModalOpen() ||
+          state.isEditOwnerModalVisible() ||
+          state.isSavedPetsVisible() ||
+          state.isContactOpen() ||
+          state.getPendingBlockTarget() ||
+          state.getPendingReportTarget()
+      ),
+    onRefresh: () => {
+      state.refreshFeed('mating');
+      showMobileToast('تم تحديث قائمة التزاوج', 'success', 1600);
+    },
   });
 }
 

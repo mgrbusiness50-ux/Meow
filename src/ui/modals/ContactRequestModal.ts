@@ -1,5 +1,6 @@
 import { state } from '../../state.ts';
 import { Pet } from '../../types.ts';
+import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
 
 export function renderContactRequestModal(targetPet: Pet | null): string {
   if (!targetPet) return '';
@@ -8,18 +9,22 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
   const isMating = targetPet.status === 'mating';
 
   return `
-    <div id="contact-request-modal-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div class="bg-[#FFF9E9] rounded-3xl max-w-md w-full border-2 border-brand-peachBorder shadow-2xl overflow-hidden my-auto p-5 space-y-4 text-[#2d221b]">
+    <div id="contact-request-modal-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in" dir="rtl">
+      <div id="contact-request-sheet" class="bg-[#FFF9E9] rounded-t-[32px] rounded-b-none sm:rounded-3xl max-w-md w-full border-2 border-b-0 sm:border-b-2 border-brand-peachBorder shadow-2xl overflow-y-auto max-h-[92dvh] overscroll-contain px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-5 space-y-4 text-[#2d221b] animate-slide-up">
         
+        <div id="contact-request-drag-handle" class="pt-0.5 pb-1 flex justify-center sm:hidden cursor-grab active:cursor-grabbing">
+          <div class="w-12 h-1.5 rounded-full bg-brand-peachBorder/80"></div>
+        </div>
+
         <!-- Header -->
         <div class="flex items-center justify-between border-b border-brand-peachBorder/60 pb-3">
-          <div class="flex items-center gap-2">
-            <span class="text-xl">${isMating ? '❤️' : '🏠'}</span>
-            <h3 class="text-base font-black text-brand-dark">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xl shrink-0">${isMating ? '❤️' : '🏠'}</span>
+            <h3 class="text-base font-black text-brand-dark truncate">
               ${isMating ? 'إرسال طلب تزاوج' : 'إرسال طلب تبني'} إلى ${targetPet.ownerName}
             </h3>
           </div>
-          <button id="close-contact-request-btn" class="w-8 h-8 rounded-full bg-brand-peachBorder/40 hover:bg-brand-peachBorder text-brand-dark flex items-center justify-center cursor-pointer transition text-xs active:scale-90">
+          <button id="close-contact-request-btn" type="button" aria-label="إغلاق" class="w-10 h-10 rounded-full bg-brand-peachBorder/40 hover:bg-brand-peachBorder text-brand-dark flex items-center justify-center cursor-pointer transition text-sm active:scale-90 shrink-0">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -102,10 +107,10 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
 
         <!-- Submit Button -->
         <div class="flex items-center justify-end gap-2.5 pt-2">
-          <button id="cancel-contact-request-btn" class="px-4 py-2 rounded-xl bg-white border border-brand-peachBorder text-brand-dark font-extrabold text-xs hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer">
+          <button id="cancel-contact-request-btn" type="button" class="h-11 px-5 rounded-full bg-white border border-brand-peachBorder text-brand-dark font-extrabold text-xs sm:text-sm hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer">
             إلغاء
           </button>
-          <button id="submit-contact-request-btn" class="px-6 py-2 rounded-xl bg-brand-orange text-white font-black text-xs shadow-soft hover:bg-brand-orange/95 transition active:scale-95 cursor-pointer">
+          <button id="submit-contact-request-btn" type="button" class="h-11 px-6 rounded-full bg-brand-orange text-white font-black text-xs sm:text-sm shadow-soft hover:bg-brand-orange/95 transition active:scale-95 cursor-pointer">
             إرسال الطلب الآن ✈️
           </button>
         </div>
@@ -121,10 +126,20 @@ export function attachContactRequestModalEvents(targetPet: Pet | null): void {
   const closeBtn = document.getElementById('close-contact-request-btn');
   const cancelBtn = document.getElementById('cancel-contact-request-btn');
   const backdrop = document.getElementById('contact-request-modal-backdrop');
+  const sheet = document.getElementById('contact-request-sheet');
 
   const handleClose = () => {
     state.setSelectedPetForRequest(null);
   };
+
+  if (sheet) {
+    attachSheetDragToDismiss(sheet, {
+      backdropEl: backdrop,
+      handleSelector: '#contact-request-drag-handle',
+      scrollContainerSelector: '#contact-request-sheet',
+      onClose: handleClose,
+    });
+  }
 
   if (closeBtn) closeBtn.addEventListener('click', handleClose);
   if (cancelBtn) cancelBtn.addEventListener('click', handleClose);

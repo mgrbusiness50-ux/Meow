@@ -17,6 +17,13 @@ import {
   SearchableOption,
   SearchableSelectController,
 } from '../components/SearchableSelect.ts';
+import {
+  resendSignUpConfirmationEmail,
+  sendPasswordRecoveryEmail,
+  signInWithEmailPassword,
+  signUpWithEmailPassword,
+  updateSupabasePassword,
+} from '../../services/supabaseAuthService.ts';
 import { signInWithGoogleOAuth } from '../../services/authService.ts';
 import { validateEgyptianMobile } from '../../utils/validation.ts';
 
@@ -57,11 +64,27 @@ export const PERSONALITY_TRAITS = [
 ];
 
 let lastRenderedStep: OnboardingStep | null = null;
-let selectedAuthMethod: 'google' | 'apple' | null = null;
 let authMode: 'login' | 'signup' = 'signup';
+let authSubView: 'main' | 'forgot_password' = 'main';
+let authEmail = '';
+let authPassword = '';
+let showAuthPassword = false;
+let authNewPassword = '';
+let authConfirmPassword = '';
+let showRecoveryPassword = false;
+let pendingConfirmationEmail = '';
 let isTermsAccepted = false;
-let isAuthenticatingWithGoogle = false;
-let authErrorMessage: string = '';
+let isAuthSubmitting = false;
+let isGoogleSubmitting = false;
+let isResendingConfirmation = false;
+let isSendingRecovery = false;
+let isUpdatingPassword = false;
+let authErrorMessage = '';
+let authSuccessMessage = '';
+let isSavingOwnerDetails = false;
+let isCompletingOnboarding = false;
+let hasSavedOnboardingPet = false;
+let hasPetErrorMessage = '';
 
 interface OwnerDetailsFormValues {
   name: string;
@@ -107,11 +130,24 @@ let draftPetNotes = '';
 const selectedTraits: Set<string> = new Set();
 const uploadedPetPhotos: (string | null)[] = [null, null, null];
 
-function resetTransientAuthState(): void {
-  selectedAuthMethod = null;
+function resetTransientAuthState(opts?: { preserveMessages?: boolean }): void {
+  authSubView = 'main';
+  authPassword = '';
+  showAuthPassword = false;
+  authNewPassword = '';
+  authConfirmPassword = '';
+  showRecoveryPassword = false;
   isTermsAccepted = false;
-  isAuthenticatingWithGoogle = false;
-  authErrorMessage = '';
+  isAuthSubmitting = false;
+  isResendingConfirmation = false;
+  isSendingRecovery = false;
+  isUpdatingPassword = false;
+  if (!opts?.preserveMessages) {
+    authEmail = '';
+    pendingConfirmationEmail = '';
+    authErrorMessage = '';
+    authSuccessMessage = '';
+  }
   state.setTermsAccepted(false, true);
 }
 
@@ -123,6 +159,10 @@ function resetTransientFormState(): void {
   onboardingOwnerFormState.markazId = '';
   onboardingOwnerFormState.cityId = '';
   onboardingOwnerFormState.villageId = '';
+  isSavingOwnerDetails = false;
+  isCompletingOnboarding = false;
+  hasSavedOnboardingPet = false;
+  hasPetErrorMessage = '';
 
   selectedPetSpecies = null;
   selectedPetGender = null;
@@ -138,6 +178,40 @@ function resetTransientFormState(): void {
   uploadedPetPhotos[0] = null;
   uploadedPetPhotos[1] = null;
   uploadedPetPhotos[2] = null;
+}
+
+function syncOnboardingOwnerDraftIfEmpty(): void {
+  const user = state.getUser();
+  if (!user) return;
+  if (
+    onboardingOwnerFormState.name ||
+    onboardingOwnerFormState.phone ||
+    onboardingOwnerFormState.gender ||
+    onboardingOwnerFormState.govId
+  ) {
+    return;
+  }
+
+  const lineage = resolveLocationLineage({
+    governorateId: user.governorateId,
+    markazId: user.markazId,
+    cityId: user.cityId,
+    villageId: user.villageId,
+    locationId: user.locationId,
+    governorate: user.governorate,
+    markaz: user.markaz,
+    city: user.city,
+    village: user.village,
+  });
+
+  onboardingOwnerFormState.name = user.name || '';
+  onboardingOwnerFormState.phone = user.phone ? formatOwnerPhoneForInput(user.phone) : '';
+  onboardingOwnerFormState.gender =
+    user.gender === 'female' ? 'female' : user.gender === 'male' ? 'male' : null;
+  onboardingOwnerFormState.govId = lineage.governorate?.id || user.governorateId || '';
+  onboardingOwnerFormState.markazId = lineage.markaz?.id || user.markazId || '';
+  onboardingOwnerFormState.cityId = lineage.city?.id || user.cityId || '';
+  onboardingOwnerFormState.villageId = lineage.village?.id || user.villageId || '';
 }
 
 function escapeAttr(val: string): string {
@@ -158,14 +232,33 @@ export function renderOnboardingView(): string {
   const step = state.getOnboardingStep();
 
   if (step !== lastRenderedStep) {
+    const previousStep = lastRenderedStep;
     lastRenderedStep = step;
     if (step === 'auth_method') {
-      authMode = 'signup';
-      resetTransientAuthState();
+      if (state.isSupabasePasswordRecovery()) {
+        resetTransientAuthState({ preserveMessages: true });
+      } else if (previousStep === 'completed') {
+        authMode = 'login';
+        resetTransientAuthState();
+        resetTransientFormState();
+        authSuccessMessage = 'تم تسجيل الخروج بنجاح. يمكنك تسجيل الدخول أو إنشاء حساب جديد.';
+      } else {
+        authMode = 'signup';
+        resetTransientAuthState();
+        resetTransientFormState();
+      }
     } else if (step === 'splash') {
       authMode = 'signup';
       resetTransientAuthState();
       resetTransientFormState();
+    } else if (step === 'owner_details') {
+      syncOnboardingOwnerDraftIfEmpty();
+    }
+    if (step !== 'pet_details') {
+      hasSavedOnboardingPet = false;
+    }
+    if (step !== 'has_pet') {
+      hasPetErrorMessage = '';
     }
   }
 
@@ -175,7 +268,7 @@ export function renderOnboardingView(): string {
   }
 
   return `
-    <div class="min-h-[100dvh] w-full flex flex-col items-center justify-between px-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-[#FFF9E9] text-[#3E2723] relative overflow-x-hidden" dir="rtl">
+    <div class="min-h-[100dvh] w-full flex flex-col items-center justify-between px-4 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-[#FFF9E9] text-[#3E2723] relative overflow-x-hidden" dir="rtl">
       
       ${renderPawBackdrop()}
 
@@ -387,63 +480,385 @@ function renderWelcomeStep(): string {
 }
 
 // -------------------------------------------------------------
-// Step 3: Auth Method (Signup First + Login Secondary + Real Google OAuth + Unchecked Privacy)
+// Step 3: Auth Method (Supabase Email/Password + Confirmation + Recovery + Deferred Social)
 // -------------------------------------------------------------
 function renderAuthMethodStep(): string {
   const isLogin = authMode === 'login';
-  const googleSelected = selectedAuthMethod === 'google';
-  const appleSelected = selectedAuthMethod === 'apple';
-  const authenticatedAccount = state.getAuthenticatedGoogleAccount();
-  const canContinue = Boolean(isTermsAccepted && authenticatedAccount);
+  const isRecoveryActive = state.isSupabasePasswordRecovery();
+  const isForgotPassword = !isRecoveryActive && authSubView === 'forgot_password';
+  const stateAuthError = !authErrorMessage && !authSuccessMessage ? state.getSupabaseAuthError() || '' : '';
+  const visibleError = authErrorMessage || stateAuthError;
+  const isAuthenticated = state.isSupabaseAuthenticated() && !isRecoveryActive;
+  const currentSessionEmail = state.getUser().email || authEmail;
 
-  return `
-    <div class="flex-1 flex flex-col items-center justify-between py-2 animate-fade-in">
-      
-      <!-- Header Section -->
-      <header class="w-full pt-4 flex flex-col items-center text-center space-y-5">
-        <div class="relative w-44 h-44 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-44 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+  if (isRecoveryActive) {
+    return `
+      <div class="flex-1 flex flex-col items-center justify-between py-2 animate-fade-in">
+        <header class="w-full pt-2 flex flex-col items-center text-center space-y-3">
+          <div class="relative w-36 h-36 flex items-center justify-center">
+            <img alt="Meow Logo" class="w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+          </div>
+          <div class="space-y-1.5">
+            <h1 class="text-2xl font-extrabold text-[#3E2723] font-baloo">إعادة تعيين كلمة المرور</h1>
+            <p class="text-[#3E2723]/75 text-base font-bold font-baloo">أدخل كلمة المرور الجديدة لحسابك في Meow 🐾</p>
+          </div>
+        </header>
+
+        <div class="w-full flex-1 flex flex-col justify-center py-4 min-w-0">
+          <form id="recovery-password-form" novalidate class="space-y-4 font-baloo">
+            <div class="space-y-1.5">
+              <label for="recovery-new-password-input" class="block text-sm font-bold text-[#2d221b]">كلمة المرور الجديدة</label>
+              <div class="relative flex items-center">
+                <input
+                  id="recovery-new-password-input"
+                  type="${showRecoveryPassword ? 'text' : 'password'}"
+                  dir="ltr"
+                  placeholder="••••••••"
+                  value="${escapeAttr(authNewPassword)}"
+                  autocomplete="new-password"
+                  class="w-full h-14 pl-12 pr-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+                />
+                <button
+                  id="btn-toggle-recovery-pw"
+                  type="button"
+                  aria-label="إظهار أو إخفاء كلمة المرور"
+                  class="absolute left-3.5 w-9 h-9 rounded-full text-[#786555] hover:text-[#e67e22] flex items-center justify-center cursor-pointer"
+                >
+                  <i class="fa-solid ${showRecoveryPassword ? 'fa-eye-slash' : 'fa-eye'}"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <label for="recovery-confirm-password-input" class="block text-sm font-bold text-[#2d221b]">تأكيد كلمة المرور الجديدة</label>
+              <input
+                id="recovery-confirm-password-input"
+                type="${showRecoveryPassword ? 'text' : 'password'}"
+                dir="ltr"
+                placeholder="••••••••"
+                value="${escapeAttr(authConfirmPassword)}"
+                autocomplete="new-password"
+                class="w-full h-14 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+              />
+            </div>
+
+            <div
+              id="auth-error-msg"
+              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-center text-sm font-bold text-rose-700 font-baloo"
+              role="alert"
+            >${escapeAttr(visibleError)}</div>
+
+            <div
+              id="auth-success-msg"
+              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-800 font-baloo"
+              role="status"
+            >${escapeAttr(authSuccessMessage)}</div>
+
+            <button
+              id="btn-update-recovery-password"
+              type="submit"
+              ${isUpdatingPassword ? 'disabled' : ''}
+              class="w-full h-14 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[24px] text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
+                isUpdatingPassword ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+              }"
+            >
+              ${isUpdatingPassword ? 'جاري حفظ كلمة المرور...' : 'حفظ كلمة المرور الجديدة'}
+            </button>
+
+            <button
+              id="btn-cancel-recovery-signout"
+              type="button"
+              ${isUpdatingPassword ? 'disabled' : ''}
+              class="w-full h-12 bg-[#F3EBDD] hover:bg-[#eae0d0] text-[#564337] border-2 border-[#d6c7b2] rounded-[24px] text-sm font-bold transition-all cursor-pointer font-baloo"
+            >
+              إلغاء والعودة لتسجيل الدخول
+            </button>
+          </form>
         </div>
 
-        <div class="space-y-2">
+        <div class="w-full pb-2"></div>
+      </div>
+    `;
+  }
+
+  if (isForgotPassword) {
+    return `
+      <div class="flex-1 flex flex-col items-center justify-between py-2 animate-fade-in">
+        <header class="w-full pt-2 flex flex-col items-center text-center space-y-3">
+          <div class="relative w-36 h-36 flex items-center justify-center">
+            <img alt="Meow Logo" class="w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+          </div>
+          <div class="space-y-1.5">
+            <h1 class="text-2xl font-extrabold text-[#3E2723] font-baloo">استعادة كلمة المرور</h1>
+            <p class="text-[#3E2723]/75 text-base font-bold font-baloo">أدخل بريدك الإلكتروني لإرسال رابط الاستعادة</p>
+          </div>
+        </header>
+
+        <div class="w-full flex-1 flex flex-col justify-center py-4 min-w-0">
+          <form id="forgot-password-form" novalidate class="space-y-4 font-baloo">
+            <div class="space-y-1.5">
+              <label for="recovery-email-input" class="block text-sm font-bold text-[#2d221b]">البريد الإلكتروني</label>
+              <input
+                id="recovery-email-input"
+                type="email"
+                dir="ltr"
+                placeholder="name@example.com"
+                value="${escapeAttr(authEmail)}"
+                autocomplete="email"
+                class="w-full h-14 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+              />
+            </div>
+
+            <div
+              id="auth-error-msg"
+              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-center text-sm font-bold text-rose-700 font-baloo"
+              role="alert"
+            >${escapeAttr(visibleError)}</div>
+
+            <div
+              id="auth-success-msg"
+              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-800 font-baloo"
+              role="status"
+            >${escapeAttr(authSuccessMessage)}</div>
+
+            <button
+              id="btn-send-recovery-email"
+              type="submit"
+              ${isSendingRecovery ? 'disabled' : ''}
+              class="w-full h-14 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[24px] text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
+                isSendingRecovery ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+              }"
+            >
+              ${isSendingRecovery ? 'جاري إرسال الرابط...' : 'إرسال رابط الاستعادة'}
+            </button>
+
+            <button
+              id="btn-back-to-auth-main"
+              type="button"
+              ${isSendingRecovery ? 'disabled' : ''}
+              class="w-full h-12 bg-[#F3EBDD] hover:bg-[#eae0d0] text-[#564337] border-2 border-[#d6c7b2] rounded-[24px] text-sm font-bold transition-all cursor-pointer font-baloo"
+            >
+              العودة لتسجيل الدخول
+            </button>
+          </form>
+        </div>
+
+        <div class="w-full pb-2"></div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="flex-1 flex flex-col items-center justify-between py-1 animate-fade-in">
+      
+      <!-- Header Section -->
+      <header class="w-full pt-2 flex flex-col items-center text-center space-y-2.5">
+        <div class="relative w-32 h-32 sm:w-36 sm:h-36 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-32 sm:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+        </div>
+
+        <div class="space-y-1">
           ${
             isLogin
-              ? `<h1 class="text-2xl font-bold text-[#3E2723] font-baloo">تسجيل الدخول</h1>
-                 <p class="text-[#3E2723]/70 text-lg font-bold font-baloo">مرحباً بعودتك إلى Meow 🐾</p>`
-              : `<h1 class="text-2xl font-bold text-[#3E2723] font-baloo">إنشاء حساب جديد</h1>
-                 <p class="text-[#3E2723]/70 text-lg font-bold font-baloo">ابدأ رحلتك مع Meow 🐾</p>`
+              ? `<h1 class="text-2xl font-extrabold text-[#3E2723] font-baloo">تسجيل الدخول</h1>
+                 <p class="text-[#3E2723]/70 text-base font-bold font-baloo">مرحباً بعودتك إلى Meow 🐾</p>`
+              : `<h1 class="text-2xl font-extrabold text-[#3E2723] font-baloo">إنشاء حساب جديد</h1>
+                 <p class="text-[#3E2723]/70 text-base font-bold font-baloo">ابدأ رحلتك مع Meow 🐾</p>`
           }
         </div>
       </header>
 
-      <!-- Main Content: Social Buttons + Continue CTA -->
-      <main class="w-full flex-1 flex flex-col justify-center space-y-7 py-6">
-        
-        <!-- Social Login Grid -->
-        <div class="space-y-4">
-          <!-- Google Button (Real Google OAuth) -->
+      <!-- Main Content: Email/Password + Confirmation + Deferred Social -->
+      <div class="w-full flex-1 flex flex-col justify-center space-y-4 py-3 min-w-0">
+
+        ${
+          isAuthenticated
+            ? `
+              <div class="rounded-[24px] border-2 border-emerald-300 bg-emerald-50/90 p-4 text-center space-y-3 font-baloo shadow-sm">
+                <p class="text-sm font-black text-emerald-900 m-0">
+                  تم التحقق من الحساب${currentSessionEmail ? `: ${escapeAttr(currentSessionEmail)}` : ''}
+                </p>
+                <button
+                  id="btn-auth-continue"
+                  type="button"
+                  class="w-full h-12 rounded-2xl bg-[#e67e22] hover:bg-[#ea580c] text-white font-extrabold text-base shadow-sm cursor-pointer transition active:scale-[0.98]"
+                >
+                  متابعة
+                </button>
+              </div>
+            `
+            : ''
+        }
+
+        <form id="auth-email-form" novalidate class="space-y-3.5 font-baloo">
+          <div class="space-y-1.5">
+            <label for="auth-email-input" class="block text-sm font-bold text-[#2d221b]">البريد الإلكتروني</label>
+            <input
+              id="auth-email-input"
+              type="email"
+              dir="ltr"
+              placeholder="name@example.com"
+              value="${escapeAttr(authEmail)}"
+              autocomplete="email"
+              class="w-full h-14 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <label for="auth-password-input" class="block text-sm font-bold text-[#2d221b]">كلمة المرور</label>
+              ${
+                isLogin
+                  ? `<button
+                       id="btn-forgot-password"
+                       type="button"
+                       class="text-xs font-black text-[#944a00] hover:text-[#e67e22] underline underline-offset-2 cursor-pointer"
+                     >نسيت كلمة المرور؟</button>`
+                  : `<span class="text-[11px] font-bold text-[#786555]">6 أحرف على الأقل</span>`
+              }
+            </div>
+            <div class="relative flex items-center">
+              <input
+                id="auth-password-input"
+                type="${showAuthPassword ? 'text' : 'password'}"
+                dir="ltr"
+                placeholder="••••••••"
+                value="${escapeAttr(authPassword)}"
+                autocomplete="${isLogin ? 'current-password' : 'new-password'}"
+                class="w-full h-14 pl-12 pr-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+              />
+              <button
+                id="btn-toggle-auth-password"
+                type="button"
+                aria-label="إظهار أو إخفاء كلمة المرور"
+                class="absolute left-3.5 w-9 h-9 rounded-full text-[#786555] hover:text-[#e67e22] flex items-center justify-center cursor-pointer"
+              >
+                <i class="fa-solid ${showAuthPassword ? 'fa-eye-slash' : 'fa-eye'}"></i>
+              </button>
+            </div>
+          </div>
+
+          ${
+            !isLogin
+              ? `
+                <!-- Agreements (Strictly unchecked by default on signup) -->
+                <div id="terms-agreement-box" class="flex items-start gap-3 px-3 py-2 rounded-2xl border border-transparent transition-all">
+                  <div class="mt-0.5">
+                    <input
+                      class="w-5 h-5 rounded border-[#3E2723]/30 text-[#944a00] focus:ring-[#944a00]/20 bg-white/80 transition-colors cursor-pointer"
+                      id="terms-checkbox"
+                      type="checkbox"
+                      ${isTermsAccepted ? 'checked' : ''}
+                    />
+                  </div>
+                  <label class="text-[#3E2723]/80 text-xs sm:text-sm leading-relaxed cursor-pointer font-baloo" for="terms-checkbox">
+                    من خلال إنشاء الحساب، أنت توافق على
+                    <span class="text-[#944a00] font-bold">شروط الاستخدام</span>
+                    و
+                    <span class="text-[#944a00] font-bold">سياسة الخصوصية</span>.
+                  </label>
+                </div>
+              `
+              : ''
+          }
+
+          ${
+            pendingConfirmationEmail
+              ? `
+                <div id="email-confirmation-box" class="rounded-[24px] border-2 border-[#e67e22]/45 bg-[#fff5ea] p-4 space-y-2.5 text-right shadow-sm">
+                  <div class="flex items-start gap-2.5">
+                    <div class="w-9 h-9 rounded-full bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center shrink-0">
+                      <i class="fa-solid fa-envelope-open-text"></i>
+                    </div>
+                    <div class="min-w-0 space-y-1">
+                      <p class="text-sm font-black text-[#2d221b] m-0">تأكيد البريد الإلكتروني مطلوب</p>
+                      <p class="text-xs font-bold text-[#786555] leading-relaxed m-0">
+                        أرسلنا رابط التفعيل إلى <span dir="ltr" class="text-[#2d221b]">${escapeAttr(pendingConfirmationEmail)}</span>. افتح الرابط في بريدك أولاً قبل المتابعة.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button
+                      id="btn-resend-confirmation"
+                      type="button"
+                      ${isResendingConfirmation ? 'disabled' : ''}
+                      class="flex-1 h-11 px-3 rounded-2xl bg-white border-2 border-[#e67e22]/50 text-[#c25807] hover:bg-[#fffaf2] text-xs font-black transition cursor-pointer active:scale-95 ${
+                        isResendingConfirmation ? 'opacity-65 cursor-wait' : ''
+                      }"
+                    >
+                      ${isResendingConfirmation ? 'جاري الإرسال...' : 'إعادة إرسال رسالة التأكيد'}
+                    </button>
+                    <button
+                      id="btn-switch-to-login-after-confirm"
+                      type="button"
+                      class="flex-1 h-11 px-3 rounded-2xl bg-[#e67e22] hover:bg-[#ea580c] text-white text-xs font-black transition cursor-pointer active:scale-95"
+                    >
+                      تم التأكيد • تسجيل الدخول
+                    </button>
+                  </div>
+                </div>
+              `
+              : ''
+          }
+
+          <!-- Status / Validation Banners -->
+          <div
+            id="auth-error-msg"
+            class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-center text-sm font-bold text-rose-700 font-baloo"
+            role="alert"
+          >${escapeAttr(visibleError)}</div>
+
+          <div
+            id="auth-success-msg"
+            class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-800 font-baloo"
+            role="status"
+          >${escapeAttr(authSuccessMessage)}</div>
+
+          <button
+            id="btn-auth-email-submit"
+            type="submit"
+            ${isAuthSubmitting ? 'disabled' : ''}
+            class="w-full h-14 text-white bg-[#f38f42] hover:bg-[#e67e22] rounded-[24px] text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
+              isAuthSubmitting ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+            }"
+          >
+            ${
+              isAuthSubmitting
+                ? isLogin
+                  ? 'جاري تسجيل الدخول...'
+                  : 'جاري إنشاء الحساب...'
+                : isLogin
+                ? 'تسجيل الدخول'
+                : 'إنشاء حساب'
+            }
+          </button>
+        </form>
+
+        <!-- Divider -->
+        <div class="px-2">
+          <div class="h-px w-full bg-[#d6c7b2]/70"></div>
+        </div>
+
+        <!-- Social Login Options (Preserving Stitch Design) -->
+        <div class="space-y-2.5">
           <button
             id="btn-login-google"
             type="button"
-            ${isAuthenticatingWithGoogle ? 'disabled' : ''}
-            class="flex items-center justify-center gap-4 w-full py-4 px-6 bg-white text-[#1f1f1f] rounded-2xl font-semibold transition-all hover:bg-gray-50 active:scale-95 shadow-sm ${
-              isAuthenticatingWithGoogle ? 'opacity-70 cursor-wait' : 'cursor-pointer'
-            } ${
-              googleSelected
-                ? 'border-2 border-[#e67e22] ring-4 ring-[#e67e22]/20'
-                : 'border border-[#3E2723]/10'
+            ${isGoogleSubmitting ? 'disabled' : ''}
+            class="flex items-center justify-center gap-3 w-full py-3.5 px-5 bg-white hover:bg-[#fffaf5] text-[#1f1f1f] rounded-2xl font-semibold border border-[#3E2723]/15 shadow-sm transition-all active:scale-[0.98] ${
+              isGoogleSubmitting ? 'opacity-70 cursor-wait' : 'cursor-pointer'
             }"
           >
-            <svg class="w-6 h-6 shrink-0" viewBox="0 0 24 24">
+            <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"></path>
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
             </svg>
-            <span id="google-btn-label" class="tracking-wide text-[17px] font-bold font-baloo">
+            <span id="google-btn-label" class="text-sm sm:text-base font-bold font-baloo truncate">
               ${
-                isAuthenticatingWithGoogle
-                  ? 'جاري التحقق عبر Google...'
+                isGoogleSubmitting
+                  ? 'جاري الاتصال بـ Google...'
                   : isLogin
                   ? 'تسجيل الدخول بواسطة Google'
                   : 'إنشاء حساب بواسطة Google'
@@ -451,72 +866,31 @@ function renderAuthMethodStep(): string {
             </span>
           </button>
 
-          <!-- Apple Button -->
           <button
             id="btn-login-apple"
             type="button"
-            class="flex items-center justify-center gap-4 w-full py-4 px-6 bg-black text-white rounded-2xl font-semibold transition-all hover:opacity-90 active:scale-95 shadow-sm cursor-pointer ${
-              appleSelected
-                ? 'border-2 border-[#e67e22] ring-4 ring-[#e67e22]/30'
-                : 'border border-black'
-            }"
+            disabled
+            aria-disabled="true"
+            class="flex items-center justify-between w-full py-3.5 px-5 bg-black/75 text-white/80 rounded-2xl font-semibold border border-black/40 shadow-sm opacity-65 cursor-not-allowed select-none"
           >
-            <svg class="w-6 h-6 fill-white shrink-0" viewBox="0 0 384 512">
-              <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 21.8-88.5 21.8-11.4 0-51.1-20.8-82.3-20.1-41.2.6-79.1 23.9-100.4 61-43.7 75.8-11.2 188.6 31.1 250.3 20.6 29.7 45.4 63.3 77.2 62.1 30.6-1.1 42.1-19.8 79-19.8 36.8 0 47.4 19.8 79.9 19.2 33.4-.6 54.8-30.3 75.2-60.2 23.5-34.4 33.2-67.8 33.6-69.5-.8-.3-65-24.9-65.1-99.3zm-30.2-184.2c27.1-32.9 25.1-62.4 23.6-70.5-23.7 1.1-51.1 15.7-68 35.5-15.1 17.5-28.1 47.2-24.2 74.9 26.8 2.1 51.5-17 68.6-39.9z"></path>
-            </svg>
-            <span class="tracking-wide text-[17px] font-bold font-baloo">${
-              isLogin ? 'تسجيل الدخول بواسطة Apple' : 'إنشاء حساب بواسطة Apple'
-            }</span>
-          </button>
-
-          <!-- Validation / OAuth Status Box -->
-          <div
-            id="auth-error-msg"
-            class="${authErrorMessage ? '' : 'hidden'} rounded-2xl border border-[#e67e22]/40 bg-[#fff3e0] px-4 py-3 text-center text-sm font-bold text-[#7c2d12] font-baloo"
-            role="alert"
-          >
-            ${authErrorMessage}
-          </div>
-        </div>
-
-        <!-- Primary CTA Area -->
-        <div class="space-y-5">
-          <button
-            id="btn-auth-continue"
-            type="button"
-            ${canContinue ? '' : 'disabled'}
-            class="w-full py-4 text-white rounded-2xl text-lg shadow-sm transition-all font-bold font-baloo ${
-              canContinue
-                ? 'bg-[#f38f42] hover:bg-[#e67e22] active:scale-[0.98] cursor-pointer'
-                : 'bg-[#f38f42]/50 opacity-60 cursor-not-allowed'
-            }"
-          >
-            التالي
-          </button>
-
-          <!-- Agreements (Strictly unchecked by default) -->
-          <div id="terms-agreement-box" class="flex items-start gap-3 px-3 py-2 rounded-2xl border border-transparent transition-all">
-            <div class="mt-1">
-              <input
-                class="w-5 h-5 rounded border-[#3E2723]/30 text-[#944a00] focus:ring-[#944a00]/20 bg-white/80 transition-colors cursor-pointer"
-                id="terms-checkbox"
-                type="checkbox"
-                ${isTermsAccepted ? 'checked' : ''}
-              />
+            <div class="flex items-center gap-3 min-w-0">
+              <svg class="w-5 h-5 fill-white/80 shrink-0" viewBox="0 0 384 512">
+                <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 21.8-88.5 21.8-11.4 0-51.1-20.8-82.3-20.1-41.2.6-79.1 23.9-100.4 61-43.7 75.8-11.2 188.6 31.1 250.3 20.6 29.7 45.4 63.3 77.2 62.1 30.6-1.1 42.1-19.8 79-19.8 36.8 0 47.4 19.8 79.9 19.2 33.4-.6 54.8-30.3 75.2-60.2 23.5-34.4 33.2-67.8 33.6-69.5-.8-.3-65-24.9-65.1-99.3zm-30.2-184.2c27.1-32.9 25.1-62.4 23.6-70.5-23.7 1.1-51.1 15.7-68 35.5-15.1 17.5-28.1 47.2-24.2 74.9 26.8 2.1 51.5-17 68.6-39.9z"></path>
+              </svg>
+              <span class="text-sm sm:text-base font-bold font-baloo truncate">
+                ${isLogin ? 'تسجيل الدخول بواسطة Apple' : 'إنشاء حساب بواسطة Apple'}
+              </span>
             </div>
-            <label class="text-[#3E2723]/75 text-sm leading-relaxed cursor-pointer font-baloo" for="terms-checkbox">
-              من خلال المتابعة، أنت توافق على
-              <span class="text-[#944a00] font-bold">شروط الاستخدام</span>
-              و
-              <span class="text-[#944a00] font-bold">سياسة الخصوصية</span>.
-            </label>
-          </div>
+            <span class="px-2.5 py-0.5 rounded-full bg-white/15 border border-white/25 text-[11px] font-black text-white/90 font-baloo shrink-0">
+              قريبًا
+            </span>
+          </button>
         </div>
 
-      </main>
+      </div>
 
       <!-- Footer Mode Switch Pill -->
-      <div class="w-full pb-2 text-center">
+      <div class="w-full pt-2 pb-1 text-center">
         <button
           id="btn-toggle-auth-mode"
           type="button"
@@ -644,7 +1018,7 @@ function renderOwnerDetailsFormContent(
       </header>
 
       <!-- Main Content: Form directly on #FFF9E9 -->
-      <main class="w-full flex-1 flex flex-col justify-start py-4">
+      <div class="w-full flex-1 flex flex-col justify-start py-4 min-w-0">
         <form id="owner-details-form" novalidate class="space-y-5 font-baloo">
           
           <!-- الاسم -->
@@ -657,7 +1031,7 @@ function renderOwnerDetailsFormContent(
                 placeholder="اكتب اسمك الكامل"
                 value="${escapeAttr(values.name)}"
                 autocomplete="off"
-                class="w-full h-16 px-6 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                class="w-full h-16 px-4 sm:px-6 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
               />
             </div>
           </div>
@@ -666,7 +1040,7 @@ function renderOwnerDetailsFormContent(
           <div class="space-y-2">
             <label for="owner-phone-number-input" class="block text-base font-bold text-[#2d221b]">رقم الهاتف</label>
             <div id="owner-phone-wrapper" class="relative flex items-center h-16 rounded-[28px]" dir="ltr">
-              <span class="h-full inline-flex items-center justify-center px-5 rounded-l-[28px] border-2 border-r-0 border-[#d6c7b2] bg-[#F7E1C3] text-[#1a1612] font-black text-lg tracking-wider select-none">+20</span>
+              <span class="h-full inline-flex items-center justify-center px-3.5 sm:px-5 rounded-l-[28px] border-2 border-r-0 border-[#d6c7b2] bg-[#F7E1C3] text-[#1a1612] font-black text-base sm:text-lg tracking-wider select-none shrink-0">+20</span>
               <input
                 type="tel"
                 id="owner-phone-number-input"
@@ -675,7 +1049,7 @@ function renderOwnerDetailsFormContent(
                 value="${escapeAttr(values.phone)}"
                 dir="ltr"
                 autocomplete="off"
-                class="w-full h-full px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-r-[28px] text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+                class="w-full min-w-0 h-full px-3.5 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-r-[28px] text-base sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
               />
             </div>
             <p id="owner-phone-hint" class="hidden text-xs font-bold text-rose-600 px-2"></p>
@@ -723,9 +1097,9 @@ function renderOwnerDetailsFormContent(
               </span>
             </div>
 
-            <div class="grid grid-cols-2 gap-3.5">
+            <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
               <!-- المحافظة -->
-              <div class="space-y-2">
+              <div class="space-y-2 min-w-0">
                 <label for="owner-governorate-select-trigger" class="block text-sm sm:text-base font-bold text-[#2d221b]">المحافظة</label>
                 ${renderSearchableSelect({
                   id: 'owner-governorate-select',
@@ -737,7 +1111,7 @@ function renderOwnerDetailsFormContent(
               </div>
 
               <!-- المركز أو القسم -->
-              <div class="space-y-2">
+              <div class="space-y-2 min-w-0">
                 <label for="owner-markaz-select-trigger" class="block text-sm sm:text-base font-bold text-[#2d221b]">المركز أو القسم</label>
                 ${renderSearchableSelect({
                   id: 'owner-markaz-select',
@@ -750,9 +1124,9 @@ function renderOwnerDetailsFormContent(
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3.5">
+            <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
               <!-- المدينة أو الحي -->
-              <div class="space-y-2">
+              <div class="space-y-2 min-w-0">
                 <label for="owner-city-select-trigger" class="block text-sm sm:text-base font-bold text-[#2d221b]">المدينة أو الحي</label>
                 ${renderSearchableSelect({
                   id: 'owner-city-select',
@@ -765,7 +1139,7 @@ function renderOwnerDetailsFormContent(
               </div>
 
               <!-- القرية / النجع / العزبة -->
-              <div class="space-y-2">
+              <div class="space-y-2 min-w-0">
                 <label for="owner-village-select-trigger" class="block text-sm font-bold text-[#2d221b] truncate">القرية / النجع / العزبة</label>
                 ${renderSearchableSelect({
                   id: 'owner-village-select',
@@ -798,7 +1172,7 @@ function renderOwnerDetailsFormContent(
           </div>
 
         </form>
-      </main>
+      </div>
 
     </div>
   `;
@@ -819,8 +1193,8 @@ export function renderOwnerEditView(): string {
   }
 
   return `
-    <div id="edit-owner-overlay" class="fixed inset-0 z-[75] bg-[#FFF9E9] text-[#3E2723] overflow-y-auto flex flex-col justify-start" dir="rtl">
-      <div class="w-full max-w-md mx-auto flex flex-col px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-10">
+    <div id="edit-owner-overlay" class="fixed inset-0 z-[75] bg-[#FFF9E9] text-[#3E2723] overflow-y-auto overscroll-contain flex flex-col justify-start" dir="rtl">
+      <div class="w-full max-w-md mx-auto flex flex-col px-4 sm:px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))]">
         ${renderOwnerDetailsFormContent('edit', editOwnerFormState)}
       </div>
     </div>
@@ -862,7 +1236,10 @@ function renderHasPetStep(): string {
           <button
             type="button"
             id="btn-has-pet-yes"
-            class="w-full sm:w-48 py-5 px-8 bg-[#e67e22] hover:bg-[#ea580c] active:scale-[0.98] text-white text-2xl font-black rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 cursor-pointer font-baloo"
+            ${isCompletingOnboarding ? 'disabled' : ''}
+            class="w-full sm:w-48 py-5 px-8 bg-[#e67e22] hover:bg-[#ea580c] active:scale-[0.98] text-white text-2xl font-black rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 cursor-pointer font-baloo ${
+              isCompletingOnboarding ? 'opacity-65 cursor-not-allowed' : ''
+            }"
           >
             <span class="whitespace-nowrap">مياو</span>
             <span class="text-2xl">🐾</span>
@@ -871,11 +1248,20 @@ function renderHasPetStep(): string {
           <button
             type="button"
             id="btn-has-pet-no"
-            class="w-full sm:w-48 py-5 px-8 bg-[#F3EBDD] hover:bg-[#eae0d0] active:scale-[0.98] text-[#564337] text-2xl font-black rounded-full border-2 border-[#d6c7b2] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-3 cursor-pointer font-baloo"
+            ${isCompletingOnboarding ? 'disabled' : ''}
+            class="w-full sm:w-48 py-5 px-8 bg-[#F3EBDD] hover:bg-[#eae0d0] active:scale-[0.98] text-[#564337] text-2xl font-black rounded-full border-2 border-[#d6c7b2] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-3 cursor-pointer font-baloo ${
+              isCompletingOnboarding ? 'opacity-70 cursor-wait' : ''
+            }"
           >
-            <span>لا</span>
+            <span>${isCompletingOnboarding ? 'جاري الإنهاء...' : 'لا'}</span>
           </button>
         </div>
+
+        <div
+          id="has-pet-error"
+          class="${hasPetErrorMessage ? '' : 'hidden'} w-full max-w-sm rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 leading-relaxed font-baloo"
+          role="alert"
+        >${escapeAttr(hasPetErrorMessage)}</div>
       </div>
 
     </div>
@@ -930,7 +1316,7 @@ function renderPetDetailsStep(): string {
       </header>
 
       <!-- Main Form directly on #FFF9E9 -->
-      <main class="w-full flex-1 flex flex-col justify-start py-4">
+      <div class="w-full flex-1 flex flex-col justify-start py-4 min-w-0">
         <form id="pet-details-form" novalidate class="space-y-5 font-baloo">
           
           <!-- نوع الأليف (عندك ايه: قطة / كلب) -->
@@ -997,29 +1383,29 @@ function renderPetDetailsStep(): string {
           </div>
 
           <!-- اسم المياو واللون -->
-          <div class="grid grid-cols-2 gap-3.5">
-            <div class="space-y-2">
-              <label for="pet-name-input" class="block text-base font-bold text-[#2d221b]">اسم المياو</label>
+          <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
+            <div class="space-y-2 min-w-0">
+              <label for="pet-name-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">اسم المياو</label>
               <div class="relative flex items-center h-16">
                 <input
                   type="text"
                   id="pet-name-input"
                   value="${escapeAttr(draftPetName)}"
                   autocomplete="off"
-                  class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full min-w-0 h-16 py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base sm:text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
 
-            <div class="space-y-2">
-              <label for="pet-color-input" class="block text-base font-bold text-[#2d221b]">اللون</label>
+            <div class="space-y-2 min-w-0">
+              <label for="pet-color-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">اللون</label>
               <div class="relative flex items-center h-16">
                 <input
                   type="text"
                   id="pet-color-input"
                   value="${escapeAttr(draftPetColor)}"
                   autocomplete="off"
-                  class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full min-w-0 h-16 py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base sm:text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
@@ -1027,20 +1413,20 @@ function renderPetDetailsStep(): string {
 
           <!-- السلالة وسلالة هجينة (اختياري) + العمر -->
           <div class="space-y-3.5">
-            <div class="grid grid-cols-2 gap-3.5">
-              <div class="space-y-2">
-                <label for="pet-breed-select" class="block text-base font-black text-[#2d221b]">السلالة</label>
+            <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
+              <div class="space-y-2 min-w-0">
+                <label for="pet-breed-select" class="block text-sm sm:text-base font-black text-[#2d221b]">السلالة</label>
                 <div class="relative flex items-center h-16">
                   <select
                     id="pet-breed-select"
                     ${selectedPetSpecies ? '' : 'disabled'}
-                    class="w-full h-16 py-3 pr-4 pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                    class="w-full min-w-0 h-16 py-3 pr-3.5 sm:pr-4 pl-9 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-sm sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
                       selectedPetSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
                     }"
                   >
                     ${renderBreedOptionsHtml(selectedPetSpecies, false, draftPetBreed)}
                   </select>
-                  <div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+                  <div class="pointer-events-none absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
                     <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
                       <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
                     </svg>
@@ -1048,19 +1434,19 @@ function renderPetDetailsStep(): string {
                 </div>
               </div>
 
-              <div class="space-y-2">
-                <label for="pet-hybrid-select" class="block text-base font-black text-[#2d221b]">سلالة هجينة (اختياري)</label>
+              <div class="space-y-2 min-w-0">
+                <label for="pet-hybrid-select" class="block text-sm sm:text-base font-black text-[#2d221b] truncate">سلالة هجينة (اختياري)</label>
                 <div class="relative flex items-center h-16">
                   <select
                     id="pet-hybrid-select"
                     ${selectedPetSpecies ? '' : 'disabled'}
-                    class="w-full h-16 py-3 pr-4 pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                    class="w-full min-w-0 h-16 py-3 pr-3.5 sm:pr-4 pl-9 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-sm sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
                       selectedPetSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
                     }"
                   >
                     ${renderBreedOptionsHtml(selectedPetSpecies, true, draftPetHybrid)}
                   </select>
-                  <div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+                  <div class="pointer-events-none absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
                     <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
                       <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
                     </svg>
@@ -1234,7 +1620,7 @@ function renderPetDetailsStep(): string {
           </div>
 
         </form>
-      </main>
+      </div>
 
     </div>
   `;
@@ -1275,155 +1661,434 @@ export function attachOnboardingEvents(): void {
     });
   }
 
-  // Auth Method Selection (Google Real OAuth / Apple / Terms / Continue / Mode Toggle)
-  const googleBtn = document.getElementById('btn-login-google') as HTMLButtonElement | null;
-  const googleBtnLabel = document.getElementById('google-btn-label');
-  const appleBtn = document.getElementById('btn-login-apple') as HTMLButtonElement | null;
+  // Auth Method: Email/Password SignUp & SignIn + Confirmation + Forgot/Recovery Password
+  const authEmailInput = document.getElementById('auth-email-input') as HTMLInputElement | null;
+  const authPasswordInput = document.getElementById('auth-password-input') as HTMLInputElement | null;
+  const toggleAuthPasswordBtn = document.getElementById('btn-toggle-auth-password');
+  const authEmailForm = document.getElementById('auth-email-form');
+  const forgotPasswordBtn = document.getElementById('btn-forgot-password');
+  const resendConfirmationBtn = document.getElementById('btn-resend-confirmation');
+  const switchToLoginAfterConfirmBtn = document.getElementById('btn-switch-to-login-after-confirm');
   const authContinueBtn = document.getElementById('btn-auth-continue') as HTMLButtonElement | null;
-  const authErrorBox = document.getElementById('auth-error-msg');
   const termsCheckbox = document.getElementById('terms-checkbox') as HTMLInputElement | null;
   const termsBox = document.getElementById('terms-agreement-box');
+  const loginGoogleBtn = document.getElementById('btn-login-google') as HTMLButtonElement | null;
   const toggleAuthModeBtn = document.getElementById('btn-toggle-auth-mode');
 
-  const syncAuthMethodUI = () => {
-    const authenticatedAccount = state.getAuthenticatedGoogleAccount();
-    const canContinue = Boolean(isTermsAccepted && authenticatedAccount);
+  const forgotPasswordForm = document.getElementById('forgot-password-form');
+  const recoveryEmailInput = document.getElementById('recovery-email-input') as HTMLInputElement | null;
+  const backToAuthMainBtn = document.getElementById('btn-back-to-auth-main');
 
-    if (googleBtn) {
-      googleBtn.disabled = isAuthenticatingWithGoogle;
-      googleBtn.className = `flex items-center justify-center gap-4 w-full py-4 px-6 bg-white text-[#1f1f1f] rounded-2xl font-semibold transition-all hover:bg-gray-50 active:scale-95 shadow-sm ${
-        isAuthenticatingWithGoogle ? 'opacity-70 cursor-wait' : 'cursor-pointer'
-      } ${
-        selectedAuthMethod === 'google'
-          ? 'border-2 border-[#e67e22] ring-4 ring-[#e67e22]/20'
-          : 'border border-[#3E2723]/10'
-      }`;
-    }
-    if (googleBtnLabel) {
-      googleBtnLabel.textContent = isAuthenticatingWithGoogle
-        ? 'جاري التحقق عبر Google...'
-        : authMode === 'login'
-        ? 'تسجيل الدخول بواسطة Google'
-        : 'إنشاء حساب بواسطة Google';
-    }
-    if (appleBtn) {
-      appleBtn.className = `flex items-center justify-center gap-4 w-full py-4 px-6 bg-black text-white rounded-2xl font-semibold transition-all hover:opacity-90 active:scale-95 shadow-sm cursor-pointer ${
-        selectedAuthMethod === 'apple'
-          ? 'border-2 border-[#e67e22] ring-4 ring-[#e67e22]/30'
-          : 'border border-black'
-      }`;
-    }
-    if (authContinueBtn) {
-      authContinueBtn.disabled = !canContinue;
-      authContinueBtn.className = `w-full py-4 text-white rounded-2xl text-lg shadow-sm transition-all font-bold font-baloo ${
-        canContinue
-          ? 'bg-[#f38f42] hover:bg-[#e67e22] active:scale-[0.98] cursor-pointer'
-          : 'bg-[#f38f42]/50 opacity-60 cursor-not-allowed'
-      }`;
-    }
-    if (termsBox) {
-      if (!isTermsAccepted && authErrorMessage.includes('شروط الاستخدام')) {
-        termsBox.className =
-          'flex items-start gap-3 px-3 py-2 rounded-2xl border border-rose-400 bg-rose-50/70 transition-all';
-      } else {
-        termsBox.className =
-          'flex items-start gap-3 px-3 py-2 rounded-2xl border border-transparent transition-all';
-      }
-    }
-    if (authErrorBox) {
-      if (authErrorMessage) {
-        authErrorBox.textContent = authErrorMessage;
-        authErrorBox.classList.remove('hidden');
-      } else {
-        authErrorBox.textContent = '';
-        authErrorBox.classList.add('hidden');
-      }
-    }
+  const recoveryPasswordForm = document.getElementById('recovery-password-form');
+  const recoveryNewPasswordInput = document.getElementById('recovery-new-password-input') as HTMLInputElement | null;
+  const recoveryConfirmPasswordInput = document.getElementById('recovery-confirm-password-input') as HTMLInputElement | null;
+  const toggleRecoveryPwBtn = document.getElementById('btn-toggle-recovery-pw');
+  const cancelRecoverySignoutBtn = document.getElementById('btn-cancel-recovery-signout');
+
+  const refreshAuthStep = () => {
+    state.setOnboardingStep('auth_method');
   };
 
-  if (googleBtn) {
-    googleBtn.addEventListener('click', async () => {
-      if (isAuthenticatingWithGoogle) return;
-
-      const checked = Boolean(termsCheckbox?.checked && isTermsAccepted);
-      if (!checked) {
-        selectedAuthMethod = 'google';
-        authErrorMessage = 'يرجى الموافقة على شروط الاستخدام وسياسة الخصوصية أولاً قبل المتابعة عبر Google.';
-        syncAuthMethodUI();
-        return;
-      }
-
-      selectedAuthMethod = 'google';
-      isAuthenticatingWithGoogle = true;
-      authErrorMessage = '';
-      syncAuthMethodUI();
-
-      const result = await signInWithGoogleOAuth();
-      isAuthenticatingWithGoogle = false;
-
-      if (result.success && result.account) {
-        authErrorMessage = '';
-        state.completeGoogleAuthentication(result.account, authMode);
-        return;
-      }
-
-      authErrorMessage =
-        result.errorMessage || 'لم تكتمل عملية التحقق عبر Google. يرجى المحاولة مرة أخرى.';
-      syncAuthMethodUI();
+  if (authEmailInput) {
+    authEmailInput.addEventListener('input', () => {
+      authEmail = authEmailInput.value;
     });
   }
 
-  if (appleBtn) {
-    appleBtn.addEventListener('click', () => {
-      selectedAuthMethod = 'apple';
-      authErrorMessage =
-        'عذراً، تسجيل الدخول عبر Apple غير متاح حالياً. يرجى استخدام Google للمتابعة.';
-      syncAuthMethodUI();
+  if (authPasswordInput) {
+    authPasswordInput.addEventListener('input', () => {
+      authPassword = authPasswordInput.value;
     });
   }
 
-  if (authContinueBtn) {
-    authContinueBtn.addEventListener('click', () => {
-      const checked = Boolean(termsCheckbox?.checked && isTermsAccepted);
-      if (!checked) {
-        authErrorMessage = 'يرجى الموافقة على شروط الاستخدام وسياسة الخصوصية للمتابعة.';
-        syncAuthMethodUI();
-        return;
+  if (toggleAuthPasswordBtn && authPasswordInput) {
+    toggleAuthPasswordBtn.addEventListener('click', () => {
+      showAuthPassword = !showAuthPassword;
+      authPasswordInput.type = showAuthPassword ? 'text' : 'password';
+      const icon = toggleAuthPasswordBtn.querySelector('i');
+      if (icon) {
+        icon.className = `fa-solid ${showAuthPassword ? 'fa-eye-slash' : 'fa-eye'}`;
       }
-      const authenticatedAccount = state.getAuthenticatedGoogleAccount();
-      if (!authenticatedAccount) {
-        authErrorMessage =
-          'يرجى إتمام تسجيل الدخول الحقيقي عبر Google أولاً قبل الانتقال للخطوة التالية.';
-        syncAuthMethodUI();
-        return;
-      }
-      authErrorMessage = '';
-      state.completeGoogleAuthentication(authenticatedAccount, authMode);
     });
   }
 
   if (termsCheckbox) {
     termsCheckbox.addEventListener('change', () => {
       isTermsAccepted = Boolean(termsCheckbox.checked);
-      state.setTermsAccepted(isTermsAccepted);
-      if (isTermsAccepted && authErrorMessage.includes('شروط الاستخدام')) {
-        authErrorMessage = '';
+      state.setTermsAccepted(isTermsAccepted, true);
+      if (isTermsAccepted && termsBox) {
+        termsBox.className =
+          'flex items-start gap-3 px-3 py-2 rounded-2xl border border-transparent transition-all';
+        if (authErrorMessage.includes('شروط الاستخدام')) {
+          authErrorMessage = '';
+          const errEl = document.getElementById('auth-error-msg');
+          if (errEl) {
+            errEl.textContent = '';
+            errEl.classList.add('hidden');
+          }
+        }
       }
-      syncAuthMethodUI();
+    });
+  }
+
+  if (forgotPasswordBtn) {
+    forgotPasswordBtn.addEventListener('click', () => {
+      authSubView = 'forgot_password';
+      authErrorMessage = '';
+      authSuccessMessage = '';
+      refreshAuthStep();
+    });
+  }
+
+  if (backToAuthMainBtn) {
+    backToAuthMainBtn.addEventListener('click', () => {
+      authSubView = 'main';
+      authErrorMessage = '';
+      authSuccessMessage = '';
+      refreshAuthStep();
+    });
+  }
+
+  if (switchToLoginAfterConfirmBtn) {
+    switchToLoginAfterConfirmBtn.addEventListener('click', () => {
+      authMode = 'login';
+      authErrorMessage = '';
+      authSuccessMessage = 'أدخل كلمة المرور لتسجيل الدخول بعد فتح رابط التفعيل في بريدك.';
+      refreshAuthStep();
+    });
+  }
+
+  if (resendConfirmationBtn) {
+    resendConfirmationBtn.addEventListener('click', async () => {
+      if (isResendingConfirmation) return;
+      const targetEmail = (pendingConfirmationEmail || authEmail || '').trim();
+      if (!targetEmail) {
+        authErrorMessage = 'يرجى إدخال البريد الإلكتروني لإعادة إرسال رسالة التفعيل.';
+        authSuccessMessage = '';
+        refreshAuthStep();
+        return;
+      }
+
+      isResendingConfirmation = true;
+      authErrorMessage = '';
+      authSuccessMessage = '';
+      refreshAuthStep();
+
+      const res = await resendSignUpConfirmationEmail(targetEmail);
+      isResendingConfirmation = false;
+      if (res.success) {
+        authSuccessMessage = res.message || 'تم إرسال رابط التفعيل إلى بريدك الإلكتروني بنجاح.';
+        authErrorMessage = '';
+      } else {
+        authErrorMessage = res.errorMessage || 'تعذر إعادة إرسال رابط التفعيل حاليًا.';
+        authSuccessMessage = '';
+      }
+      refreshAuthStep();
+    });
+  }
+
+  if (authContinueBtn) {
+    authContinueBtn.addEventListener('click', async () => {
+      if (!state.isSupabaseAuthenticated() || state.isSupabasePasswordRecovery()) {
+        authErrorMessage = 'يرجى تسجيل الدخول بحساب مؤكد أولاً للمتابعة.';
+        refreshAuthStep();
+        return;
+      }
+      let bundle = state.getSupabaseAccountBundle();
+      if (!bundle?.exists || state.getSupabaseAuthError()) {
+        authContinueBtn.disabled = true;
+        authContinueBtn.classList.add('opacity-70', 'cursor-wait');
+        authContinueBtn.textContent = 'جاري التحقق من الحساب...';
+        const loaded = await state.retrySupabaseAccountLoad();
+        if (!loaded) {
+          authErrorMessage =
+            state.getSupabaseAuthError() ||
+            'تعذر تحميل بيانات الحساب من قاعدة البيانات. يرجى المحاولة مرة أخرى.';
+          refreshAuthStep();
+          return;
+        }
+        bundle = state.getSupabaseAccountBundle();
+        if (state.getOnboardingStep() !== 'auth_method') {
+          return;
+        }
+      }
+      if (bundle?.onboardingDone) {
+        state.setOnboardingStep('completed');
+      } else if (state.isOwnerDetailsCompleted()) {
+        state.setOnboardingStep('has_pet');
+      } else {
+        state.setTermsAccepted(true, true);
+        state.setOnboardingStep('owner_details');
+      }
+    });
+  }
+
+  if (authEmailForm) {
+    authEmailForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (isAuthSubmitting) return;
+
+      authEmail = (authEmailInput?.value || authEmail || '').trim();
+      authPassword = authPasswordInput?.value || authPassword || '';
+      authErrorMessage = '';
+      authSuccessMessage = '';
+
+      if (authMode === 'signup') {
+        const checked = Boolean(termsCheckbox?.checked && isTermsAccepted);
+        if (!checked) {
+          authErrorMessage = 'يرجى الموافقة على شروط الاستخدام وسياسة الخصوصية أولاً لإنشاء الحساب.';
+          refreshAuthStep();
+          return;
+        }
+      }
+
+      if (state.isPreviewOnboardingMode()) {
+        authErrorMessage =
+          'أنت الآن في وضع المعاينة. لاختبار المصادقة الحقيقية، افتح التطبيق بدون ?preview=onboarding.';
+        refreshAuthStep();
+        return;
+      }
+
+      isAuthSubmitting = true;
+      refreshAuthStep();
+
+      try {
+        if (authMode === 'signup') {
+          const res = await signUpWithEmailPassword({
+            email: authEmail,
+            password: authPassword,
+          });
+
+          if (!res.success) {
+            isAuthSubmitting = false;
+            authErrorMessage = res.errorMessage || 'تعذر إنشاء الحساب. يرجى المحاولة مرة أخرى.';
+            if (res.errorCode === 'user_already_exists') {
+              pendingConfirmationEmail = '';
+            }
+            refreshAuthStep();
+            return;
+          }
+
+          if (res.needsEmailConfirmation || !res.session) {
+            isAuthSubmitting = false;
+            pendingConfirmationEmail = authEmail;
+            authSuccessMessage =
+              res.message ||
+              'تم إنشاء الحساب! يرجى تأكيد بريدك الإلكتروني عبر الرابط المرسل إليك قبل المتابعة.';
+            authErrorMessage = '';
+            refreshAuthStep();
+            return;
+          }
+
+          pendingConfirmationEmail = '';
+          const syncRes = await state.handleDirectSupabaseAuthSuccess(res.session);
+          isAuthSubmitting = false;
+          if (!syncRes.success) {
+            authErrorMessage =
+              syncRes.errorMessage || 'تم إنشاء الحساب لكن تعذر تحميل ملف الحساب. يرجى المحاولة مجددًا.';
+            refreshAuthStep();
+            return;
+          }
+          return;
+        }
+
+        // Login Mode
+        const res = await signInWithEmailPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+
+        if (!res.success || !res.session) {
+          isAuthSubmitting = false;
+          authErrorMessage = res.errorMessage || 'تعذر تسجيل الدخول. يرجى التحقق من البيانات.';
+          if (res.needsEmailConfirmation || res.errorCode === 'email_not_confirmed') {
+            pendingConfirmationEmail = authEmail;
+          }
+          refreshAuthStep();
+          return;
+        }
+
+        pendingConfirmationEmail = '';
+        const syncRes = await state.handleDirectSupabaseAuthSuccess(res.session);
+        isAuthSubmitting = false;
+        if (!syncRes.success) {
+          authErrorMessage =
+            syncRes.errorMessage || 'تم تسجيل الدخول لكن تعذر تحميل بيانات الحساب. يرجى المحاولة مجددًا.';
+          refreshAuthStep();
+          return;
+        }
+      } catch {
+        isAuthSubmitting = false;
+        authErrorMessage = 'حدث خطأ غير متوقع أثناء المصادقة. يرجى المحاولة مرة أخرى.';
+        refreshAuthStep();
+      }
+    });
+  }
+
+  if (recoveryEmailInput) {
+    recoveryEmailInput.addEventListener('input', () => {
+      authEmail = recoveryEmailInput.value;
+    });
+  }
+
+  if (forgotPasswordForm) {
+    forgotPasswordForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (isSendingRecovery) return;
+      authEmail = (recoveryEmailInput?.value || authEmail || '').trim();
+      authErrorMessage = '';
+      authSuccessMessage = '';
+
+      isSendingRecovery = true;
+      refreshAuthStep();
+
+      const res = await sendPasswordRecoveryEmail(authEmail);
+      isSendingRecovery = false;
+      if (res.success) {
+        authSuccessMessage =
+          res.message ||
+          'إذا كان البريد الإلكتروني مسجلًا لدينا، فقد تم إرسال رابط استعادة كلمة المرور إليه.';
+      } else {
+        authErrorMessage = res.errorMessage || 'تعذر إرسال رابط استعادة كلمة المرور.';
+      }
+      refreshAuthStep();
+    });
+  }
+
+  if (recoveryNewPasswordInput) {
+    recoveryNewPasswordInput.addEventListener('input', () => {
+      authNewPassword = recoveryNewPasswordInput.value;
+    });
+  }
+
+  if (recoveryConfirmPasswordInput) {
+    recoveryConfirmPasswordInput.addEventListener('input', () => {
+      authConfirmPassword = recoveryConfirmPasswordInput.value;
+    });
+  }
+
+  if (toggleRecoveryPwBtn) {
+    toggleRecoveryPwBtn.addEventListener('click', () => {
+      showRecoveryPassword = !showRecoveryPassword;
+      if (recoveryNewPasswordInput) {
+        recoveryNewPasswordInput.type = showRecoveryPassword ? 'text' : 'password';
+      }
+      if (recoveryConfirmPasswordInput) {
+        recoveryConfirmPasswordInput.type = showRecoveryPassword ? 'text' : 'password';
+      }
+      const icon = toggleRecoveryPwBtn.querySelector('i');
+      if (icon) {
+        icon.className = `fa-solid ${showRecoveryPassword ? 'fa-eye-slash' : 'fa-eye'}`;
+      }
+    });
+  }
+
+  if (recoveryPasswordForm) {
+    recoveryPasswordForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (isUpdatingPassword) return;
+      authNewPassword = recoveryNewPasswordInput?.value || authNewPassword || '';
+      authConfirmPassword = recoveryConfirmPasswordInput?.value || authConfirmPassword || '';
+      authErrorMessage = '';
+      authSuccessMessage = '';
+
+      if (authNewPassword.length < 6) {
+        authErrorMessage = 'كلمة المرور الجديدة يجب أن تتكون من 6 أحرف على الأقل.';
+        refreshAuthStep();
+        return;
+      }
+      if (authNewPassword !== authConfirmPassword) {
+        authErrorMessage = 'كلمتا المرور غير متطابقتين. يرجى التأكد وإعادة الإدخال.';
+        refreshAuthStep();
+        return;
+      }
+
+      isUpdatingPassword = true;
+      refreshAuthStep();
+
+      const res = await updateSupabasePassword(authNewPassword);
+      isUpdatingPassword = false;
+      if (!res.success) {
+        authErrorMessage = res.errorMessage || 'تعذر تحديث كلمة المرور حاليًا.';
+        refreshAuthStep();
+        return;
+      }
+
+      authNewPassword = '';
+      authConfirmPassword = '';
+      authSuccessMessage = res.message || 'تم تحديث كلمة المرور بنجاح.';
+      await state.completePasswordRecoveryFlow(res.session);
+    });
+  }
+
+  if (cancelRecoverySignoutBtn) {
+    cancelRecoverySignoutBtn.addEventListener('click', async () => {
+      authNewPassword = '';
+      authConfirmPassword = '';
+      authErrorMessage = '';
+      authSuccessMessage = '';
+      await state.signOutSupabaseAccount();
+      authMode = 'login';
+      refreshAuthStep();
+    });
+  }
+
+  if (loginGoogleBtn) {
+    loginGoogleBtn.addEventListener('click', async () => {
+      if (isGoogleSubmitting || isAuthSubmitting) return;
+      authErrorMessage = '';
+      authSuccessMessage = '';
+
+      if (authMode === 'signup') {
+        const checked = Boolean(termsCheckbox?.checked && isTermsAccepted);
+        if (!checked) {
+          authErrorMessage = 'يرجى الموافقة على شروط الاستخدام وسياسة الخصوصية أولاً لإنشاء الحساب.';
+          refreshAuthStep();
+          return;
+        }
+      } else {
+        state.setTermsAccepted(true, true);
+      }
+
+      isGoogleSubmitting = true;
+      refreshAuthStep();
+
+      try {
+        const res = await signInWithGoogleOAuth();
+        isGoogleSubmitting = false;
+
+        if (!res.success || !res.account) {
+          authErrorMessage =
+            res.errorMessage || 'تعذر إتمام تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
+          refreshAuthStep();
+          return;
+        }
+
+        const completed = state.completeGoogleAuthentication(res.account, authMode);
+        if (!completed) {
+          authErrorMessage = 'تعذر إكمال تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
+          refreshAuthStep();
+        }
+      } catch {
+        isGoogleSubmitting = false;
+        authErrorMessage = 'تعذر إتمام تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
+        refreshAuthStep();
+      }
     });
   }
 
   if (toggleAuthModeBtn) {
     toggleAuthModeBtn.addEventListener('click', () => {
       authMode = authMode === 'login' ? 'signup' : 'login';
+      authSubView = 'main';
       authErrorMessage = '';
-      selectedAuthMethod = null;
+      authSuccessMessage = '';
       state.setOnboardingStep('auth_method');
     });
   }
 
-  attachOwnerDetailsFormEvents(onboardingOwnerFormState, (payload) => {
-    state.setOwnerDetailsCompleted(
+  attachOwnerDetailsFormEvents(onboardingOwnerFormState, async (payload) => {
+    const result = await state.saveOwnerDetailsAndAdvance(
       payload.name,
       payload.city,
       payload.phone,
@@ -1431,6 +2096,7 @@ export function attachOnboardingEvents(): void {
       payload.governorate,
       payload.extraLoc
     );
+    return result;
   });
   attachRemainingOnboardingEvents();
 }
@@ -1451,7 +2117,7 @@ function attachOwnerDetailsFormEvents(
       markaz?: string;
       village?: string;
     };
-  }) => void
+  }) => Promise<{ success: boolean; errorMessage?: string }> | { success: boolean; errorMessage?: string } | void
 ): void {
   const ownerNameInput = document.getElementById('owner-full-name-input') as HTMLInputElement | null;
   const ownerPhoneInput = document.getElementById('owner-phone-number-input') as HTMLInputElement | null;
@@ -1612,9 +2278,12 @@ function attachOwnerDetailsFormEvents(
   });
 
   const ownerForm = document.getElementById('owner-details-form');
+  const ownerSubmitBtn = document.getElementById('btn-owner-submit') as HTMLButtonElement | null;
   if (ownerForm) {
-    ownerForm.addEventListener('submit', (e) => {
+    ownerForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isSavingOwnerDetails) return;
+
       const name = (ownerNameInput?.value || '').trim();
       const phoneRaw = (ownerPhoneInput?.value || '').trim();
       const govIdVal = (ownerGovSelect?.getValue() || formState.govId || '').trim();
@@ -1679,21 +2348,52 @@ function attachOwnerDetailsFormEvents(
       const cityNode = getGeoNodeById(cityIdVal);
       const villageNode = getGeoNodeById(villageIdVal);
 
-      onValidSubmit({
-        name,
-        city: cityNode?.name || '',
-        phone: phoneCheck.normalized,
-        gender: formState.gender!,
-        governorate: govNode?.name || '',
-        extraLoc: {
-          governorateId: govIdVal,
-          markazId: markazIdVal,
-          cityId: cityIdVal,
-          villageId: villageIdVal || undefined,
-          markaz: markazNode?.name || undefined,
-          village: villageNode?.name || undefined,
-        },
-      });
+      const originalLabel = ownerSubmitBtn?.innerHTML || '';
+      isSavingOwnerDetails = true;
+      if (ownerSubmitBtn) {
+        ownerSubmitBtn.disabled = true;
+        ownerSubmitBtn.classList.add('opacity-70', 'cursor-wait');
+        ownerSubmitBtn.innerHTML = '<span>جاري حفظ البيانات...</span>';
+      }
+
+      try {
+        const result = await onValidSubmit({
+          name,
+          city: cityNode?.name || '',
+          phone: phoneCheck.normalized,
+          gender: formState.gender!,
+          governorate: govNode?.name || '',
+          extraLoc: {
+            governorateId: govIdVal,
+            markazId: markazIdVal,
+            cityId: cityIdVal,
+            villageId: villageIdVal || undefined,
+            markaz: markazNode?.name || undefined,
+            village: villageNode?.name || undefined,
+          },
+        });
+
+        if (result && !result.success) {
+          if (ownerFormError) {
+            ownerFormError.textContent =
+              result.errorMessage || 'تعذر حفظ البيانات. يرجى المحاولة مرة أخرى.';
+            ownerFormError.classList.remove('hidden');
+            ownerFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      } catch {
+        if (ownerFormError) {
+          ownerFormError.textContent = 'حدث خطأ أثناء حفظ البيانات. يرجى المحاولة مرة أخرى.';
+          ownerFormError.classList.remove('hidden');
+        }
+      } finally {
+        isSavingOwnerDetails = false;
+        if (ownerSubmitBtn) {
+          ownerSubmitBtn.disabled = false;
+          ownerSubmitBtn.classList.remove('opacity-70', 'cursor-wait');
+          if (originalLabel) ownerSubmitBtn.innerHTML = originalLabel;
+        }
+      }
     });
   }
 }
@@ -1707,9 +2407,8 @@ export function attachOwnerEditEvents(): void {
     });
   }
 
-  attachOwnerDetailsFormEvents(editOwnerFormState, (payload) => {
-    isEditOwnerDraftActive = false;
-    state.updateUserInfo(
+  attachOwnerDetailsFormEvents(editOwnerFormState, async (payload) => {
+    const res = await state.saveOwnerEditWithSupabase(
       payload.name,
       payload.city,
       payload.phone,
@@ -1717,7 +2416,11 @@ export function attachOwnerEditEvents(): void {
       payload.governorate,
       payload.extraLoc
     );
-    state.setEditOwnerModalVisible(false);
+    if (res.success) {
+      isEditOwnerDraftActive = false;
+      state.setEditOwnerModalVisible(false);
+    }
+    return res;
   });
 }
 
@@ -1727,15 +2430,28 @@ function attachRemainingOnboardingEvents(): void {
   const hasPetYesBtn = document.getElementById('btn-has-pet-yes');
   if (hasPetYesBtn) {
     hasPetYesBtn.addEventListener('click', () => {
+      if (isCompletingOnboarding) return;
+      hasPetErrorMessage = '';
       state.setOnboardingStep('pet_details');
     });
   }
 
-  // Has Pet: No (لا) -> Completes onboarding
+  // Has Pet: No (لا) -> Completes onboarding after confirming save in Supabase
   const hasPetNoBtn = document.getElementById('btn-has-pet-no');
   if (hasPetNoBtn) {
-    hasPetNoBtn.addEventListener('click', () => {
-      state.setOnboardingStep('completed');
+    hasPetNoBtn.addEventListener('click', async () => {
+      if (isCompletingOnboarding) return;
+      isCompletingOnboarding = true;
+      hasPetErrorMessage = '';
+      state.setOnboardingStep('has_pet');
+
+      const res = await state.completeOnboardingWithSupabase();
+      isCompletingOnboarding = false;
+      if (!res.success) {
+        hasPetErrorMessage =
+          res.errorMessage || 'تعذر إتمام التسجيل حاليًا. يرجى المحاولة مرة أخرى.';
+        state.setOnboardingStep('has_pet');
+      }
     });
   }
 
@@ -1978,9 +2694,11 @@ function attachRemainingOnboardingEvents(): void {
 
   // Pet Details Form Submit ("نونو على الكلام") — Strict Mandatory Field Gate
   const petForm = document.getElementById('pet-details-form');
+  const petSubmitBtn = document.getElementById('btn-pet-submit') as HTMLButtonElement | null;
   if (petForm) {
-    petForm.addEventListener('submit', (e) => {
+    petForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isCompletingOnboarding) return;
       const name = (petNameInput?.value || '').trim();
       const color = (petColorInput?.value || '').trim();
       const breed = (breedSelect?.value || '').trim();
@@ -2055,36 +2773,62 @@ function attachRemainingOnboardingEvents(): void {
         petFormError.classList.add('hidden');
       }
 
-      const currentUser = state.getUser();
-      state.savePet({
-        name,
-        breed,
-        hybridBreed: hybridBreed || undefined,
-        color,
-        species: selectedPetSpecies!,
-        gender: selectedPetGender!,
-        photos: validPhotos,
-        ageYears,
-        ageMonths,
-        area: currentUser.village || currentUser.city || currentUser.governorate || 'القاهرة',
-        city: currentUser.city || currentUser.governorate || 'القاهرة',
-        governorate: currentUser.governorate || 'القاهرة',
-        markaz: currentUser.markaz,
-        village: currentUser.village,
-        governorateId: currentUser.governorateId,
-        markazId: currentUser.markazId,
-        cityId: currentUser.cityId,
-        villageId: currentUser.villageId,
-        locationId: currentUser.locationId,
-        lat: currentUser.lat,
-        lng: currentUser.lng,
-        healthNotes: notes || '',
-        personality: Array.from(selectedTraits),
-        vaccinationStatus: selectedVaccination === 'yes' ? 'fully_vaccinated' : 'not_vaccinated',
-        status: 'mating',
-      });
+      if (!hasSavedOnboardingPet) {
+        const currentUser = state.getUser();
+        state.savePet({
+          name,
+          breed,
+          hybridBreed: hybridBreed || undefined,
+          color,
+          species: selectedPetSpecies!,
+          gender: selectedPetGender!,
+          photos: validPhotos,
+          ageYears,
+          ageMonths,
+          area: currentUser.village || currentUser.city || currentUser.governorate || 'القاهرة',
+          city: currentUser.city || currentUser.governorate || 'القاهرة',
+          governorate: currentUser.governorate || 'القاهرة',
+          markaz: currentUser.markaz,
+          village: currentUser.village,
+          governorateId: currentUser.governorateId,
+          markazId: currentUser.markazId,
+          cityId: currentUser.cityId,
+          villageId: currentUser.villageId,
+          locationId: currentUser.locationId,
+          lat: currentUser.lat,
+          lng: currentUser.lng,
+          healthNotes: notes || '',
+          personality: Array.from(selectedTraits),
+          vaccinationStatus: selectedVaccination === 'yes' ? 'fully_vaccinated' : 'not_vaccinated',
+          status: 'mating',
+        });
+        hasSavedOnboardingPet = true;
+      }
 
-      state.setOnboardingStep('completed');
+      isCompletingOnboarding = true;
+      const originalLabel = petSubmitBtn?.innerHTML || '';
+      if (petSubmitBtn) {
+        petSubmitBtn.disabled = true;
+        petSubmitBtn.classList.add('opacity-70', 'cursor-wait');
+        petSubmitBtn.innerHTML = '<span>جاري إتمام التسجيل...</span>';
+      }
+
+      try {
+        const res = await state.completeOnboardingWithSupabase();
+        if (!res.success && petFormError) {
+          petFormError.textContent =
+            res.errorMessage || 'تعذر تأكيد إتمام التسجيل حاليًا. يرجى المحاولة مرة أخرى.';
+          petFormError.classList.remove('hidden');
+          petFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      } finally {
+        isCompletingOnboarding = false;
+        if (petSubmitBtn) {
+          petSubmitBtn.disabled = false;
+          petSubmitBtn.classList.remove('opacity-70', 'cursor-wait');
+          if (originalLabel) petSubmitBtn.innerHTML = originalLabel;
+        }
+      }
     });
   }
 }

@@ -2,6 +2,7 @@ import { state } from '../../state.ts';
 import { Pet, PetSpecies, PetGender, VaccinationStatus } from '../../types.ts';
 import { CAT_BREEDS, DOG_BREEDS } from '../../data/egyptLocations.ts';
 import { PERSONALITY_TRAITS } from '../views/OnboardingView.ts';
+import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
 
 function escapeAttr(value: string): string {
   return value
@@ -91,31 +92,34 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
   const petNameColorClass = getPetNameTextColorClass(selectedGender);
 
   return `
-    <div id="add-pet-modal-backdrop" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in" dir="rtl">
-      <div class="bg-[#FFF9E9] rounded-3xl max-w-lg w-full border-2 border-[#d6c7b2] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col relative text-[#2d221b] animate-scale-up">
+    <div id="add-pet-modal-backdrop" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden animate-fade-in" dir="rtl">
+      <div id="add-pet-modal-sheet" class="bg-[#FFF9E9] rounded-t-[32px] rounded-b-none sm:rounded-3xl max-w-lg w-full border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl overflow-hidden my-0 sm:my-auto max-h-[92dvh] flex flex-col relative text-[#2d221b] animate-slide-up sm:animate-scale-up">
 
         <!-- Header matching Onboarding Step 6 & clean modal close -->
-        <div class="px-5 py-4 flex items-center justify-between border-b border-[#d6c7b2]/60 bg-[#FFF9E9]/95 sticky top-0 z-10">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <div class="w-10 h-10 rounded-2xl bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center text-lg shrink-0">
-              <i class="fa-solid fa-paw"></i>
+        <div id="add-pet-drag-handle" class="px-5 pt-2.5 pb-3.5 flex flex-col border-b border-[#d6c7b2]/60 bg-[#FFF9E9]/95 sticky top-0 z-10">
+          <div class="w-12 h-1.5 rounded-full bg-[#d6c7b2] mx-auto mb-2.5 sm:hidden cursor-grab active:cursor-grabbing"></div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-10 h-10 rounded-2xl bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center text-lg shrink-0">
+                <i class="fa-solid fa-paw"></i>
+              </div>
+              <h3 class="text-xl sm:text-2xl font-extrabold font-baloo text-[#1a1612] m-0 truncate">
+                ${isEdit ? `تعديل بيانات: ${escapeAttr(petToEdit!.name)}` : 'تسجيل بيانات المياو'}
+              </h3>
             </div>
-            <h3 class="text-xl sm:text-2xl font-extrabold font-baloo text-[#1a1612] m-0 truncate">
-              ${isEdit ? `تعديل بيانات: ${escapeAttr(petToEdit!.name)}` : 'تسجيل بيانات المياو'}
-            </h3>
+            <button
+              id="close-add-pet-modal-btn"
+              class="w-10 h-10 rounded-full bg-[#fffefc] border border-[#d6c7b2] hover:bg-[#e67e22] hover:text-white text-[#2d221b] flex items-center justify-center cursor-pointer transition text-base active:scale-90 shrink-0"
+              type="button"
+              aria-label="إغلاق"
+            >
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
-          <button
-            id="close-add-pet-modal-btn"
-            class="w-9 h-9 rounded-full bg-[#fffefc] border border-[#d6c7b2] hover:bg-[#e67e22] hover:text-white text-[#2d221b] flex items-center justify-center cursor-pointer transition text-sm active:scale-90 shrink-0"
-            type="button"
-            aria-label="إغلاق"
-          >
-            <i class="fa-solid fa-xmark"></i>
-          </button>
         </div>
 
         <!-- Scrollable Form Body (Exact same fields, order, colors & design as Onboarding Step 6) -->
-        <form id="pet-form" novalidate class="p-5 overflow-y-auto space-y-5 flex-1 font-baloo">
+        <form id="pet-form" novalidate class="p-4 sm:p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-5 overflow-y-auto overscroll-contain space-y-5 flex-1 font-baloo">
 
           <!-- 1. عندك ايه (قطة / كلب) -->
           <div class="space-y-2">
@@ -180,7 +184,7 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                             <button
                               type="button"
                               data-clear-photo-slot="${idx}"
-                              class="clear-pet-photo-btn absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-black/65 hover:bg-black/85 text-white text-xs font-black flex items-center justify-center cursor-pointer transition shadow-sm"
+                              class="clear-pet-photo-btn absolute top-1.5 left-1.5 w-7 h-7 rounded-full bg-black/70 hover:bg-black/85 text-white text-sm font-black flex items-center justify-center cursor-pointer transition shadow-sm active:scale-90"
                               aria-label="إزالة الصورة"
                             >×</button>
                           `
@@ -194,29 +198,29 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
           </div>
 
           <!-- 3. اسم المياو واللون -->
-          <div class="grid grid-cols-2 gap-3.5">
-            <div class="space-y-2">
-              <label for="form-pet-name" class="block text-base font-bold text-[#2d221b]">اسم المياو</label>
+          <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
+            <div class="space-y-2 min-w-0">
+              <label for="form-pet-name" class="block text-sm sm:text-base font-bold text-[#2d221b]">اسم المياو</label>
               <div class="relative flex items-center h-16">
                 <input
                   type="text"
                   id="form-pet-name"
                   value="${escapeAttr(petName)}"
                   autocomplete="off"
-                  class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full min-w-0 h-16 py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base sm:text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
 
-            <div class="space-y-2">
-              <label for="form-pet-color" class="block text-base font-bold text-[#2d221b]">اللون</label>
+            <div class="space-y-2 min-w-0">
+              <label for="form-pet-color" class="block text-sm sm:text-base font-bold text-[#2d221b]">اللون</label>
               <div class="relative flex items-center h-16">
                 <input
                   type="text"
                   id="form-pet-color"
                   value="${escapeAttr(petColor)}"
                   autocomplete="off"
-                  class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full min-w-0 h-16 py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base sm:text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
@@ -224,20 +228,20 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
 
           <!-- 4. السلالة وسلالة هجينة (اختياري) + 5. العمر -->
           <div class="space-y-3.5">
-            <div class="grid grid-cols-2 gap-3.5">
-              <div class="space-y-2">
-                <label for="form-pet-breed" class="block text-base font-black text-[#2d221b]">السلالة</label>
+            <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
+              <div class="space-y-2 min-w-0">
+                <label for="form-pet-breed" class="block text-sm sm:text-base font-black text-[#2d221b]">السلالة</label>
                 <div class="relative flex items-center h-16">
                   <select
                     id="form-pet-breed"
                     ${selectedSpecies ? '' : 'disabled'}
-                    class="w-full h-16 py-3 pr-4 pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                    class="w-full min-w-0 h-16 py-3 pr-3.5 sm:pr-4 pl-9 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-sm sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
                       selectedSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
                     }"
                   >
                     ${renderBreedOptionsHtml(selectedSpecies, false, petBreed)}
                   </select>
-                  <div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+                  <div class="pointer-events-none absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
                     <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
                       <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
                     </svg>
@@ -245,19 +249,19 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                 </div>
               </div>
 
-              <div class="space-y-2">
-                <label for="form-pet-hybrid" class="block text-base font-black text-[#2d221b]">سلالة هجينة (اختياري)</label>
+              <div class="space-y-2 min-w-0">
+                <label for="form-pet-hybrid" class="block text-sm sm:text-base font-black text-[#2d221b] truncate">سلالة هجينة (اختياري)</label>
                 <div class="relative flex items-center h-16">
                   <select
                     id="form-pet-hybrid"
                     ${selectedSpecies ? '' : 'disabled'}
-                    class="w-full h-16 py-3 pr-4 pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                    class="w-full min-w-0 h-16 py-3 pr-3.5 sm:pr-4 pl-9 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-sm sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
                       selectedSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
                     }"
                   >
                     ${renderBreedOptionsHtml(selectedSpecies, true, petHybrid)}
                   </select>
-                  <div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+                  <div class="pointer-events-none absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
                     <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
                       <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
                     </svg>
@@ -450,6 +454,7 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
 export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   const closeBtn = document.getElementById('close-add-pet-modal-btn');
   const backdrop = document.getElementById('add-pet-modal-backdrop');
+  const sheet = document.getElementById('add-pet-modal-sheet');
   const form = document.getElementById('pet-form') as HTMLFormElement | null;
 
   const handleClose = () => {
@@ -460,6 +465,14 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   if (backdrop) {
     backdrop.addEventListener('click', (e) => {
       if (e.target === backdrop) handleClose();
+    });
+  }
+  if (sheet) {
+    attachSheetDragToDismiss(sheet, {
+      backdropEl: backdrop,
+      handleSelector: '#add-pet-drag-handle',
+      scrollContainerSelector: '#pet-form',
+      onClose: handleClose,
     });
   }
 
@@ -592,7 +605,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
       clearBtn.type = 'button';
       clearBtn.setAttribute('data-clear-photo-slot', String(idx));
       clearBtn.className =
-        'clear-pet-photo-btn absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-black/65 hover:bg-black/85 text-white text-xs font-black flex items-center justify-center cursor-pointer transition shadow-sm';
+        'clear-pet-photo-btn absolute top-1.5 left-1.5 w-7 h-7 rounded-full bg-black/70 hover:bg-black/85 text-white text-sm font-black flex items-center justify-center cursor-pointer transition shadow-sm active:scale-90';
       clearBtn.setAttribute('aria-label', 'إزالة الصورة');
       clearBtn.textContent = '×';
       clearBtn.addEventListener('click', (ev) => {

@@ -7,6 +7,7 @@ import {
   formatPetLocation,
   formatVaccinationStatus as formatVaccination,
 } from '../../utils/petFormatters.ts';
+import { attachHorizontalCarouselSwipe } from '../../utils/touchGestures.ts';
 
 let activePhotoIndex = 0;
 let lastOpenedPetId: string | null = null;
@@ -348,7 +349,7 @@ function renderGroupMemberIndividualCard(
     >
       <!-- Member's Own Dedicated Photo Carousel (Locked 4/4.3 aspect ratio + light bottom black gradient) -->
       <div
-        class="relative w-full aspect-[4/4.3] bg-[#f3ebdd] overflow-hidden select-none"
+        class="relative w-full aspect-[4/4.3] bg-[#f3ebdd] overflow-hidden select-none touch-pan-y"
         data-member-gallery="${member.petId}"
       >
         ${
@@ -645,7 +646,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
       </div>
 
       <!-- Main Profile Scrollable Content -->
-      <main class="w-full max-w-md mx-auto -mt-14 pb-32 flex-1 flex flex-col relative z-10">
+      <div class="w-full max-w-md mx-auto -mt-14 pb-32 flex-1 flex flex-col relative z-10 min-w-0">
         
         <!-- 1. Locked-Aspect Photo Gallery (Never stretches vertically regardless of photo proportions) -->
         <div
@@ -982,7 +983,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
 
         </div>
 
-      </main>
+      </div>
 
       <!-- 6. Fixed Bottom Action Bar -->
       <footer class="fixed bottom-0 inset-x-0 z-40 bg-[#FFF9E9]/95 backdrop-blur-md border-t border-brand-peachBorder/60 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl">
@@ -1046,8 +1047,8 @@ export function renderPetDetailModal(pet: Pet | null): string {
       ${
         isConfirmationDialogOpen
           ? `
-          <div id="confirmation-dialog-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" dir="rtl">
-            <div class="bg-white w-full max-w-sm rounded-[34px] p-6 shadow-2xl border-2 border-brand-peachBorder space-y-4 animate-scale-up text-right">
+          <div id="confirmation-dialog-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+            <div class="bg-white w-full max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[34px] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 shadow-2xl border-2 border-b-0 sm:border-b-2 border-brand-peachBorder space-y-4 animate-slide-up text-right">
               
               <div class="flex items-center gap-3 pb-3 border-b border-brand-peachBorder/40">
                 <div class="w-12 h-12 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center text-2xl shrink-0">
@@ -1085,14 +1086,14 @@ export function renderPetDetailModal(pet: Pet | null): string {
                 <button
                   id="confirm-send-request-btn"
                   type="button"
-                  class="h-13 rounded-full bg-brand-orange text-white font-black text-sm sm:text-base shadow-soft hover:bg-brand-orangeHover transition-all active:scale-95 cursor-pointer font-baloo"
+                  class="h-[52px] rounded-full bg-brand-orange text-white font-black text-sm sm:text-base shadow-soft hover:bg-brand-orangeHover transition-all active:scale-95 cursor-pointer font-baloo"
                 >
                   تأكيد وإرسال ✓
                 </button>
                 <button
                   id="cancel-confirmation-btn"
                   type="button"
-                  class="h-13 rounded-full bg-white border-2 border-brand-peachBorder text-brand-dark font-black text-sm sm:text-base hover:bg-brand-peachBorder/20 transition-all active:scale-95 cursor-pointer font-baloo"
+                  class="h-[52px] rounded-full bg-white border-2 border-brand-peachBorder text-brand-dark font-black text-sm sm:text-base hover:bg-brand-peachBorder/20 transition-all active:scale-95 cursor-pointer font-baloo"
                 >
                   إلغاء
                 </button>
@@ -1265,6 +1266,7 @@ export function attachPetDetailModalEvents(pet: Pet | null): void {
       const mCount = mPhotos.length;
       if (mCount <= 1) return;
 
+      const mViewport = document.querySelector<HTMLElement>(`[data-member-gallery="${member.petId}"]`);
       const mTrack = document.querySelector<HTMLElement>(`[data-member-track="${member.petId}"]`);
       const mCounter = document.querySelector<HTMLElement>(`[data-member-counter="${member.petId}"]`);
       const mDots = document.querySelectorAll<HTMLButtonElement>(`[data-member-dot="${member.petId}"]`);
@@ -1275,6 +1277,7 @@ export function attachPetDetailModalEvents(pet: Pet | null): void {
         const idx = (nextIdx + mCount) % mCount;
         memberPhotoIndices[member.petId] = idx;
         if (mTrack) {
+          mTrack.style.transition = '';
           mTrack.style.transform = `translate3d(-${idx * 100}%, 0, 0)`;
         }
         if (mCounter) {
@@ -1287,6 +1290,17 @@ export function attachPetDetailModalEvents(pet: Pet | null): void {
               : 'member-gallery-dot h-2 rounded-full transition-all duration-300 cursor-pointer pointer-events-auto w-2 bg-white/80 hover:bg-white';
         });
       };
+
+      if (mViewport && mTrack) {
+        attachHorizontalCarouselSwipe({
+          viewport: mViewport,
+          track: mTrack,
+          count: mCount,
+          getIndex: () => memberPhotoIndices[member.petId] || 0,
+          onChangeIndex: (idx) => syncMemberGallery(idx),
+          onSync: () => syncMemberGallery(memberPhotoIndices[member.petId] || 0),
+        });
+      }
 
       if (mPrev) {
         mPrev.addEventListener('click', (e) => {

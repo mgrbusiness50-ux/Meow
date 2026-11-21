@@ -1,6 +1,7 @@
 import { state } from '../../state.ts';
 import { getViewMode } from '../components/Header.ts';
 import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
+import { attachPullToRefresh, showMobileToast } from '../../utils/touchGestures.ts';
 
 export function renderAdoptionView(): string {
   const filters = state.getAdoptionFilters();
@@ -11,13 +12,13 @@ export function renderAdoptionView(): string {
   const loadingState = state.getFilteringLoadingState();
 
   return `
-    <main class="w-full max-w-md mx-auto px-4 pt-2 pb-24 flex-1 space-y-4">
+    <div id="adoption-view-root" class="w-full max-w-md mx-auto px-3.5 min-[360px]:px-4 pt-2 pb-24 flex-1 space-y-4">
       
       <!-- Dismissible Meow Advice Message (Small message with X button) -->
       ${
         !state.getIsAdviceDismissed()
           ? `
-          <div id="meow-adoption-advice-banner" class="bg-amber-50/90 dark:bg-[#342A24] border border-brand-peachBorder/70 dark:border-warm-darkBorder rounded-2xl px-4 py-3 flex items-center justify-between gap-3 text-sm text-brand-dark/90 dark:text-white shadow-2xs transition-all">
+          <div id="meow-adoption-advice-banner" class="bg-amber-50/90 dark:bg-[#342A24] border border-brand-peachBorder/70 dark:border-warm-darkBorder rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-sm text-brand-dark/90 dark:text-white shadow-sm transition-all">
             <div class="flex items-center gap-2.5 min-w-0">
               <span class="text-lg text-brand-orange shrink-0">💡</span>
               <p class="m-0 font-bold text-xs sm:text-sm leading-normal">
@@ -26,12 +27,12 @@ export function renderAdoptionView(): string {
             </div>
             <button
               id="dismiss-adoption-advice-btn"
-              class="w-6 h-6 rounded-full flex items-center justify-center text-brand-subtleGray dark:text-[#A89F91] hover:text-brand-orange hover:bg-black/5 dark:hover:bg-white/10 shrink-0 cursor-pointer transition active:scale-90"
+              class="w-9 h-9 rounded-full flex items-center justify-center text-brand-subtleGray dark:text-[#A89F91] hover:text-brand-orange hover:bg-black/5 dark:hover:bg-white/10 shrink-0 cursor-pointer transition active:scale-90"
               type="button"
               aria-label="إغلاق الرسالة"
               title="إغلاق"
             >
-              <i class="fa-solid fa-xmark text-xs"></i>
+              <i class="fa-solid fa-xmark text-sm"></i>
             </button>
           </div>
           `
@@ -126,7 +127,7 @@ export function renderAdoptionView(): string {
       ${
         loadingState.active
           ? `
-            <div id="adoption-loading-indicator" class="bg-[#fff5ea] border border-[#e67e22]/40 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-xs font-black text-[#786555] font-baloo shadow-2xs animate-fade-in">
+            <div id="adoption-loading-indicator" class="bg-[#fff5ea] border border-[#e67e22]/40 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-xs font-black text-[#786555] font-baloo shadow-sm animate-fade-in">
               <span class="w-4 h-4 rounded-full border-2 border-[#e67e22] border-t-transparent animate-spin shrink-0"></span>
               <span>${loadingState.label || 'جاري تحميل حالات التبني...'}</span>
             </div>
@@ -149,7 +150,7 @@ export function renderAdoptionView(): string {
           </div>
           `
           : `
-          <div class="${viewMode === 'grid' ? 'grid grid-cols-2 gap-4' : 'flex flex-col gap-4'}" data-purpose="pet-listings-grid">
+          <div class="${viewMode === 'grid' ? 'grid grid-cols-2 gap-3 sm:gap-4' : 'flex flex-col gap-4'}" data-purpose="pet-listings-grid">
             ${pets
               .map((pet) => {
                 const isGroup = pet.adoptionType === 'group';
@@ -196,7 +197,7 @@ export function renderAdoptionView(): string {
 
                     return `
                       <article
-                        class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                        class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                         data-pet-detail-id="${pet.id}"
                         data-pet-type="${pet.species || 'cat'}"
                       >
@@ -303,7 +304,7 @@ export function renderAdoptionView(): string {
 
                   return `
                     <article
-                      class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                      class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                       data-pet-detail-id="${pet.id}"
                       data-pet-type="${pet.species || 'cat'}"
                     >
@@ -557,7 +558,7 @@ export function renderAdoptionView(): string {
                             .slice(0, 3)
                             .map(
                               (trait) => `
-                              <span class="px-3 py-1 rounded-xl bg-white/25 backdrop-blur-md border border-white/30 text-white text-xs font-bold shadow-2xs font-baloo">
+                              <span class="px-3 py-1 rounded-xl bg-white/25 backdrop-blur-md border border-white/30 text-white text-xs font-bold shadow-sm font-baloo">
                                 ${trait}
                               </span>
                             `
@@ -575,7 +576,7 @@ export function renderAdoptionView(): string {
           `
       }
 
-    </main>
+    </div>
   `;
 }
 
@@ -671,5 +672,26 @@ export function attachAdoptionEvents(): void {
         state.setSelectedPetForRequest(pet);
       }
     });
+  });
+
+  attachPullToRefresh(document.getElementById('adoption-view-root'), {
+    isBlocked: () =>
+      Boolean(
+        state.isNotificationsOpen() ||
+          state.isSettingsOpen() ||
+          state.getSelectedPetForDetail() ||
+          state.getSelectedPetForRequest() ||
+          state.isAddPetModalVisible() ||
+          state.getIsFilterModalOpen() ||
+          state.isEditOwnerModalVisible() ||
+          state.isSavedPetsVisible() ||
+          state.isContactOpen() ||
+          state.getPendingBlockTarget() ||
+          state.getPendingReportTarget()
+      ),
+    onRefresh: () => {
+      state.refreshFeed('adoption');
+      showMobileToast('تم تحديث قائمة التبني', 'success', 1600);
+    },
   });
 }

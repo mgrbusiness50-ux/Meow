@@ -40,7 +40,7 @@ export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
   const alignClass = opts.dropdownAlign === 'right' ? 'right-0' : 'left-0';
   const btnClass =
     opts.buttonClass ||
-    'w-8 h-8 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/60 transition-all cursor-pointer active:scale-90';
+    'w-10 h-10 rounded-full bg-black/45 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/65 transition-all cursor-pointer active:scale-90';
   const targetType = opts.reportTargetType || (opts.conversationId ? 'chat' : 'pet');
 
   return `
@@ -55,7 +55,7 @@ export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
       </button>
 
       <div
-        class="meow-more-dropdown hidden absolute top-full ${alignClass} mt-1.5 min-w-[178px] rounded-2xl bg-white border border-brand-peachBorder shadow-2xl py-1.5 px-1.5 z-[65] text-right space-y-0.5"
+        class="meow-more-dropdown hidden absolute top-full ${alignClass} mt-1.5 min-w-[186px] rounded-2xl bg-white border border-brand-peachBorder shadow-2xl py-1.5 px-1.5 z-[65] text-right space-y-0.5"
         role="menu"
       >
         ${
@@ -63,7 +63,7 @@ export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
             ? `
             <button
               type="button"
-              class="meow-pin-conv-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-black text-brand-dark hover:bg-brand-orange/10 hover:text-brand-orange transition-colors cursor-pointer font-baloo text-right"
+              class="meow-pin-conv-btn w-full min-h-[44px] flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-black text-brand-dark hover:bg-brand-orange/10 hover:text-brand-orange transition-colors cursor-pointer font-baloo text-right"
               data-pin-conversation-id="${escapeAttr(opts.conversationId)}"
               role="menuitem"
             >
@@ -76,7 +76,7 @@ export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
 
         <button
           type="button"
-          class="meow-report-action-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-black text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer font-baloo text-right"
+          class="meow-report-action-btn w-full min-h-[44px] flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-black text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer font-baloo text-right"
           data-report-user-id="${escapeAttr(opts.userId)}"
           data-report-user-name="${escapeAttr(opts.userName)}"
           data-report-user-avatar="${escapeAttr(opts.userAvatar || '')}"
@@ -92,7 +92,7 @@ export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
 
         <button
           type="button"
-          class="meow-block-action-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-black text-red-600 hover:bg-red-50 transition-colors cursor-pointer font-baloo text-right"
+          class="meow-block-action-btn w-full min-h-[44px] flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-black text-red-600 hover:bg-red-50 transition-colors cursor-pointer font-baloo text-right"
           data-block-user-id="${escapeAttr(opts.userId)}"
           data-block-user-name="${escapeAttr(opts.userName)}"
           data-block-user-avatar="${escapeAttr(opts.userAvatar || '')}"
@@ -109,7 +109,7 @@ export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
             <div class="my-1 border-t border-brand-peachBorder/50"></div>
             <button
               type="button"
-              class="meow-delete-conv-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-black text-red-600 hover:bg-red-50 transition-colors cursor-pointer font-baloo text-right"
+              class="meow-delete-conv-btn w-full min-h-[44px] flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-black text-red-600 hover:bg-red-50 transition-colors cursor-pointer font-baloo text-right"
               data-delete-conversation-id="${escapeAttr(opts.conversationId)}"
               role="menuitem"
             >
@@ -254,8 +254,11 @@ export function renderBlockConfirmModal(): string {
   if (!target) return '';
 
   return `
-    <div id="meow-block-confirm-backdrop" class="fixed inset-0 z-[90] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" dir="rtl">
-      <div class="bg-white w-full max-w-sm rounded-[28px] p-6 shadow-2xl border-2 border-red-200 space-y-4 animate-scale-up text-right">
+    <div id="meow-block-confirm-backdrop" class="fixed inset-0 z-[90] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+      <div class="bg-white w-full max-w-sm rounded-t-[32px] sm:rounded-[28px] p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl border-t-2 sm:border-2 border-red-200 space-y-4 animate-slide-up sm:animate-scale-up text-right">
+        <div class="sm:hidden flex justify-center -mt-2 pb-1">
+          <span class="w-12 h-1.5 rounded-full bg-red-100"></span>
+        </div>
         
         <div class="flex items-center gap-3 pb-3 border-b border-red-100">
           <div class="w-12 h-12 rounded-2xl bg-red-500/15 text-red-600 flex items-center justify-center text-xl shrink-0">
@@ -338,9 +341,12 @@ export function renderReportModal(): string {
       : target.targetUserName;
 
   return `
-    <div id="meow-report-modal-backdrop" class="fixed inset-0 z-[95] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" dir="rtl">
-      <div class="bg-white w-full max-w-sm rounded-[28px] p-6 shadow-2xl border-2 border-brand-peachBorder space-y-4 animate-scale-up text-right max-h-[90vh] overflow-y-auto">
-        
+    <div id="meow-report-modal-backdrop" class="fixed inset-0 z-[95] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+      <div class="bg-white w-full max-w-sm rounded-t-[32px] sm:rounded-[28px] p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl border-t-2 sm:border-2 border-brand-peachBorder space-y-4 animate-slide-up sm:animate-scale-up text-right max-h-[90dvh] overflow-y-auto overscroll-contain">
+        <div class="sm:hidden flex justify-center -mt-2 pb-1">
+          <span class="w-12 h-1.5 rounded-full bg-brand-peachBorder"></span>
+        </div>
+
         <div class="flex items-center justify-between gap-2 pb-3 border-b border-brand-peachBorder/50">
           <div class="flex items-center gap-3 min-w-0">
             <div class="w-11 h-11 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center text-lg shrink-0">
@@ -358,7 +364,7 @@ export function renderReportModal(): string {
           <button
             id="close-report-modal-btn"
             type="button"
-            class="w-8 h-8 rounded-full bg-brand-peachBorder/30 text-brand-dark flex items-center justify-center text-xs cursor-pointer hover:bg-brand-orange hover:text-white transition shrink-0"
+            class="w-10 h-10 rounded-full bg-brand-peachBorder/30 text-brand-dark flex items-center justify-center text-sm cursor-pointer hover:bg-brand-orange hover:text-white transition shrink-0"
             aria-label="إغلاق"
           >
             <i class="fa-solid fa-xmark"></i>
@@ -492,7 +498,7 @@ export function renderReportSubmittedToast(): string {
   if (!notice) return '';
 
   return `
-    <div id="meow-report-notice-toast" class="fixed top-4 inset-x-4 z-[96] max-w-md mx-auto bg-white border-2 border-emerald-200 rounded-2xl p-4 shadow-xl flex items-start justify-between gap-3 text-right animate-fade-in" dir="rtl">
+    <div id="meow-report-notice-toast" class="fixed inset-x-4 z-[96] max-w-md mx-auto bg-white border-2 border-emerald-200 rounded-2xl p-4 shadow-xl flex items-start justify-between gap-3 text-right animate-fade-in" style="top: max(1rem, env(safe-area-inset-top));" dir="rtl">
       <div class="flex items-start gap-2.5 min-w-0">
         <div class="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
           <i class="fa-solid fa-circle-check"></i>
@@ -509,7 +515,7 @@ export function renderReportSubmittedToast(): string {
       <button
         id="dismiss-report-notice-btn"
         type="button"
-        class="w-7 h-7 rounded-full bg-brand-peachBorder/30 text-brand-dark flex items-center justify-center text-xs cursor-pointer shrink-0 hover:bg-brand-orange hover:text-white transition"
+        class="w-9 h-9 rounded-full bg-brand-peachBorder/30 text-brand-dark flex items-center justify-center text-sm cursor-pointer shrink-0 hover:bg-brand-orange hover:text-white transition"
         aria-label="إغلاق الإشعار"
       >
         <i class="fa-solid fa-xmark"></i>

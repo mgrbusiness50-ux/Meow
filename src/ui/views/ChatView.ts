@@ -6,6 +6,12 @@ import {
   formatPetSpeciesShort,
   formatVaccinationStatus,
 } from '../../utils/petFormatters.ts';
+import {
+  attachLongPress,
+  attachPullToRefresh,
+  attachSheetDragToDismiss,
+  showMobileToast,
+} from '../../utils/touchGestures.ts';
 
 let chatCategoryFilter: 'all' | 'mating' | 'adoption' | 'clinics' = 'all';
 let isStickersOpen = false;
@@ -145,16 +151,16 @@ export function renderChatView(): string {
   });
 
   return `
-    <main class="w-full max-w-md mx-auto px-4 pt-3 pb-24 flex-1">
+    <div id="chat-list-view-root" class="w-full max-w-md mx-auto px-3.5 sm:px-4 pt-3 pb-6 flex-1 min-w-0">
 
       <!-- Categories & Filters Order (1. الكل, 2. التزاوج, 3. التبني, 4. العيادات) - Enlarged Pill Buttons -->
       <div class="mb-4 flex flex-col gap-3">
-        <div class="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1">
+        <div class="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1" data-no-ptr="true">
           <!-- 1. الكل -->
           <button
             data-chat-filter="all"
             type="button"
-            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-xs ${
+            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
               chatCategoryFilter === 'all'
                 ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
                 : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
@@ -167,7 +173,7 @@ export function renderChatView(): string {
           <button
             data-chat-filter="mating"
             type="button"
-            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-xs ${
+            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
               chatCategoryFilter === 'mating'
                 ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
                 : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
@@ -180,7 +186,7 @@ export function renderChatView(): string {
           <button
             data-chat-filter="adoption"
             type="button"
-            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-xs ${
+            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
               chatCategoryFilter === 'adoption'
                 ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
                 : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
@@ -194,7 +200,7 @@ export function renderChatView(): string {
             <button
               data-chat-filter="clinics"
               type="button"
-              class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] opacity-80 hover:opacity-100 flex items-center gap-2 shadow-xs ${
+              class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] opacity-80 hover:opacity-100 flex items-center gap-2 shadow-sm ${
                 chatCategoryFilter === 'clinics' ? 'border-brand-orange bg-brand-orange/10' : ''
               }"
             >
@@ -208,7 +214,7 @@ export function renderChatView(): string {
         </div>
 
         <!-- Switcher Between Active Chats & Contact Requests - Enlarged Pill Switcher -->
-        <div class="bg-white/90 dark:bg-[#27201B] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-full p-1.5 flex items-center gap-1.5 shadow-2xs">
+        <div class="bg-white/90 dark:bg-[#27201B] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-full p-1.5 flex items-center gap-1.5 shadow-sm">
           <button
             id="subtab-chats-btn"
             type="button"
@@ -251,7 +257,7 @@ export function renderChatView(): string {
           <div class="bg-white/80 dark:bg-[#27201B]/80 border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-8 text-center space-y-4 shadow-card" dir="rtl">
             <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-brand-orange/20 to-brand-peachBorder/40 dark:from-brand-orange/30 dark:to-warm-darkBorder text-brand-orange flex items-center justify-center mx-auto text-3xl border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder shadow-soft relative">
               <i class="fa-solid fa-house-medical text-3xl text-brand-orange drop-shadow-sm"></i>
-              <span class="absolute -bottom-1 -right-1 w-7 h-7 bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder rounded-full flex items-center justify-center text-brand-orange text-xs shadow-2xs">
+              <span class="absolute -bottom-1 -right-1 w-7 h-7 bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder rounded-full flex items-center justify-center text-brand-orange text-xs shadow-sm">
                 <i class="fa-solid fa-stethoscope"></i>
               </span>
             </div>
@@ -269,7 +275,7 @@ export function renderChatView(): string {
           : renderRequestsList(requests)
       }
 
-    </main>
+    </div>
   `;
 }
 
@@ -442,7 +448,7 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                   showDeleteConversation: true,
                   reportTargetType: 'chat',
                   buttonClass:
-                    'w-8 h-8 rounded-full bg-brand-cream/80 hover:bg-brand-peachBorder/40 text-brand-subtleGray hover:text-brand-dark flex items-center justify-center transition cursor-pointer active:scale-90',
+                    'w-10 h-10 rounded-full bg-brand-cream/80 hover:bg-brand-peachBorder/40 text-brand-subtleGray hover:text-brand-dark flex items-center justify-center transition cursor-pointer active:scale-90',
                   dropdownAlign: 'left',
                 })}
                 <i class="fa-solid fa-chevron-left text-xs text-brand-subtleGray group-hover:text-brand-orange transition"></i>
@@ -479,7 +485,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
 
   return `
     <div class="space-y-3">
-      <div class="p-3.5 rounded-[24px] bg-brand-orange/10 border-2 border-brand-peachBorder/80 text-xs font-bold text-brand-dark flex items-center gap-2.5 shadow-2xs">
+      <div class="p-3.5 rounded-[24px] bg-brand-orange/10 border-2 border-brand-peachBorder/80 text-xs font-bold text-brand-dark flex items-center gap-2.5 shadow-sm">
         <i class="fa-solid fa-shield-halved text-brand-orange text-base shrink-0"></i>
         <span>${privacyNoticeText}</span>
       </div>
@@ -506,7 +512,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
             <div class="bg-white/95 border-2 border-brand-peachBorder rounded-[30px] p-4 shadow-sm space-y-2.5 text-right">
               <div class="flex items-center justify-between gap-2.5">
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <img src="${req.senderAvatar}" alt="${req.senderName}" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shadow-2xs shrink-0" />
+                  <img src="${req.senderAvatar}" alt="${req.senderName}" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shadow-sm shrink-0" />
                   <div class="min-w-0">
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <h4 class="text-sm sm:text-base font-black text-brand-dark truncate font-baloo m-0">${req.senderName}</h4>
@@ -542,7 +548,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                           petName: previewPet?.name || req.senderPetName || req.receiverPetName,
                           reportTargetType: 'request',
                           buttonClass:
-                            'w-8 h-8 rounded-full bg-brand-cream/80 hover:bg-brand-peachBorder/40 text-brand-subtleGray hover:text-brand-dark flex items-center justify-center transition cursor-pointer active:scale-90',
+                            'w-10 h-10 rounded-full bg-brand-cream/80 hover:bg-brand-peachBorder/40 text-brand-subtleGray hover:text-brand-dark flex items-center justify-center transition cursor-pointer active:scale-90',
                           dropdownAlign: 'left',
                         })
                       : ''
@@ -580,7 +586,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                       <button
                         type="button"
                         data-preview-request-id="${req.id}"
-                        class="preview-request-pet-btn h-8 px-3 rounded-full bg-white border border-brand-peachBorder hover:border-brand-orange text-brand-orange text-[11px] font-black transition cursor-pointer shrink-0 font-baloo"
+                        class="preview-request-pet-btn h-9 px-3.5 rounded-full bg-white border border-brand-peachBorder hover:border-brand-orange text-brand-orange text-xs font-black transition cursor-pointer shrink-0 font-baloo active:scale-95"
                       >
                         معاينة
                       </button>
@@ -619,7 +625,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                     <button
                       data-request-id="${req.id}"
                       data-other-user-id="${menuTargetUserId}"
-                      class="view-conversation-direct-btn h-9 px-4 rounded-full bg-white border-2 border-brand-orange text-brand-orange text-xs font-black hover:bg-brand-orange/10 transition active:scale-95 cursor-pointer font-baloo"
+                      class="view-conversation-direct-btn h-10 px-4 rounded-full bg-white border-2 border-brand-orange text-brand-orange text-xs font-black hover:bg-brand-orange/10 transition active:scale-95 cursor-pointer font-baloo"
                       type="button"
                     >
                       فتح المحادثة
@@ -676,12 +682,12 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
     <div id="active-chat-room" class="fixed inset-0 z-50 bg-[#FAF4ED] dark:bg-[#1A1512] flex flex-col w-full max-w-md mx-auto shadow-2xl h-[100dvh] overflow-hidden" dir="rtl">
       
       <!-- Top WhatsApp Header (Clean & Warm, Larger & Clear) -->
-      <header class="shrink-0 bg-[#FFF9E9] dark:bg-[#27201B] border-b-2 border-brand-peachBorder/70 dark:border-warm-darkBorder px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between shadow-xs z-30">
+      <header class="shrink-0 bg-[#FFF9E9] dark:bg-[#27201B] border-b-2 border-brand-peachBorder/70 dark:border-warm-darkBorder px-3.5 sm:px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between shadow-sm z-30">
         <div class="flex items-center gap-2.5 min-w-0">
           <!-- Back button -->
           <button 
             id="back-to-chats-btn" 
-            class="w-11 h-11 rounded-full bg-black/5 dark:bg-white/10 hover:bg-brand-orange hover:text-white text-brand-dark dark:text-white flex items-center justify-center text-base cursor-pointer transition active:scale-90 shadow-2xs shrink-0" 
+            class="w-11 h-11 rounded-full bg-black/5 dark:bg-white/10 hover:bg-brand-orange hover:text-white text-brand-dark dark:text-white flex items-center justify-center text-base cursor-pointer transition active:scale-90 shadow-sm shrink-0" 
             type="button"
             aria-label="الرجوع إلى المحادثات"
             title="رجوع"
@@ -694,7 +700,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             <img
               src="${conv.otherUserAvatar}"
               alt="${conv.otherUserName}"
-              class="w-12 h-12 rounded-full object-cover border-2 border-brand-orange shadow-xs"
+              class="w-12 h-12 rounded-full object-cover border-2 border-brand-orange shadow-sm"
             />
             <span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#27201B]"></span>
           </div>
@@ -722,7 +728,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               ? `
               <a 
                 href="tel:${conv.otherUserPhone}" 
-                class="w-11 h-11 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition shadow-2xs"
+                class="w-11 h-11 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition shadow-sm"
                 title="اتصال هاتفي"
                 aria-label="اتصال هاتفي"
               >
@@ -764,7 +770,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                           .slice(0, 3)
                           .map(
                             (t) => `
-                              <img src="${t.photo}" alt="${t.name}" class="w-8 h-8 rounded-xl object-cover border-2 border-white shadow-2xs" />
+                              <img src="${t.photo}" alt="${t.name}" class="w-8 h-8 rounded-xl object-cover border-2 border-white shadow-sm" />
                             `
                           )
                           .join('')}
@@ -790,14 +796,14 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                 <button
                   id="open-chat-pet-detail-btn"
                   type="button"
-                  class="px-2.5 py-1 rounded-full bg-white border border-brand-peachBorder text-[10px] font-black text-brand-dark hover:border-brand-orange hover:text-brand-orange transition cursor-pointer font-baloo"
+                  class="px-3 py-1.5 min-h-[34px] rounded-full bg-white border border-brand-peachBorder text-[11px] font-black text-brand-dark hover:border-brand-orange hover:text-brand-orange transition cursor-pointer font-baloo active:scale-95"
                 >
                   الملف الكامل
                 </button>
                 <button
                   id="toggle-chat-group-details-btn"
                   type="button"
-                  class="px-3 py-1 rounded-full bg-brand-orange/15 text-brand-orange text-[11px] font-black hover:bg-brand-orange hover:text-white transition cursor-pointer font-baloo flex items-center gap-1"
+                  class="px-3 py-1.5 min-h-[34px] rounded-full bg-brand-orange/15 text-brand-orange text-[11px] font-black hover:bg-brand-orange hover:text-white transition cursor-pointer font-baloo flex items-center gap-1 active:scale-95"
                 >
                   <span>${isGroupDetailsExpanded ? 'إخفاء' : 'الحيوانات'}</span>
                   <i class="fa-solid ${isGroupDetailsExpanded ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px]"></i>
@@ -938,7 +944,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             if (msg.senderId === 'system') {
               return `
                 <div class="flex justify-center my-2.5 select-none">
-                  <span class="px-4 py-2 rounded-full bg-white/90 dark:bg-[#27201B]/90 border border-brand-peachBorder/70 dark:border-warm-darkBorder text-xs sm:text-[13px] font-bold text-brand-orange text-center max-w-[88%] shadow-2xs leading-relaxed font-baloo">
+                  <span class="px-4 py-2 rounded-full bg-white/90 dark:bg-[#27201B]/90 border border-brand-peachBorder/70 dark:border-warm-darkBorder text-xs sm:text-[13px] font-bold text-brand-orange text-center max-w-[88%] shadow-sm leading-relaxed font-baloo">
                     ${msg.text}
                   </span>
                 </div>
@@ -999,7 +1005,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                         ${
                           msg.fileUrl
                             ? `
-                            <a href="${msg.fileUrl}" download="${msg.fileName || 'meow_file'}" class="w-7 h-7 rounded-full bg-brand-orange text-white flex items-center justify-center text-xs shrink-0" title="تحميل">
+                            <a href="${msg.fileUrl}" download="${msg.fileName || 'meow_file'}" class="w-9 h-9 rounded-full bg-brand-orange text-white flex items-center justify-center text-xs shrink-0 active:scale-90 transition" title="تحميل">
                               <i class="fa-solid fa-download"></i>
                             </a>
                             `
@@ -1059,7 +1065,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                             ? `<img src="${msg.stickerUrl}" alt="استيكر" class="max-w-[150px] max-h-[150px] object-contain drop-shadow-md rounded-2xl hover:scale-105 transition-transform" />`
                             : `<span class="text-6xl sm:text-7xl filter drop-shadow-md transform hover:scale-110 active:scale-95 transition-transform duration-200 cursor-pointer animate-fade-in inline-block">${msg.stickerEmoji || '🐾'}</span>`
                         }
-                        <span class="mt-1.5 px-3 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange text-[10px] font-black font-baloo border border-brand-orange/20 shadow-2xs">
+                        <span class="mt-1.5 px-3 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange text-[10px] font-black font-baloo border border-brand-orange/20 shadow-sm">
                           ${msg.stickerTitle || 'استيكر مخصص'}
                         </span>
                       </div>
@@ -1147,8 +1153,8 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           class="${isStickersOpen ? 'flex' : 'hidden'} pointer-events-auto flex-col bg-[#FAF4ED]/98 backdrop-blur-md border-2 border-brand-peachBorder rounded-[30px] h-72 sm:h-80 transition-all overflow-hidden shadow-nav"
         >
           <!-- 1. Top Drag Handle & Switcher Header -->
-          <div class="pt-2 pb-2 px-4 flex flex-col items-center border-b border-brand-peachBorder/60 shrink-0 bg-[#FFF9E9]/95">
-            <div class="w-10 h-1 bg-brand-peachBorder rounded-full mb-2"></div>
+          <div id="chat-stickers-drag-handle" class="pt-2.5 pb-2 px-4 flex flex-col items-center border-b border-brand-peachBorder/60 shrink-0 bg-[#FFF9E9]/95 touch-none cursor-grab">
+            <div class="w-11 h-1.5 bg-brand-peachBorder rounded-full mb-2"></div>
             
             <!-- Controls Bar: Search Icon, Center Switcher Pills, Close Button -->
             <div class="w-full flex items-center justify-between gap-2">
@@ -1157,21 +1163,21 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               <button
                 type="button"
                 id="sticker-search-btn"
-                class="w-8 h-8 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:text-brand-orange flex items-center justify-center text-xs transition active:scale-90 cursor-pointer shadow-2xs"
+                class="w-10 h-10 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:text-brand-orange flex items-center justify-center text-sm transition active:scale-90 cursor-pointer shadow-sm"
                 title="بحث في الملصقات"
               >
                 <i class="fa-solid fa-magnifying-glass"></i>
               </button>
 
               <!-- Center Switcher Pill Tabs (Emoji / GIF / Stickers style) -->
-              <div class="flex items-center bg-brand-peachBorder/30 dark:bg-black/30 p-1 rounded-full border border-brand-peachBorder/60 dark:border-warm-darkBorder shadow-2xs">
+              <div class="flex items-center bg-brand-peachBorder/30 dark:bg-black/30 p-1 rounded-full border border-brand-peachBorder/60 dark:border-warm-darkBorder shadow-sm">
                 <button
                   type="button"
-                  class="px-3.5 py-1 rounded-full text-xs font-black bg-white dark:bg-[#2F241C] text-brand-orange shadow-2xs flex items-center gap-1.5 font-baloo cursor-pointer"
+                  class="px-3.5 py-1.5 rounded-full text-xs font-black bg-white dark:bg-[#2F241C] text-brand-orange shadow-sm flex items-center gap-1.5 font-baloo cursor-pointer"
                 >
                   <i class="fa-solid fa-note-sticky text-xs"></i>
                   <span>ملصقاتي</span>
-                  <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-brand-orange/15 text-brand-orange font-mono">${getCustomStickers().length}</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange font-mono">${getCustomStickers().length}</span>
                 </button>
               </div>
 
@@ -1179,7 +1185,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               <button 
                 id="close-stickers-btn" 
                 type="button" 
-                class="w-8 h-8 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec hover:text-brand-orange flex items-center justify-center text-xs cursor-pointer transition active:scale-90 shadow-2xs"
+                class="w-10 h-10 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec hover:text-brand-orange flex items-center justify-center text-sm cursor-pointer transition active:scale-90 shadow-sm"
                 title="إغلاق لوحة الملصقات"
               >
                 <i class="fa-solid fa-xmark"></i>
@@ -1189,14 +1195,14 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           </div>
 
           <!-- 2. Stickers Content Grid with Smooth Scroll -->
-          <div class="flex-1 overflow-y-auto px-4 py-3 min-h-0 overscroll-contain">
+          <div id="chat-stickers-scroll" class="flex-1 overflow-y-auto px-4 py-3 min-h-0 overscroll-contain">
             
             <div class="grid grid-cols-4 sm:grid-cols-5 gap-3">
               
               <!-- FIRST ITEM IN GRID: Dedicated 'Create sticker' / 'إنشاء استيكر' Tile (WhatsApp Style in Meow Palette) -->
               <div
                 id="create-sticker-tile"
-                class="create-sticker-tile group aspect-square rounded-2xl border-2 border-dashed border-brand-orange/80 bg-brand-orange/5 hover:bg-brand-orange/15 hover:border-brand-orange flex flex-col items-center justify-center p-2 text-center cursor-pointer transition-all active:scale-95 shadow-2xs"
+                class="create-sticker-tile group aspect-square rounded-2xl border-2 border-dashed border-brand-orange/80 bg-brand-orange/5 hover:bg-brand-orange/15 hover:border-brand-orange flex flex-col items-center justify-center p-2 text-center cursor-pointer transition-all active:scale-95 shadow-sm"
                 title="إنشاء استيكر جديد من صورك"
               >
                 <div class="w-10 h-10 rounded-full bg-brand-orange text-white flex items-center justify-center shadow-soft mb-1.5 group-hover:scale-110 transition-transform">
@@ -1211,7 +1217,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               ${getCustomStickers()
                 .map(
                   (stk) => `
-                <div class="relative group aspect-square rounded-2xl bg-white dark:bg-[#2F241C] border-2 border-brand-peachBorder dark:border-warm-darkBorder hover:border-brand-orange p-1.5 flex items-center justify-center transition-all shadow-2xs hover:shadow-sm">
+                <div class="relative group aspect-square rounded-2xl bg-white dark:bg-[#2F241C] border-2 border-brand-peachBorder dark:border-warm-darkBorder hover:border-brand-orange p-1.5 flex items-center justify-center transition-all shadow-sm hover:shadow-md">
                   <button
                     type="button"
                     class="custom-sticker-send-btn w-full h-full flex items-center justify-center cursor-pointer active:scale-90 transition-transform"
@@ -1223,7 +1229,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                   </button>
                   <button
                     type="button"
-                    class="delete-custom-sticker-btn absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] shadow-sm hover:scale-110 active:scale-90 transition cursor-pointer"
+                    class="delete-custom-sticker-btn absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center text-xs shadow-sm hover:scale-110 active:scale-90 transition cursor-pointer"
                     data-sticker-id="${stk.id}"
                     title="حذف الاستيكر"
                   >
@@ -1252,20 +1258,20 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           </div>
 
           <!-- 3. Bottom Pack Navigation Bar (Like WhatsApp: Clock, Star, Pet Pack, Add) -->
-          <div class="shrink-0 px-4 py-2 bg-[#FFF9E9] dark:bg-[#231C17] border-t border-brand-peachBorder/60 dark:border-warm-darkBorder flex items-center justify-between">
-            <div class="flex items-center gap-3.5">
+          <div class="shrink-0 px-4 py-1.5 bg-[#FFF9E9] dark:bg-[#231C17] border-t border-brand-peachBorder/60 dark:border-warm-darkBorder flex items-center justify-between">
+            <div class="flex items-center gap-2">
               <!-- Recents 🕒 -->
-              <button type="button" class="text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange transition p-1 text-sm cursor-pointer" title="الأخيرة">
+              <button type="button" class="text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90" title="الأخيرة">
                 <i class="fa-regular fa-clock"></i>
               </button>
               <!-- Favorites ⭐ -->
-              <button type="button" class="text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange transition p-1 text-sm cursor-pointer" title="المفضلة">
+              <button type="button" class="text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90" title="المفضلة">
                 <i class="fa-regular fa-star"></i>
               </button>
               <!-- Meow Pet Pack 🐾 (Active Tab) -->
-              <button type="button" class="relative text-brand-orange transition p-1 text-base cursor-pointer" title="استيكرز مياو">
+              <button type="button" class="relative text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-base cursor-pointer active:scale-90" title="استيكرز مياو">
                 <i class="fa-solid fa-paw"></i>
-                <span class="absolute -bottom-1 inset-x-0 mx-auto w-3.5 h-0.5 bg-brand-orange rounded-full"></span>
+                <span class="absolute bottom-0.5 inset-x-0 mx-auto w-3.5 h-0.5 bg-brand-orange rounded-full"></span>
               </button>
             </div>
 
@@ -1273,7 +1279,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             <button
               id="add-sticker-pack-btn"
               type="button"
-              class="w-7 h-7 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-xs transition active:scale-90 cursor-pointer"
+              class="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-sm transition active:scale-90 cursor-pointer"
               title="إضافة استيكر جديد من صورة"
             >
               <i class="fa-solid fa-plus"></i>
@@ -1288,7 +1294,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           <button
             id="chat-attachment-btn"
             type="button"
-            class="w-11 h-11 rounded-full bg-white border-2 border-brand-peachBorder text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-lg transition-all active:scale-90 cursor-pointer shadow-xs shrink-0"
+            class="w-11 h-11 rounded-full bg-white border-2 border-brand-peachBorder text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-lg transition-all active:scale-90 cursor-pointer shadow-sm shrink-0"
             title="إرفاق صورة أو ملف"
             aria-label="إرفاق ملف"
           >
@@ -1303,7 +1309,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               isStickersOpen
                 ? 'border-brand-orange text-brand-orange bg-brand-orange/15 shadow-soft'
                 : 'border-brand-peachBorder text-warm-textSec'
-            } hover:border-brand-orange hover:text-brand-orange flex items-center justify-center text-lg transition-all active:scale-90 cursor-pointer shadow-xs shrink-0"
+            } hover:border-brand-orange hover:text-brand-orange flex items-center justify-center text-lg transition-all active:scale-90 cursor-pointer shadow-sm shrink-0"
             title="ملصقات مياو"
             aria-label="ملصقات"
           >
@@ -1311,12 +1317,12 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           </button>
 
           <!-- Floating Pill Input Field -->
-          <div class="flex-1 min-h-[48px] relative flex items-center bg-white border-2 border-brand-peachBorder/90 rounded-full px-4 py-1 shadow-2xs focus-within:border-brand-orange transition-colors">
+          <div class="flex-1 min-w-0 min-h-[48px] relative flex items-center bg-white border-2 border-brand-peachBorder/90 rounded-full px-4 py-1 shadow-sm focus-within:border-brand-orange transition-colors">
             <input
               type="text"
               id="chat-message-input"
               placeholder="اكتب رسالة..."
-              class="w-full bg-transparent border-none py-1 text-[15px] sm:text-base font-bold text-brand-dark placeholder-brand-subtleGray focus:outline-none font-baloo"
+              class="w-full min-w-0 bg-transparent border-none py-1 text-[15px] sm:text-base font-bold text-brand-dark placeholder-brand-subtleGray focus:outline-none font-baloo"
               autocomplete="off"
             />
           </div>
@@ -1337,16 +1343,16 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
       ${
         previewChatImageUrl
           ? `
-          <div id="chat-image-lightbox" class="fixed inset-0 z-[95] bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div id="chat-image-lightbox" class="fixed inset-0 z-[95] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
             <button
               id="close-chat-image-lightbox-btn"
               type="button"
               aria-label="إغلاق الصورة"
-              class="absolute top-5 right-5 w-11 h-11 rounded-full bg-white/15 hover:bg-brand-orange text-white flex items-center justify-center text-lg cursor-pointer transition"
+              class="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 w-11 h-11 rounded-full bg-white/15 hover:bg-brand-orange text-white flex items-center justify-center text-lg cursor-pointer transition active:scale-90"
             >
               <i class="fa-solid fa-xmark"></i>
             </button>
-            <img src="${previewChatImageUrl}" alt="معاينة الصورة" class="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl" />
+            <img src="${previewChatImageUrl}" alt="معاينة الصورة" class="max-w-full max-h-[85dvh] rounded-2xl object-contain shadow-2xl" />
           </div>
           `
           : ''
@@ -1404,16 +1410,76 @@ export function attachChatEvents(): void {
     });
   }
 
-  // Conversation card click
+  // Pull-to-refresh on chat list (when outside active chat room and no modal open)
+  const chatListRoot = document.getElementById('chat-list-view-root');
+  if (chatListRoot && !currentActiveConv) {
+    attachPullToRefresh(chatListRoot, {
+      isBlocked: () =>
+        Boolean(
+          state.getActiveConversation() ||
+            state.getIsFilterModalOpen() ||
+            state.isNotificationsOpen() ||
+            state.isSettingsOpen() ||
+            state.getPendingDeleteConversation() ||
+            document.querySelector('.meow-more-dropdown:not(.hidden)')
+        ),
+      onRefresh: () => {
+        state.refreshFeed('chat');
+        showMobileToast('تم تحديث المحادثات والطلبات', 'success');
+      },
+    });
+  }
+
+  // Conversation card click + Long-press to open quick options menu
   const conversationCards = document.querySelectorAll<HTMLElement>('.conversation-item-card');
   conversationCards.forEach((card) => {
     card.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('.meow-more-menu-container')) {
         return;
       }
+      if (card.dataset.longPressConsumed === '1') {
+        delete card.dataset.longPressConsumed;
+        return;
+      }
       const convId = card.getAttribute('data-conversation-id');
       if (convId) {
         state.setActiveConversationId(convId);
+      }
+    });
+
+    attachLongPress(card, () => {
+      const menuBtn = card.querySelector<HTMLButtonElement>('.meow-more-btn');
+      if (menuBtn) {
+        card.dataset.longPressConsumed = '1';
+        window.setTimeout(() => {
+          delete card.dataset.longPressConsumed;
+        }, 400);
+        menuBtn.click();
+      }
+    });
+  });
+
+  // Long-press on text message bubble copies text
+  const messageRows = document.querySelectorAll<HTMLElement>('#chat-messages-container > [data-msg-id]');
+  messageRows.forEach((row) => {
+    attachLongPress(row, () => {
+      const pEl = row.querySelector('p');
+      const textToCopy = pEl?.textContent?.trim() || '';
+      if (!textToCopy) {
+        showMobileToast('يمكن نسخ الرسائل النصية فقط', 'default');
+        return;
+      }
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(textToCopy)
+          .then(() => showMobileToast('تم نسخ نص الرسالة', 'success'))
+          .catch(() => {
+            copyTextFallback(textToCopy);
+            showMobileToast('تم نسخ نص الرسالة', 'success');
+          });
+      } else {
+        copyTextFallback(textToCopy);
+        showMobileToast('تم نسخ نص الرسالة', 'success');
       }
     });
   });
@@ -1631,12 +1697,19 @@ export function attachChatEvents(): void {
   }
 
   if (closeStickersBtn && stickersDrawer && stickersBtn) {
-    closeStickersBtn.addEventListener('click', () => {
+    const closeStickers = () => {
       isStickersOpen = false;
       stickersDrawer.classList.remove('flex');
       stickersDrawer.classList.add('hidden');
       stickersBtn.classList.remove('border-brand-orange', 'text-brand-orange', 'bg-brand-orange/15', 'shadow-soft');
       stickersBtn.classList.add('text-warm-textSec');
+    };
+    closeStickersBtn.addEventListener('click', closeStickers);
+
+    attachSheetDragToDismiss(stickersDrawer, {
+      handleSelector: '#chat-stickers-drag-handle',
+      scrollContainerSelector: '#chat-stickers-scroll',
+      onClose: closeStickers,
     });
   }
 
@@ -1947,13 +2020,28 @@ function launchOneTimeMatingConfetti(): void {
   }, 2600);
 }
 
+function copyTextFallback(text: string): void {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  } catch {
+    // ignore clipboard fallback failures
+  }
+}
+
 export function renderDeleteConversationConfirmModal(): string {
   const conv = state.getPendingDeleteConversation();
   if (!conv) return '';
 
   return `
-    <div id="meow-delete-conv-backdrop" class="fixed inset-0 z-[92] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" dir="rtl">
-      <div class="bg-white w-full max-w-sm rounded-[28px] p-6 shadow-2xl border-2 border-red-200 space-y-4 animate-scale-up text-right">
+    <div id="meow-delete-conv-backdrop" class="fixed inset-0 z-[92] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+      <div class="bg-white w-full max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[28px] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 shadow-2xl border-2 border-b-0 sm:border-b-2 border-red-200 space-y-4 animate-slide-up text-right">
         
         <div class="flex items-center gap-3 pb-3 border-b border-red-100">
           <div class="w-12 h-12 rounded-2xl bg-red-500/15 text-red-600 flex items-center justify-center text-xl shrink-0">

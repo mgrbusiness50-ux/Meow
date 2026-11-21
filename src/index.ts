@@ -23,6 +23,20 @@ function setupAndroidBackHandler(): void {
   }
 }
 
+function setupAndroidDeepLinkHandler(): void {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      void CapApp.addListener('appUrlOpen', ({ url }) => {
+        if (url) {
+          void state.handleAuthDeepLinkUrl(url);
+        }
+      });
+    }
+  } catch (err) {
+    console.warn('Capacitor appUrlOpen listener skipped:', err);
+  }
+}
+
 function bootMeowApp(): void {
   // 1. Mount Meow Responsive 2D Application into #root
   const rootElement = document.getElementById('root');
@@ -31,8 +45,9 @@ function bootMeowApp(): void {
     app.init();
   }
 
-  // 2. Register Android Hardware Back Button Handler
+  // 2. Register Android Hardware Back Button & Deep Link Handlers
   setupAndroidBackHandler();
+  setupAndroidDeepLinkHandler();
 
   // 3. Initialize XR Blocks Spatial 3D Experience (WebXR + Simulator)
   try {

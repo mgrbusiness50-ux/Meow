@@ -113,7 +113,7 @@ export class MeowApp {
         ${isInsideChatRoom ? '' : renderHeader()}
 
         <!-- Main Tab Content -->
-        <main class="flex-1 flex flex-col ${isInsideChatRoom ? 'p-0 m-0 pb-0' : 'pb-24'}">
+        <main class="flex-1 flex flex-col ${isInsideChatRoom ? 'p-0 m-0 pb-0' : ''}" style="${isInsideChatRoom ? '' : 'padding-bottom: calc(6rem + env(safe-area-inset-bottom));'}">
           ${tabHtml}
         </main>
 

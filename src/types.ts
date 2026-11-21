@@ -1,10 +1,10 @@
-export type PetSpecies = 'cat' | 'dog' | 'bird';
+export type PetSpecies = 'cat' | 'dog';
 export type PetGender = 'male' | 'female';
 export type VaccinationStatus = 'fully_vaccinated' | 'partially_vaccinated' | 'not_vaccinated';
 export type PetStatus = 'mating' | 'adoption' | 'not_available';
 export type AdoptionType = 'individual' | 'group';
 export type AdoptionPublishMode = 'group_only' | 'separate' | 'both';
-export type PrivacySetting = 'public' | 'limited_until_approved' | 'private';
+export type PrivacySetting = 'public' | 'private';
 
 export interface GroupAdoptionMember {
   petId: string;

@@ -1,6 +1,6 @@
 export function renderStoreView(): string {
   return `
-    <main class="w-full max-w-md mx-auto px-5 pt-3 pb-24 flex-1">
+    <div class="w-full max-w-md mx-auto px-4 sm:px-5 pt-3 pb-6 flex-1 min-w-0">
       <div class="relative flex flex-col items-center justify-center text-center px-4 py-12 overflow-hidden bg-white/60 border border-brand-peachBorder rounded-3xl shadow-card" data-purpose="empty-messages-state">
         
         <!-- Decorative scattered paw prints matching _8/code.html -->
@@ -52,7 +52,7 @@ export function renderStoreView(): string {
         </button>
 
       </div>
-    </main>
+    </div>
   `;
 }
 
