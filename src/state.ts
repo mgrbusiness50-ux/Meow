@@ -69,6 +69,7 @@ import {
   SupabaseBasicResult,
   SupabaseUserAccountBundle,
   clearSupabasePasswordRecoveryState,
+  closeNativeAuthBrowser,
   fetchSupabaseUserAccountBundle,
   getCurrentSupabaseSession,
   handleSupabaseAuthCallbackUrl,
@@ -816,6 +817,67 @@ class AppStateManager {
     void this.verifyInitialSupabaseSession();
   }
 
+  private stripAuthParamsFromBrowserUrl(): void {
+    if (typeof window === 'undefined' || Capacitor.isNativePlatform()) return;
+    try {
+      const current = new URL(window.location.href);
+      const authQueryKeys = [
+        'code',
+        'token_hash',
+        'type',
+        'access_token',
+        'refresh_token',
+        'error',
+        'error_code',
+        'error_description',
+        'sb_flow_id',
+        'flow_id',
+      ];
+      let mutated = false;
+      for (const key of authQueryKeys) {
+        if (current.searchParams.has(key)) {
+          current.searchParams.delete(key);
+          mutated = true;
+        }
+      }
+      const hashRaw = current.hash.replace(/^#/, '');
+      if (hashRaw) {
+        const hashParams = new URLSearchParams(hashRaw);
+        const hasAuthHash = authQueryKeys.some((k) => hashParams.has(k));
+        if (hasAuthHash) {
+          for (const key of authQueryKeys) {
+            hashParams.delete(key);
+          }
+          const nextHash = hashParams.toString();
+          current.hash = nextHash ? `#${nextHash}` : '';
+          mutated = true;
+        }
+      }
+      if (mutated) {
+        window.history.replaceState({}, document.title, `${current.pathname}${current.search}${current.hash}`);
+      }
+    } catch {
+      // Ignore URL cleanup error
+    }
+  }
+
+  private urlHasAuthErrorParams(rawUrl: string): boolean {
+    try {
+      const parsed = new URL(rawUrl);
+      const hash = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+      return Boolean(
+        parsed.searchParams.get('error') ||
+          parsed.searchParams.get('error_code') ||
+          parsed.searchParams.get('error_description') ||
+          hash.get('error') ||
+          hash.get('error_code') ||
+          hash.get('error_description')
+      );
+    } catch {
+      return false;
+    }
+  }
+
   private async verifyInitialSupabaseSession(): Promise<void> {
     if (!this.deepLinkInitChecked) {
       let launchUrl: string | undefined;
@@ -845,6 +907,11 @@ class AppStateManager {
       }
     }
 
+    const webHref =
+      !Capacitor.isNativePlatform() && typeof window !== 'undefined' ? window.location.href : '';
+    const webHasCallback = Boolean(webHref && isSupabaseAuthCallbackUrl(webHref));
+    const webHasCallbackError = Boolean(webHasCallback && this.urlHasAuthErrorParams(webHref));
+
     const result = await getCurrentSupabaseSession();
     if (!result.configured) {
       this.isSupabaseAuthReady = true;
@@ -857,6 +924,18 @@ class AppStateManager {
       const handled = await this.activeDeepLinkAuthPromise.catch(() => false);
       if (handled || this.supabaseAuthError) {
         return;
+      }
+    }
+
+    if (webHasCallback) {
+      if (webHasCallbackError || !result.session) {
+        const handled = await this.handleAuthDeepLinkUrl(webHref);
+        this.stripAuthParamsFromBrowserUrl();
+        if (handled || this.supabaseAuthError) {
+          return;
+        }
+      } else {
+        this.stripAuthParamsFromBrowserUrl();
       }
     }
 
@@ -1369,6 +1448,10 @@ class AppStateManager {
     });
   }
 
+  public hasPendingAuthDeepLink(): boolean {
+    return Boolean(this.activeDeepLinkAuthPromise);
+  }
+
   public async handleAuthDeepLinkUrl(url: string): Promise<boolean> {
     const trimmedUrl = (url || '').trim();
     if (
@@ -1392,6 +1475,7 @@ class AppStateManager {
     }
 
     const runPromise = (async (): Promise<boolean> => {
+      void closeNativeAuthBrowser();
       const cbRes = await handleSupabaseAuthCallbackUrl(trimmedUrl);
       if (!cbRes.handled) {
         return false;

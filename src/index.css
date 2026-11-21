@@ -47,8 +47,12 @@ html.dark body {
   color: #F7EFE8;
 }
 
-/* 1. REMOVE ANY 3D/CANVAS BOTTOM IMAGE UNDER THE APP */
-canvas {
+/* 1. REMOVE ANY 3D/CANVAS/XR SIMULATOR UI UNDER THE APP UNLESS EXPLICITLY ACTIVE */
+canvas,
+#XRButtonWrapper,
+xrblocks-simulator-settings,
+xrblocks-simulator-hand-pose-panel,
+xrblocks-simulator-overlay-instructions {
   display: none !important;
 }
 
@@ -60,6 +64,10 @@ body.xr-active canvas {
   width: 100vw !important;
   height: 100vh !important;
   z-index: 9999 !important;
+}
+
+body.xr-active #XRButtonWrapper {
+  display: flex !important;
 }
 
 #root {

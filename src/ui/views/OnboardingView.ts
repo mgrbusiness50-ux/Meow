@@ -18,13 +18,14 @@ import {
   SearchableSelectController,
 } from '../components/SearchableSelect.ts';
 import {
+  addNativeAuthBrowserFinishedListener,
   resendSignUpConfirmationEmail,
   sendPasswordRecoveryEmail,
   signInWithEmailPassword,
+  signInWithGoogleSupabaseOAuth,
   signUpWithEmailPassword,
   updateSupabasePassword,
 } from '../../services/supabaseAuthService.ts';
-import { signInWithGoogleOAuth } from '../../services/authService.ts';
 import { validateEgyptianMobile } from '../../utils/validation.ts';
 
 const SPLASH_LOGO_URL =
@@ -139,6 +140,7 @@ function resetTransientAuthState(opts?: { preserveMessages?: boolean }): void {
   showRecoveryPassword = false;
   isTermsAccepted = false;
   isAuthSubmitting = false;
+  isGoogleSubmitting = false;
   isResendingConfirmation = false;
   isSendingRecovery = false;
   isUpdatingPassword = false;
@@ -260,6 +262,10 @@ export function renderOnboardingView(): string {
     if (step !== 'has_pet') {
       hasPetErrorMessage = '';
     }
+    if (step !== 'auth_method') {
+      isAuthSubmitting = false;
+      isGoogleSubmitting = false;
+    }
   }
 
   // Splash screen renders standalone without step dots or footer
@@ -268,12 +274,12 @@ export function renderOnboardingView(): string {
   }
 
   return `
-    <div class="min-h-[100dvh] w-full flex flex-col items-center justify-between px-4 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-[#FFF9E9] text-[#3E2723] relative overflow-x-hidden" dir="rtl">
+    <div class="min-h-[100dvh] w-full flex flex-col items-center justify-between px-4 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-[#FFF9E9] text-[#3E2723] relative overflow-x-hidden" dir="rtl">
       
       ${renderPawBackdrop()}
 
       <!-- Minimal Step Dots Navigation (no skip button) -->
-      <div class="w-full max-w-md flex items-center justify-center pt-1 pb-2 z-20">
+      <div class="w-full max-w-md flex items-center justify-center pt-1 pb-1 sm:pb-2 z-20">
         <div class="flex items-center gap-1.5">
           ${renderStepDots(step)}
         </div>
@@ -285,7 +291,7 @@ export function renderOnboardingView(): string {
       </div>
 
       <!-- Footer Handle Only (@Meow2026) -->
-      <footer class="w-full max-w-md pt-4 pb-4 text-center z-20">
+      <footer class="w-full max-w-md pt-2 pb-1 sm:pt-4 sm:pb-4 text-center z-20">
         <span dir="ltr" class="inline-block text-xs font-bold text-[#8C827A] tracking-wide font-baloo">@Meow2026</span>
       </footer>
 
@@ -408,22 +414,22 @@ function renderSplashScreen(): string {
   return `
     <div
       id="splash-screen-container"
-      class="relative h-[100dvh] w-full flex flex-col items-center justify-center px-8 text-[#3E2723] overflow-hidden cursor-pointer select-none"
+      class="relative h-[100dvh] w-full flex flex-col items-center justify-center px-6 sm:px-8 text-[#3E2723] overflow-hidden cursor-pointer select-none"
       style="background: radial-gradient(circle at center, #FFFBEB 0%, #FFF8E7 100%);"
       dir="rtl"
     >
       <!-- Center Logo Section with Soft Aura -->
       <div class="relative flex-grow flex items-center justify-center animate-fade-in">
-        <div class="absolute w-72 h-72 rounded-full bg-[#F7E1C3] blur-[40px] opacity-40 -z-10"></div>
+        <div class="absolute w-52 h-52 sm:w-72 sm:h-72 rounded-full bg-[#F7E1C3] blur-[40px] opacity-40 -z-10"></div>
         <img
           alt="Meow Logo"
-          class="relative z-10 w-64 h-auto object-contain max-w-[80vw]"
+          class="relative z-10 w-44 sm:w-56 md:w-64 h-auto object-contain max-w-[68vw] sm:max-w-[80vw]"
           src="${SPLASH_LOGO_URL}"
         />
       </div>
 
       <!-- Footer Text: By Mohamed Gamil -->
-      <div class="pb-12 text-center animate-fade-in" style="font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive;">
+      <div class="pb-8 sm:pb-12 text-center animate-fade-in" style="font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive;">
         <p class="text-[10px] uppercase tracking-[0.3em] opacity-40 mb-1.5 font-medium">By</p>
         <p class="text-sm font-semibold tracking-[0.05em] text-[#3E2723]/80">Mohamed Gamil</p>
       </div>
@@ -432,44 +438,44 @@ function renderSplashScreen(): string {
 }
 
 // -------------------------------------------------------------
-// Step 2: Welcome Screen (Exact Stitch welcome_screen/code.html)
+// Step 2: Welcome Screen (Fits cleanly within mobile viewport without scroll; Tablet scales up)
 // -------------------------------------------------------------
 function renderWelcomeStep(): string {
   return `
-    <div class="flex-1 flex flex-col items-center justify-between py-2 animate-fade-in">
+    <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
       
       <!-- Top Official Logo -->
-      <header class="w-full pt-2 pb-2 flex flex-col items-center text-center">
-        <div class="relative w-44 h-44 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-44 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+      <header class="w-full pt-0 sm:pt-2 pb-1 sm:pb-2 flex flex-col items-center text-center">
+        <div class="relative w-24 h-24 sm:w-40 sm:h-40 md:w-44 md:h-44 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-24 sm:w-40 md:w-44 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
         </div>
       </header>
 
       <!-- Center Mascot Card & Headline -->
-      <div class="flex flex-col items-center text-center space-y-6 my-auto">
+      <div class="flex flex-col items-center text-center space-y-3 sm:space-y-6 my-auto">
         <div class="relative flex items-center justify-center">
-          <div class="w-48 h-48 rounded-3xl overflow-hidden shadow-lg border-4 border-white/80 bg-white/40 flex items-center justify-center">
+          <div class="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg border-[3px] sm:border-4 border-white/80 bg-white/40 flex items-center justify-center">
             <img alt="Meow Mascot" class="w-full h-full object-cover" src="${MASCOT_IMG_URL}">
           </div>
         </div>
 
-        <div class="space-y-3 px-4 w-full max-w-sm mx-auto">
-          <h1 class="text-3xl font-extrabold text-[#2d1b10] leading-snug font-baloo" style="font-size: 1.85rem; line-height: 1.4;">
+        <div class="space-y-1 sm:space-y-3 px-2 sm:px-4 w-full max-w-sm mx-auto">
+          <h1 class="text-xl sm:text-3xl font-extrabold text-[#2d1b10] leading-snug sm:leading-[1.4] font-baloo">
             كل الي حيوانك الأليف محتاجه في مكان واحد
-            <span class="block text-2xl pt-2 text-[#895036]">🤎</span>
+            <span class="block text-lg sm:text-2xl pt-1 sm:pt-2 text-[#895036]">🤎</span>
           </h1>
         </div>
       </div>
 
       <!-- Bottom Next CTA Button -->
-      <div class="w-full pt-4 flex justify-end">
+      <div class="w-full pt-2 sm:pt-4 flex justify-end">
         <button
           type="button"
           id="btn-welcome-next"
-          class="w-24 h-24 rounded-3xl font-bold text-lg text-white shadow-md active:scale-95 transition-all flex flex-col items-center justify-center gap-1.5 hover:opacity-95 cursor-pointer bg-[#e67e22]"
+          class="w-20 h-16 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl font-bold text-base sm:text-lg text-white shadow-md active:scale-95 transition-all flex flex-col items-center justify-center gap-1 sm:gap-1.5 hover:opacity-95 cursor-pointer bg-[#e67e22]"
         >
-          <span class="text-lg font-baloo">التالي</span>
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+          <span class="text-base sm:text-lg font-baloo">التالي</span>
+          <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
             <path d="M19 12H5M12 19l-7-7 7-7"></path>
           </svg>
         </button>
@@ -493,20 +499,20 @@ function renderAuthMethodStep(): string {
 
   if (isRecoveryActive) {
     return `
-      <div class="flex-1 flex flex-col items-center justify-between py-2 animate-fade-in">
-        <header class="w-full pt-2 flex flex-col items-center text-center space-y-3">
-          <div class="relative w-36 h-36 flex items-center justify-center">
-            <img alt="Meow Logo" class="w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+      <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
+        <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3">
+          <div class="relative w-20 h-20 sm:w-32 sm:h-32 md:w-36 md:h-36 flex items-center justify-center">
+            <img alt="Meow Logo" class="w-20 sm:w-32 md:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
           </div>
-          <div class="space-y-1.5">
-            <h1 class="text-2xl font-extrabold text-[#3E2723] font-baloo">إعادة تعيين كلمة المرور</h1>
-            <p class="text-[#3E2723]/75 text-base font-bold font-baloo">أدخل كلمة المرور الجديدة لحسابك في Meow 🐾</p>
+          <div class="space-y-1">
+            <h1 class="text-xl sm:text-2xl font-extrabold text-[#3E2723] font-baloo">إعادة تعيين كلمة المرور</h1>
+            <p class="text-[#3E2723]/75 text-sm sm:text-base font-bold font-baloo">أدخل كلمة المرور الجديدة لحسابك في Meow 🐾</p>
           </div>
         </header>
 
-        <div class="w-full flex-1 flex flex-col justify-center py-4 min-w-0">
-          <form id="recovery-password-form" novalidate class="space-y-4 font-baloo">
-            <div class="space-y-1.5">
+        <div class="w-full flex-1 flex flex-col justify-center py-2.5 sm:py-4 min-w-0">
+          <form id="recovery-password-form" novalidate class="space-y-3 sm:space-y-4 font-baloo">
+            <div class="space-y-1">
               <label for="recovery-new-password-input" class="block text-sm font-bold text-[#2d221b]">كلمة المرور الجديدة</label>
               <div class="relative flex items-center">
                 <input
@@ -516,7 +522,7 @@ function renderAuthMethodStep(): string {
                   placeholder="••••••••"
                   value="${escapeAttr(authNewPassword)}"
                   autocomplete="new-password"
-                  class="w-full h-14 pl-12 pr-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+                  class="w-full h-12 sm:h-14 pl-12 pr-4 sm:pr-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[24px] text-sm sm:text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
                 />
                 <button
                   id="btn-toggle-recovery-pw"
@@ -529,7 +535,7 @@ function renderAuthMethodStep(): string {
               </div>
             </div>
 
-            <div class="space-y-1.5">
+            <div class="space-y-1">
               <label for="recovery-confirm-password-input" class="block text-sm font-bold text-[#2d221b]">تأكيد كلمة المرور الجديدة</label>
               <input
                 id="recovery-confirm-password-input"
@@ -538,19 +544,19 @@ function renderAuthMethodStep(): string {
                 placeholder="••••••••"
                 value="${escapeAttr(authConfirmPassword)}"
                 autocomplete="new-password"
-                class="w-full h-14 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+                class="w-full h-12 sm:h-14 px-4 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[24px] text-sm sm:text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
               />
             </div>
 
             <div
               id="auth-error-msg"
-              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-center text-sm font-bold text-rose-700 font-baloo"
+              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
               role="alert"
             >${escapeAttr(visibleError)}</div>
 
             <div
               id="auth-success-msg"
-              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-800 font-baloo"
+              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
               role="status"
             >${escapeAttr(authSuccessMessage)}</div>
 
@@ -558,7 +564,7 @@ function renderAuthMethodStep(): string {
               id="btn-update-recovery-password"
               type="submit"
               ${isUpdatingPassword ? 'disabled' : ''}
-              class="w-full h-14 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[24px] text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
+              class="w-full h-12 sm:h-14 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[20px] sm:rounded-[24px] text-base sm:text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
                 isUpdatingPassword ? 'opacity-70 cursor-wait' : 'cursor-pointer'
               }"
             >
@@ -569,34 +575,34 @@ function renderAuthMethodStep(): string {
               id="btn-cancel-recovery-signout"
               type="button"
               ${isUpdatingPassword ? 'disabled' : ''}
-              class="w-full h-12 bg-[#F3EBDD] hover:bg-[#eae0d0] text-[#564337] border-2 border-[#d6c7b2] rounded-[24px] text-sm font-bold transition-all cursor-pointer font-baloo"
+              class="w-full h-11 sm:h-12 bg-[#F3EBDD] hover:bg-[#eae0d0] text-[#564337] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[24px] text-xs sm:text-sm font-bold transition-all cursor-pointer font-baloo"
             >
               إلغاء والعودة لتسجيل الدخول
             </button>
           </form>
         </div>
 
-        <div class="w-full pb-2"></div>
+        <div class="w-full pb-1 sm:pb-2"></div>
       </div>
     `;
   }
 
   if (isForgotPassword) {
     return `
-      <div class="flex-1 flex flex-col items-center justify-between py-2 animate-fade-in">
-        <header class="w-full pt-2 flex flex-col items-center text-center space-y-3">
-          <div class="relative w-36 h-36 flex items-center justify-center">
-            <img alt="Meow Logo" class="w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+      <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
+        <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3">
+          <div class="relative w-20 h-20 sm:w-32 sm:h-32 md:w-36 md:h-36 flex items-center justify-center">
+            <img alt="Meow Logo" class="w-20 sm:w-32 md:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
           </div>
-          <div class="space-y-1.5">
-            <h1 class="text-2xl font-extrabold text-[#3E2723] font-baloo">استعادة كلمة المرور</h1>
-            <p class="text-[#3E2723]/75 text-base font-bold font-baloo">أدخل بريدك الإلكتروني لإرسال رابط الاستعادة</p>
+          <div class="space-y-1">
+            <h1 class="text-xl sm:text-2xl font-extrabold text-[#3E2723] font-baloo">استعادة كلمة المرور</h1>
+            <p class="text-[#3E2723]/75 text-sm sm:text-base font-bold font-baloo">أدخل بريدك الإلكتروني لإرسال رابط الاستعادة</p>
           </div>
         </header>
 
-        <div class="w-full flex-1 flex flex-col justify-center py-4 min-w-0">
-          <form id="forgot-password-form" novalidate class="space-y-4 font-baloo">
-            <div class="space-y-1.5">
+        <div class="w-full flex-1 flex flex-col justify-center py-2.5 sm:py-4 min-w-0">
+          <form id="forgot-password-form" novalidate class="space-y-3 sm:space-y-4 font-baloo">
+            <div class="space-y-1">
               <label for="recovery-email-input" class="block text-sm font-bold text-[#2d221b]">البريد الإلكتروني</label>
               <input
                 id="recovery-email-input"
@@ -605,19 +611,19 @@ function renderAuthMethodStep(): string {
                 placeholder="name@example.com"
                 value="${escapeAttr(authEmail)}"
                 autocomplete="email"
-                class="w-full h-14 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+                class="w-full h-12 sm:h-14 px-4 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[24px] text-sm sm:text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
               />
             </div>
 
             <div
               id="auth-error-msg"
-              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-center text-sm font-bold text-rose-700 font-baloo"
+              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
               role="alert"
             >${escapeAttr(visibleError)}</div>
 
             <div
               id="auth-success-msg"
-              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-800 font-baloo"
+              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
               role="status"
             >${escapeAttr(authSuccessMessage)}</div>
 
@@ -625,7 +631,7 @@ function renderAuthMethodStep(): string {
               id="btn-send-recovery-email"
               type="submit"
               ${isSendingRecovery ? 'disabled' : ''}
-              class="w-full h-14 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[24px] text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
+              class="w-full h-12 sm:h-14 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[20px] sm:rounded-[24px] text-base sm:text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
                 isSendingRecovery ? 'opacity-70 cursor-wait' : 'cursor-pointer'
               }"
             >
@@ -636,52 +642,52 @@ function renderAuthMethodStep(): string {
               id="btn-back-to-auth-main"
               type="button"
               ${isSendingRecovery ? 'disabled' : ''}
-              class="w-full h-12 bg-[#F3EBDD] hover:bg-[#eae0d0] text-[#564337] border-2 border-[#d6c7b2] rounded-[24px] text-sm font-bold transition-all cursor-pointer font-baloo"
+              class="w-full h-11 sm:h-12 bg-[#F3EBDD] hover:bg-[#eae0d0] text-[#564337] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[24px] text-xs sm:text-sm font-bold transition-all cursor-pointer font-baloo"
             >
               العودة لتسجيل الدخول
             </button>
           </form>
         </div>
 
-        <div class="w-full pb-2"></div>
+        <div class="w-full pb-1 sm:pb-2"></div>
       </div>
     `;
   }
 
   return `
-    <div class="flex-1 flex flex-col items-center justify-between py-1 animate-fade-in">
+    <div class="flex-1 flex flex-col items-center justify-between py-0.5 sm:py-1 animate-fade-in">
       
       <!-- Header Section -->
-      <header class="w-full pt-2 flex flex-col items-center text-center space-y-2.5">
-        <div class="relative w-32 h-32 sm:w-36 sm:h-36 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-32 sm:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+      <header class="w-full pt-0.5 sm:pt-2 flex flex-col items-center text-center space-y-1.5 sm:space-y-2.5">
+        <div class="relative w-20 h-20 sm:w-32 sm:h-32 md:w-36 md:h-36 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-20 sm:w-32 md:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
         </div>
 
-        <div class="space-y-1">
+        <div class="space-y-0.5 sm:space-y-1">
           ${
             isLogin
-              ? `<h1 class="text-2xl font-extrabold text-[#3E2723] font-baloo">تسجيل الدخول</h1>
-                 <p class="text-[#3E2723]/70 text-base font-bold font-baloo">مرحباً بعودتك إلى Meow 🐾</p>`
-              : `<h1 class="text-2xl font-extrabold text-[#3E2723] font-baloo">إنشاء حساب جديد</h1>
-                 <p class="text-[#3E2723]/70 text-base font-bold font-baloo">ابدأ رحلتك مع Meow 🐾</p>`
+              ? `<h1 class="text-xl sm:text-2xl font-extrabold text-[#3E2723] font-baloo">تسجيل الدخول</h1>
+                 <p class="text-[#3E2723]/70 text-sm sm:text-base font-bold font-baloo">مرحباً بعودتك إلى Meow 🐾</p>`
+              : `<h1 class="text-xl sm:text-2xl font-extrabold text-[#3E2723] font-baloo">إنشاء حساب جديد</h1>
+                 <p class="text-[#3E2723]/70 text-sm sm:text-base font-bold font-baloo">ابدأ رحلتك مع Meow 🐾</p>`
           }
         </div>
       </header>
 
-      <!-- Main Content: Email/Password + Confirmation + Deferred Social -->
-      <div class="w-full flex-1 flex flex-col justify-center space-y-4 py-3 min-w-0">
+      <!-- Main Content: Email/Password + Google OAuth -->
+      <div class="w-full flex-1 flex flex-col justify-center space-y-3 sm:space-y-4 py-1.5 sm:py-3 min-w-0">
 
         ${
           isAuthenticated
             ? `
-              <div class="rounded-[24px] border-2 border-emerald-300 bg-emerald-50/90 p-4 text-center space-y-3 font-baloo shadow-sm">
-                <p class="text-sm font-black text-emerald-900 m-0">
+              <div class="rounded-[20px] sm:rounded-[24px] border-2 border-emerald-300 bg-emerald-50/90 p-3 sm:p-4 text-center space-y-2.5 sm:space-y-3 font-baloo shadow-sm">
+                <p class="text-xs sm:text-sm font-black text-emerald-900 m-0">
                   تم التحقق من الحساب${currentSessionEmail ? `: ${escapeAttr(currentSessionEmail)}` : ''}
                 </p>
                 <button
                   id="btn-auth-continue"
                   type="button"
-                  class="w-full h-12 rounded-2xl bg-[#e67e22] hover:bg-[#ea580c] text-white font-extrabold text-base shadow-sm cursor-pointer transition active:scale-[0.98]"
+                  class="w-full h-11 sm:h-12 rounded-2xl bg-[#e67e22] hover:bg-[#ea580c] text-white font-extrabold text-sm sm:text-base shadow-sm cursor-pointer transition active:scale-[0.98]"
                 >
                   متابعة
                 </button>
@@ -690,9 +696,9 @@ function renderAuthMethodStep(): string {
             : ''
         }
 
-        <form id="auth-email-form" novalidate class="space-y-3.5 font-baloo">
-          <div class="space-y-1.5">
-            <label for="auth-email-input" class="block text-sm font-bold text-[#2d221b]">البريد الإلكتروني</label>
+        <form id="auth-email-form" novalidate class="space-y-2.5 sm:space-y-3.5 font-baloo">
+          <div class="space-y-1">
+            <label for="auth-email-input" class="block text-xs sm:text-sm font-bold text-[#2d221b]">البريد الإلكتروني</label>
             <input
               id="auth-email-input"
               type="email"
@@ -700,13 +706,13 @@ function renderAuthMethodStep(): string {
               placeholder="name@example.com"
               value="${escapeAttr(authEmail)}"
               autocomplete="email"
-              class="w-full h-14 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+              class="w-full h-12 sm:h-14 px-4 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[24px] text-sm sm:text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
             />
           </div>
 
-          <div class="space-y-1.5">
+          <div class="space-y-1">
             <div class="flex items-center justify-between gap-2">
-              <label for="auth-password-input" class="block text-sm font-bold text-[#2d221b]">كلمة المرور</label>
+              <label for="auth-password-input" class="block text-xs sm:text-sm font-bold text-[#2d221b]">كلمة المرور</label>
               ${
                 isLogin
                   ? `<button
@@ -725,7 +731,7 @@ function renderAuthMethodStep(): string {
                 placeholder="••••••••"
                 value="${escapeAttr(authPassword)}"
                 autocomplete="${isLogin ? 'current-password' : 'new-password'}"
-                class="w-full h-14 pl-12 pr-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+                class="w-full h-12 sm:h-14 pl-12 pr-4 sm:pr-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[24px] text-sm sm:text-base font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
               />
               <button
                 id="btn-toggle-auth-password"
@@ -742,7 +748,7 @@ function renderAuthMethodStep(): string {
             !isLogin
               ? `
                 <!-- Agreements (Strictly unchecked by default on signup) -->
-                <div id="terms-agreement-box" class="flex items-start gap-3 px-3 py-2 rounded-2xl border border-transparent transition-all">
+                <div id="terms-agreement-box" class="flex items-start gap-2.5 sm:gap-3 px-2 sm:px-3 py-1 sm:py-2 rounded-2xl border border-transparent transition-all">
                   <div class="mt-0.5">
                     <input
                       class="w-5 h-5 rounded border-[#3E2723]/30 text-[#944a00] focus:ring-[#944a00]/20 bg-white/80 transition-colors cursor-pointer"
@@ -765,14 +771,14 @@ function renderAuthMethodStep(): string {
           ${
             pendingConfirmationEmail
               ? `
-                <div id="email-confirmation-box" class="rounded-[24px] border-2 border-[#e67e22]/45 bg-[#fff5ea] p-4 space-y-2.5 text-right shadow-sm">
+                <div id="email-confirmation-box" class="rounded-[20px] sm:rounded-[24px] border-2 border-[#e67e22]/45 bg-[#fff5ea] p-3 sm:p-4 space-y-2 text-right shadow-sm">
                   <div class="flex items-start gap-2.5">
-                    <div class="w-9 h-9 rounded-full bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center shrink-0">
+                    <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center shrink-0">
                       <i class="fa-solid fa-envelope-open-text"></i>
                     </div>
                     <div class="min-w-0 space-y-1">
-                      <p class="text-sm font-black text-[#2d221b] m-0">تأكيد البريد الإلكتروني مطلوب</p>
-                      <p class="text-xs font-bold text-[#786555] leading-relaxed m-0">
+                      <p class="text-xs sm:text-sm font-black text-[#2d221b] m-0">تأكيد البريد الإلكتروني مطلوب</p>
+                      <p class="text-[11px] sm:text-xs font-bold text-[#786555] leading-relaxed m-0">
                         أرسلنا رابط التفعيل إلى <span dir="ltr" class="text-[#2d221b]">${escapeAttr(pendingConfirmationEmail)}</span>. افتح الرابط في بريدك أولاً قبل المتابعة.
                       </p>
                     </div>
@@ -782,7 +788,7 @@ function renderAuthMethodStep(): string {
                       id="btn-resend-confirmation"
                       type="button"
                       ${isResendingConfirmation ? 'disabled' : ''}
-                      class="flex-1 h-11 px-3 rounded-2xl bg-white border-2 border-[#e67e22]/50 text-[#c25807] hover:bg-[#fffaf2] text-xs font-black transition cursor-pointer active:scale-95 ${
+                      class="flex-1 h-10 sm:h-11 px-3 rounded-2xl bg-white border-2 border-[#e67e22]/50 text-[#c25807] hover:bg-[#fffaf2] text-xs font-black transition cursor-pointer active:scale-95 ${
                         isResendingConfirmation ? 'opacity-65 cursor-wait' : ''
                       }"
                     >
@@ -791,7 +797,7 @@ function renderAuthMethodStep(): string {
                     <button
                       id="btn-switch-to-login-after-confirm"
                       type="button"
-                      class="flex-1 h-11 px-3 rounded-2xl bg-[#e67e22] hover:bg-[#ea580c] text-white text-xs font-black transition cursor-pointer active:scale-95"
+                      class="flex-1 h-10 sm:h-11 px-3 rounded-2xl bg-[#e67e22] hover:bg-[#ea580c] text-white text-xs font-black transition cursor-pointer active:scale-95"
                     >
                       تم التأكيد • تسجيل الدخول
                     </button>
@@ -804,13 +810,13 @@ function renderAuthMethodStep(): string {
           <!-- Status / Validation Banners -->
           <div
             id="auth-error-msg"
-            class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-center text-sm font-bold text-rose-700 font-baloo"
+            class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
             role="alert"
           >${escapeAttr(visibleError)}</div>
 
           <div
             id="auth-success-msg"
-            class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-800 font-baloo"
+            class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
             role="status"
           >${escapeAttr(authSuccessMessage)}</div>
 
@@ -818,7 +824,7 @@ function renderAuthMethodStep(): string {
             id="btn-auth-email-submit"
             type="submit"
             ${isAuthSubmitting ? 'disabled' : ''}
-            class="w-full h-14 text-white bg-[#f38f42] hover:bg-[#e67e22] rounded-[24px] text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
+            class="w-full h-12 sm:h-14 text-white bg-[#f38f42] hover:bg-[#e67e22] rounded-[20px] sm:rounded-[24px] text-base sm:text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
               isAuthSubmitting ? 'opacity-70 cursor-wait' : 'cursor-pointer'
             }"
           >
@@ -839,13 +845,13 @@ function renderAuthMethodStep(): string {
           <div class="h-px w-full bg-[#d6c7b2]/70"></div>
         </div>
 
-        <!-- Social Login Options (Preserving Stitch Design) -->
-        <div class="space-y-2.5">
+        <!-- Social Login Options -->
+        <div class="space-y-2 sm:space-y-2.5">
           <button
             id="btn-login-google"
             type="button"
             ${isGoogleSubmitting ? 'disabled' : ''}
-            class="flex items-center justify-center gap-3 w-full py-3.5 px-5 bg-white hover:bg-[#fffaf5] text-[#1f1f1f] rounded-2xl font-semibold border border-[#3E2723]/15 shadow-sm transition-all active:scale-[0.98] ${
+            class="flex items-center justify-center gap-2.5 sm:gap-3 w-full py-2.5 sm:py-3.5 px-4 sm:px-5 bg-white hover:bg-[#fffaf5] text-[#1f1f1f] rounded-xl sm:rounded-2xl font-semibold border border-[#3E2723]/15 shadow-sm transition-all active:scale-[0.98] ${
               isGoogleSubmitting ? 'opacity-70 cursor-wait' : 'cursor-pointer'
             }"
           >
@@ -871,9 +877,9 @@ function renderAuthMethodStep(): string {
             type="button"
             disabled
             aria-disabled="true"
-            class="flex items-center justify-between w-full py-3.5 px-5 bg-black/75 text-white/80 rounded-2xl font-semibold border border-black/40 shadow-sm opacity-65 cursor-not-allowed select-none"
+            class="flex items-center justify-between w-full py-2.5 sm:py-3.5 px-4 sm:px-5 bg-black/75 text-white/80 rounded-xl sm:rounded-2xl font-semibold border border-black/40 shadow-sm opacity-65 cursor-not-allowed select-none"
           >
-            <div class="flex items-center gap-3 min-w-0">
+            <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
               <svg class="w-5 h-5 fill-white/80 shrink-0" viewBox="0 0 384 512">
                 <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 21.8-88.5 21.8-11.4 0-51.1-20.8-82.3-20.1-41.2.6-79.1 23.9-100.4 61-43.7 75.8-11.2 188.6 31.1 250.3 20.6 29.7 45.4 63.3 77.2 62.1 30.6-1.1 42.1-19.8 79-19.8 36.8 0 47.4 19.8 79.9 19.2 33.4-.6 54.8-30.3 75.2-60.2 23.5-34.4 33.2-67.8 33.6-69.5-.8-.3-65-24.9-65.1-99.3zm-30.2-184.2c27.1-32.9 25.1-62.4 23.6-70.5-23.7 1.1-51.1 15.7-68 35.5-15.1 17.5-28.1 47.2-24.2 74.9 26.8 2.1 51.5-17 68.6-39.9z"></path>
               </svg>
@@ -890,19 +896,19 @@ function renderAuthMethodStep(): string {
       </div>
 
       <!-- Footer Mode Switch Pill -->
-      <div class="w-full pt-2 pb-1 text-center">
+      <div class="w-full pt-1.5 sm:pt-2 pb-0.5 sm:pb-1 text-center">
         <button
           id="btn-toggle-auth-mode"
           type="button"
-          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border cursor-pointer transition-all hover:opacity-90 active:scale-95"
+          class="inline-flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full border cursor-pointer transition-all hover:opacity-90 active:scale-95"
           style="background-color: rgba(247, 225, 195, 0.5); border-color: rgba(230, 126, 34, 0.2);"
         >
           ${
             isLogin
-              ? `<span class="text-[#3E2723]/70 text-sm font-semibold font-baloo">ليس لديك حساب؟</span>
-                 <span class="text-[#944a00] font-bold text-sm font-baloo">إنشاء حساب جديد</span>`
-              : `<span class="text-[#3E2723]/70 text-sm font-semibold font-baloo">لديك حساب بالفعل؟</span>
-                 <span class="text-[#944a00] font-bold text-sm font-baloo">تسجيل الدخول</span>`
+              ? `<span class="text-[#3E2723]/70 text-xs sm:text-sm font-semibold font-baloo">ليس لديك حساب؟</span>
+                 <span class="text-[#944a00] font-bold text-xs sm:text-sm font-baloo">إنشاء حساب جديد</span>`
+              : `<span class="text-[#3E2723]/70 text-xs sm:text-sm font-semibold font-baloo">لديك حساب بالفعل؟</span>
+                 <span class="text-[#944a00] font-bold text-xs sm:text-sm font-baloo">تسجيل الدخول</span>`
           }
         </button>
       </div>
@@ -996,7 +1002,7 @@ function renderOwnerDetailsFormContent(
     <div class="flex-1 flex flex-col items-center justify-start py-1 animate-fade-in">
       
       <!-- Header Section -->
-      <header class="w-full pt-2 flex flex-col items-center text-center space-y-3 relative">
+      <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3 relative">
         ${
           mode === 'edit'
             ? `
@@ -1004,26 +1010,26 @@ function renderOwnerDetailsFormContent(
                 id="close-edit-owner-btn"
                 type="button"
                 aria-label="رجوع"
-                class="absolute top-2 right-0 w-11 h-11 rounded-full bg-[#fffefc] border-2 border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:border-[#e67e22] hover:text-[#e67e22] transition cursor-pointer shadow-sm active:scale-95"
+                class="absolute top-1 sm:top-2 right-0 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#fffefc] border-2 border-[#d6c7b2] text-[#2d221b] flex items-center justify-center hover:border-[#e67e22] hover:text-[#e67e22] transition cursor-pointer shadow-sm active:scale-95"
               >
-                <i class="fa-solid fa-arrow-right text-base"></i>
+                <i class="fa-solid fa-arrow-right text-sm sm:text-base"></i>
               </button>
             `
             : ''
         }
-        <div class="relative w-40 h-40 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
+        <div class="relative w-24 h-24 sm:w-36 sm:h-36 md:w-40 md:h-40 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-24 sm:w-36 md:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
         </div>
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1a1612] tracking-normal font-baloo">${headingText}</h1>
+        <h1 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#1a1612] tracking-normal font-baloo">${headingText}</h1>
       </header>
 
       <!-- Main Content: Form directly on #FFF9E9 -->
-      <div class="w-full flex-1 flex flex-col justify-start py-4 min-w-0">
-        <form id="owner-details-form" novalidate class="space-y-5 font-baloo">
+      <div class="w-full flex-1 flex flex-col justify-start py-2.5 sm:py-4 min-w-0">
+        <form id="owner-details-form" novalidate class="space-y-3.5 sm:space-y-5 font-baloo">
           
           <!-- الاسم -->
-          <div class="space-y-2">
-            <label for="owner-full-name-input" class="block text-base font-bold text-[#2d221b]">الاسم</label>
+          <div class="space-y-1.5 sm:space-y-2">
+            <label for="owner-full-name-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">الاسم</label>
             <div class="relative flex items-center">
               <input
                 type="text"
@@ -1031,16 +1037,16 @@ function renderOwnerDetailsFormContent(
                 placeholder="اكتب اسمك الكامل"
                 value="${escapeAttr(values.name)}"
                 autocomplete="off"
-                class="w-full h-16 px-4 sm:px-6 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                class="w-full h-12 sm:h-16 px-4 sm:px-6 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-base sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
               />
             </div>
           </div>
 
           <!-- رقم الهاتف -->
-          <div class="space-y-2">
-            <label for="owner-phone-number-input" class="block text-base font-bold text-[#2d221b]">رقم الهاتف</label>
-            <div id="owner-phone-wrapper" class="relative flex items-center h-16 rounded-[28px]" dir="ltr">
-              <span class="h-full inline-flex items-center justify-center px-3.5 sm:px-5 rounded-l-[28px] border-2 border-r-0 border-[#d6c7b2] bg-[#F7E1C3] text-[#1a1612] font-black text-base sm:text-lg tracking-wider select-none shrink-0">+20</span>
+          <div class="space-y-1.5 sm:space-y-2">
+            <label for="owner-phone-number-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">رقم الهاتف</label>
+            <div id="owner-phone-wrapper" class="relative flex items-center h-12 sm:h-16 rounded-[20px] sm:rounded-[28px]" dir="ltr">
+              <span class="h-full inline-flex items-center justify-center px-3.5 sm:px-5 rounded-l-[20px] sm:rounded-l-[28px] border-2 border-r-0 border-[#d6c7b2] bg-[#F7E1C3] text-[#1a1612] font-black text-sm sm:text-lg tracking-wider select-none shrink-0">+20</span>
               <input
                 type="tel"
                 id="owner-phone-number-input"
@@ -1049,70 +1055,72 @@ function renderOwnerDetailsFormContent(
                 value="${escapeAttr(values.phone)}"
                 dir="ltr"
                 autocomplete="off"
-                class="w-full min-w-0 h-full px-3.5 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-r-[28px] text-base sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+                class="w-full min-w-0 h-full px-3.5 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-r-[20px] sm:rounded-r-[28px] text-sm sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
               />
             </div>
             <p id="owner-phone-hint" class="hidden text-xs font-bold text-rose-600 px-2"></p>
           </div>
 
           <!-- الجنس -->
-          <div class="space-y-2">
-            <label class="block text-base font-bold text-[#2d221b]">الجنس</label>
-            <div id="owner-gender-group" class="grid grid-cols-2 gap-3.5 rounded-[28px]">
+          <div class="space-y-1.5 sm:space-y-2">
+            <label class="block text-sm sm:text-base font-bold text-[#2d221b]">الجنس</label>
+            <div id="owner-gender-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 rounded-[20px] sm:rounded-[28px]">
               <button
                 type="button"
                 id="owner-gender-male-btn"
-                class="h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 ${
+                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 ${
                   values.gender === 'male'
                     ? 'border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="text-2xl">♂</span>
+                <span class="text-xl sm:text-2xl">♂</span>
                 <span>ذكر</span>
               </button>
 
               <button
                 type="button"
                 id="owner-gender-female-btn"
-                class="h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 ${
+                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 ${
                   values.gender === 'female'
                     ? 'border-[#ec4899] bg-[#fce7f3] text-[#db2777]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="text-2xl">♀</span>
+                <span class="text-xl sm:text-2xl">♀</span>
                 <span>أنثى</span>
               </button>
             </div>
           </div>
 
           <!-- الموقع الجغرافي في مصر: الدولة ← المحافظة ← المركز/القسم ← المدينة/الحي ← القرية/النجع/العزبة -->
-          <div class="space-y-3.5">
+          <div class="space-y-2.5 sm:space-y-3.5">
             <div class="flex items-center justify-between gap-2">
-              <label class="block text-base font-bold text-[#2d221b]">الموقع الجغرافي</label>
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-xs font-black text-[#2d221b]">
+              <label class="block text-sm sm:text-base font-bold text-[#2d221b]">الموقع الجغرافي</label>
+              <span class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[11px] sm:text-xs font-black text-[#2d221b]">
                 <span>🇪🇬</span>
                 <span>الدولة: مصر</span>
               </span>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
+            <div class="grid grid-cols-2 gap-2.5 sm:gap-3.5">
               <!-- المحافظة -->
-              <div class="space-y-2 min-w-0">
-                <label for="owner-governorate-select-trigger" class="block text-sm sm:text-base font-bold text-[#2d221b]">المحافظة</label>
+              <div class="space-y-1.5 sm:space-y-2 min-w-0">
+                <label for="owner-governorate-select-trigger" class="block text-xs sm:text-base font-bold text-[#2d221b]">المحافظة</label>
                 ${renderSearchableSelect({
                   id: 'owner-governorate-select',
                   options: ownerNodesToOptions(govNodes),
                   value: values.govId,
                   placeholder: 'اختر المحافظة',
                   searchPlaceholder: 'ابحث عن المحافظة...',
+                  heightClass: 'h-12 sm:h-16',
+                  roundedClass: 'rounded-[20px] sm:rounded-[28px]',
                 })}
               </div>
 
               <!-- المركز أو القسم -->
-              <div class="space-y-2 min-w-0">
-                <label for="owner-markaz-select-trigger" class="block text-sm sm:text-base font-bold text-[#2d221b]">المركز أو القسم</label>
+              <div class="space-y-1.5 sm:space-y-2 min-w-0">
+                <label for="owner-markaz-select-trigger" class="block text-xs sm:text-base font-bold text-[#2d221b]">المركز أو القسم</label>
                 ${renderSearchableSelect({
                   id: 'owner-markaz-select',
                   options: ownerNodesToOptions(markazNodes),
@@ -1120,14 +1128,16 @@ function renderOwnerDetailsFormContent(
                   placeholder: values.govId ? 'اختر المركز أو القسم' : 'اختر المحافظة أولاً',
                   searchPlaceholder: 'ابحث عن المركز أو القسم...',
                   disabled: !values.govId,
+                  heightClass: 'h-12 sm:h-16',
+                  roundedClass: 'rounded-[20px] sm:rounded-[28px]',
                 })}
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
+            <div class="grid grid-cols-2 gap-2.5 sm:gap-3.5">
               <!-- المدينة أو الحي -->
-              <div class="space-y-2 min-w-0">
-                <label for="owner-city-select-trigger" class="block text-sm sm:text-base font-bold text-[#2d221b]">المدينة أو الحي</label>
+              <div class="space-y-1.5 sm:space-y-2 min-w-0">
+                <label for="owner-city-select-trigger" class="block text-xs sm:text-base font-bold text-[#2d221b]">المدينة أو الحي</label>
                 ${renderSearchableSelect({
                   id: 'owner-city-select',
                   options: ownerNodesToOptions(cityNodes),
@@ -1135,12 +1145,14 @@ function renderOwnerDetailsFormContent(
                   placeholder: values.markazId ? 'اختر المدينة أو الحي' : 'اختر المركز أولاً',
                   searchPlaceholder: 'ابحث عن المدينة أو الحي...',
                   disabled: !values.markazId,
+                  heightClass: 'h-12 sm:h-16',
+                  roundedClass: 'rounded-[20px] sm:rounded-[28px]',
                 })}
               </div>
 
               <!-- القرية / النجع / العزبة -->
-              <div class="space-y-2 min-w-0">
-                <label for="owner-village-select-trigger" class="block text-sm font-bold text-[#2d221b] truncate">القرية / النجع / العزبة</label>
+              <div class="space-y-1.5 sm:space-y-2 min-w-0">
+                <label for="owner-village-select-trigger" class="block text-xs sm:text-sm font-bold text-[#2d221b] truncate">القرية / النجع / العزبة</label>
                 ${renderSearchableSelect({
                   id: 'owner-village-select',
                   options: villageMeta.options,
@@ -1148,6 +1160,8 @@ function renderOwnerDetailsFormContent(
                   placeholder: villageMeta.placeholder,
                   searchPlaceholder: 'ابحث عن القرية أو التجمع...',
                   disabled: villageMeta.disabled,
+                  heightClass: 'h-12 sm:h-16',
+                  roundedClass: 'rounded-[20px] sm:rounded-[28px]',
                 })}
               </div>
             </div>
@@ -1156,16 +1170,16 @@ function renderOwnerDetailsFormContent(
           <!-- Validation Alert -->
           <div
             id="owner-form-error"
-            class="hidden rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 leading-relaxed"
+            class="hidden rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed"
             role="alert"
           ></div>
 
           <!-- CTA Button -->
-          <div class="pt-4">
+          <div class="pt-2 sm:pt-4">
             <button
               id="btn-owner-submit"
               type="submit"
-              class="w-full h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[28px] font-extrabold text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
+              class="w-full h-14 sm:h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[20px] sm:rounded-[28px] font-extrabold text-xl sm:text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
             >
               <span>${submitLabel}</span>
             </button>
@@ -1194,7 +1208,7 @@ export function renderOwnerEditView(): string {
 
   return `
     <div id="edit-owner-overlay" class="fixed inset-0 z-[75] bg-[#FFF9E9] text-[#3E2723] overflow-y-auto overscroll-contain flex flex-col justify-start" dir="rtl">
-      <div class="w-full max-w-md mx-auto flex flex-col px-4 sm:px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))]">
+      <div class="w-full max-w-md mx-auto flex flex-col px-4 sm:px-6 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
         ${renderOwnerDetailsFormContent('edit', editOwnerFormState)}
       </div>
     </div>
@@ -1202,54 +1216,53 @@ export function renderOwnerEditView(): string {
 }
 
 // -------------------------------------------------------------
-// Step 5: Has Pet Question (Exact Stitch _2/code.html)
-// No extra subtitle added below heading.
+// Step 5: Has Pet Question
 // -------------------------------------------------------------
 function renderHasPetStep(): string {
   return `
-    <div class="flex-1 flex flex-col items-center justify-between py-2 animate-fade-in">
+    <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
       
       <!-- Header Logo -->
-      <header class="w-full pt-2 flex flex-col items-center text-center">
-        <div class="relative w-40 h-40 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
+      <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center">
+        <div class="relative w-24 h-24 sm:w-36 sm:h-36 md:w-40 md:h-40 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-24 sm:w-36 md:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
         </div>
       </header>
 
       <!-- Main Question, Pet Photo, and Action Buttons -->
-      <div class="flex-1 flex flex-col items-center justify-center text-center space-y-8 my-auto py-4 w-full">
+      <div class="flex-1 flex flex-col items-center justify-center text-center space-y-5 sm:space-y-8 my-auto py-2 sm:py-4 w-full">
         <div>
-          <h2 class="text-3xl sm:text-4xl font-extrabold text-[#2d221b] tracking-normal leading-snug font-baloo">
+          <h2 class="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#2d221b] tracking-normal leading-snug font-baloo">
             هل تمتلك حيواناً أليفاً؟
           </h2>
         </div>
 
-        <div class="flex justify-center items-center my-2">
+        <div class="flex justify-center items-center my-1 sm:my-2">
           <img
             src="${HAS_PET_IMG_URL}"
             alt="Pet"
-            class="w-56 h-56 object-cover rounded-3xl shadow-md border-4 border-white/60"
+            class="w-40 h-40 sm:w-52 sm:h-52 md:w-56 md:h-56 object-cover rounded-2xl sm:rounded-3xl shadow-md border-[3px] sm:border-4 border-white/60"
           />
         </div>
 
-        <div class="flex flex-col sm:flex-row items-center justify-center gap-4 w-full px-4">
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full px-2 sm:px-4">
           <button
             type="button"
             id="btn-has-pet-yes"
             ${isCompletingOnboarding ? 'disabled' : ''}
-            class="w-full sm:w-48 py-5 px-8 bg-[#e67e22] hover:bg-[#ea580c] active:scale-[0.98] text-white text-2xl font-black rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 cursor-pointer font-baloo ${
+            class="w-full sm:w-48 py-3.5 sm:py-5 px-6 sm:px-8 bg-[#e67e22] hover:bg-[#ea580c] active:scale-[0.98] text-white text-xl sm:text-2xl font-black rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 sm:gap-3 cursor-pointer font-baloo ${
               isCompletingOnboarding ? 'opacity-65 cursor-not-allowed' : ''
             }"
           >
             <span class="whitespace-nowrap">مياو</span>
-            <span class="text-2xl">🐾</span>
+            <span class="text-xl sm:text-2xl">🐾</span>
           </button>
 
           <button
             type="button"
             id="btn-has-pet-no"
             ${isCompletingOnboarding ? 'disabled' : ''}
-            class="w-full sm:w-48 py-5 px-8 bg-[#F3EBDD] hover:bg-[#eae0d0] active:scale-[0.98] text-[#564337] text-2xl font-black rounded-full border-2 border-[#d6c7b2] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-3 cursor-pointer font-baloo ${
+            class="w-full sm:w-48 py-3.5 sm:py-5 px-6 sm:px-8 bg-[#F3EBDD] hover:bg-[#eae0d0] active:scale-[0.98] text-[#564337] text-xl sm:text-2xl font-black rounded-full border-2 border-[#d6c7b2] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2.5 sm:gap-3 cursor-pointer font-baloo ${
               isCompletingOnboarding ? 'opacity-70 cursor-wait' : ''
             }"
           >
@@ -1259,7 +1272,7 @@ function renderHasPetStep(): string {
 
         <div
           id="has-pet-error"
-          class="${hasPetErrorMessage ? '' : 'hidden'} w-full max-w-sm rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 leading-relaxed font-baloo"
+          class="${hasPetErrorMessage ? '' : 'hidden'} w-full max-w-sm rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed font-baloo"
           role="alert"
         >${escapeAttr(hasPetErrorMessage)}</div>
       </div>
@@ -1308,60 +1321,60 @@ function renderPetDetailsStep(): string {
     <div class="flex-1 flex flex-col items-center justify-start py-1 animate-fade-in">
       
       <!-- Header Section -->
-      <header class="w-full pt-2 flex flex-col items-center text-center space-y-3">
-        <div class="relative w-40 h-40 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
+      <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3">
+        <div class="relative w-24 h-24 sm:w-36 sm:h-36 md:w-40 md:h-40 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-24 sm:w-36 md:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
         </div>
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1a1612] tracking-normal font-baloo">تسجيل بيانات المياو</h1>
+        <h1 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#1a1612] tracking-normal font-baloo">تسجيل بيانات المياو</h1>
       </header>
 
       <!-- Main Form directly on #FFF9E9 -->
-      <div class="w-full flex-1 flex flex-col justify-start py-4 min-w-0">
-        <form id="pet-details-form" novalidate class="space-y-5 font-baloo">
+      <div class="w-full flex-1 flex flex-col justify-start py-2.5 sm:py-4 min-w-0">
+        <form id="pet-details-form" novalidate class="space-y-3.5 sm:space-y-5 font-baloo">
           
           <!-- نوع الأليف (عندك ايه: قطة / كلب) -->
-          <div class="space-y-2">
-            <label class="block text-base font-bold text-[#2d221b]">عندك ايه</label>
-            <div id="pet-species-group" class="grid grid-cols-2 gap-3.5 rounded-[28px]">
+          <div class="space-y-1.5 sm:space-y-2">
+            <label class="block text-sm sm:text-base font-bold text-[#2d221b]">عندك ايه</label>
+            <div id="pet-species-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 rounded-[20px] sm:rounded-[28px]">
               <button
                 type="button"
                 id="pet-type-cat-btn"
-                class="h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 ${
+                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 ${
                   selectedPetSpecies === 'cat'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="text-2xl">🐱</span>
+                <span class="text-xl sm:text-2xl">🐱</span>
                 <span class="font-black">قطة</span>
               </button>
 
               <button
                 type="button"
                 id="pet-type-dog-btn"
-                class="h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 ${
+                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 ${
                   selectedPetSpecies === 'dog'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="text-2xl">🐶</span>
+                <span class="text-xl sm:text-2xl">🐶</span>
                 <span class="font-black">كلب</span>
               </button>
             </div>
           </div>
 
           <!-- صور للمياو (3 مربعات) -->
-          <div class="space-y-2">
-            <label class="block text-base font-bold text-[#2d221b]">صور للمياو</label>
-            <div id="pet-photos-group" class="grid grid-cols-3 gap-3 rounded-3xl">
+          <div class="space-y-1.5 sm:space-y-2">
+            <label class="block text-sm sm:text-base font-bold text-[#2d221b]">صور للمياو</label>
+            <div id="pet-photos-group" class="grid grid-cols-3 gap-2.5 sm:gap-3 rounded-2xl sm:rounded-3xl">
               ${[0, 1, 2]
                 .map((idx) => {
                   const photo = uploadedPetPhotos[idx];
                   const isPrimary = idx === 0;
                   return `
                     <label
-                      class="relative flex items-center justify-center aspect-square rounded-3xl border-2 overflow-hidden ${
+                      class="relative flex items-center justify-center aspect-square rounded-2xl sm:rounded-3xl border-2 overflow-hidden ${
                         isPrimary
                           ? 'border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5e5]'
                           : 'border-[#d6c7b2] bg-[#fffefc] hover:bg-[#faf6ed]'
@@ -1371,7 +1384,7 @@ function renderPetDetailsStep(): string {
                       ${
                         photo
                           ? `<img src="${photo}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`
-                          : `<span class="text-4xl font-black ${
+                          : `<span class="text-3xl sm:text-4xl font-black ${
                               isPrimary ? 'text-[#e67e22]' : 'text-[#998b7c]'
                             } group-hover:scale-110 transition-transform">+</span>`
                       }
@@ -1383,71 +1396,71 @@ function renderPetDetailsStep(): string {
           </div>
 
           <!-- اسم المياو واللون -->
-          <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
-            <div class="space-y-2 min-w-0">
-              <label for="pet-name-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">اسم المياو</label>
-              <div class="relative flex items-center h-16">
+          <div class="grid grid-cols-2 gap-2.5 sm:gap-3.5">
+            <div class="space-y-1.5 sm:space-y-2 min-w-0">
+              <label for="pet-name-input" class="block text-xs sm:text-base font-bold text-[#2d221b]">اسم المياو</label>
+              <div class="relative flex items-center h-12 sm:h-16">
                 <input
                   type="text"
                   id="pet-name-input"
                   value="${escapeAttr(draftPetName)}"
                   autocomplete="off"
-                  class="w-full min-w-0 h-16 py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base sm:text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full min-w-0 h-12 sm:h-16 py-2.5 sm:py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-sm sm:text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
 
-            <div class="space-y-2 min-w-0">
-              <label for="pet-color-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">اللون</label>
-              <div class="relative flex items-center h-16">
+            <div class="space-y-1.5 sm:space-y-2 min-w-0">
+              <label for="pet-color-input" class="block text-xs sm:text-base font-bold text-[#2d221b]">اللون</label>
+              <div class="relative flex items-center h-12 sm:h-16">
                 <input
                   type="text"
                   id="pet-color-input"
                   value="${escapeAttr(draftPetColor)}"
                   autocomplete="off"
-                  class="w-full min-w-0 h-16 py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base sm:text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full min-w-0 h-12 sm:h-16 py-2.5 sm:py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-sm sm:text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
           </div>
 
           <!-- السلالة وسلالة هجينة (اختياري) + العمر -->
-          <div class="space-y-3.5">
-            <div class="grid grid-cols-2 gap-3 sm:gap-3.5">
-              <div class="space-y-2 min-w-0">
-                <label for="pet-breed-select" class="block text-sm sm:text-base font-black text-[#2d221b]">السلالة</label>
-                <div class="relative flex items-center h-16">
+          <div class="space-y-2.5 sm:space-y-3.5">
+            <div class="grid grid-cols-2 gap-2.5 sm:gap-3.5">
+              <div class="space-y-1.5 sm:space-y-2 min-w-0">
+                <label for="pet-breed-select" class="block text-xs sm:text-base font-black text-[#2d221b]">السلالة</label>
+                <div class="relative flex items-center h-12 sm:h-16">
                   <select
                     id="pet-breed-select"
                     ${selectedPetSpecies ? '' : 'disabled'}
-                    class="w-full min-w-0 h-16 py-3 pr-3.5 sm:pr-4 pl-9 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-sm sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                    class="w-full min-w-0 h-12 sm:h-16 py-2 sm:py-3 pr-3 sm:pr-4 pl-8 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-xs sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
                       selectedPetSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
                     }"
                   >
                     ${renderBreedOptionsHtml(selectedPetSpecies, false, draftPetBreed)}
                   </select>
-                  <div class="pointer-events-none absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
-                    <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                  <div class="pointer-events-none absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+                    <svg class="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 20 20">
                       <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
                     </svg>
                   </div>
                 </div>
               </div>
 
-              <div class="space-y-2 min-w-0">
-                <label for="pet-hybrid-select" class="block text-sm sm:text-base font-black text-[#2d221b] truncate">سلالة هجينة (اختياري)</label>
-                <div class="relative flex items-center h-16">
+              <div class="space-y-1.5 sm:space-y-2 min-w-0">
+                <label for="pet-hybrid-select" class="block text-xs sm:text-base font-black text-[#2d221b] truncate">سلالة هجينة (اختياري)</label>
+                <div class="relative flex items-center h-12 sm:h-16">
                   <select
                     id="pet-hybrid-select"
                     ${selectedPetSpecies ? '' : 'disabled'}
-                    class="w-full min-w-0 h-16 py-3 pr-3.5 sm:pr-4 pl-9 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-sm sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                    class="w-full min-w-0 h-12 sm:h-16 py-2 sm:py-3 pr-3 sm:pr-4 pl-8 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-xs sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
                       selectedPetSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
                     }"
                   >
                     ${renderBreedOptionsHtml(selectedPetSpecies, true, draftPetHybrid)}
                   </select>
-                  <div class="pointer-events-none absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
-                    <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                  <div class="pointer-events-none absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 flex items-center text-[#786555]">
+                    <svg class="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 20 20">
                       <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path>
                     </svg>
                   </div>
@@ -1456,10 +1469,10 @@ function renderPetDetailsStep(): string {
             </div>
 
             <!-- العمر -->
-            <div class="space-y-2">
-              <label class="block text-base font-black text-[#2d221b]">العمر</label>
-              <div id="pet-age-group" class="grid grid-cols-2 gap-3.5 h-16 rounded-[28px]">
-                <div class="relative flex items-center h-16">
+            <div class="space-y-1.5 sm:space-y-2">
+              <label class="block text-sm sm:text-base font-black text-[#2d221b]">العمر</label>
+              <div id="pet-age-group" class="grid grid-cols-2 gap-2.5 sm:gap-3.5 h-12 sm:h-16 rounded-[20px] sm:rounded-[28px]">
+                <div class="relative flex items-center h-12 sm:h-16">
                   <input
                     type="number"
                     id="pet-age-years-input"
@@ -1468,10 +1481,10 @@ function renderPetDetailsStep(): string {
                     max="25"
                     placeholder="سنة"
                     value="${escapeAttr(draftPetAgeYears)}"
-                    class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                    class="w-full h-12 sm:h-16 py-2.5 sm:py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-base sm:text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                   />
                 </div>
-                <div class="relative flex items-center h-16">
+                <div class="relative flex items-center h-12 sm:h-16">
                   <input
                     type="number"
                     id="pet-age-months-input"
@@ -1480,7 +1493,7 @@ function renderPetDetailsStep(): string {
                     max="11"
                     placeholder="شهر (اختياري)"
                     value="${escapeAttr(draftPetAgeMonths)}"
-                    class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                    class="w-full h-12 sm:h-16 py-2.5 sm:py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-sm sm:text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                   />
                 </div>
               </div>
@@ -1488,17 +1501,17 @@ function renderPetDetailsStep(): string {
           </div>
 
           <!-- الجنس -->
-          <div class="space-y-2">
-            <label class="block text-base font-bold text-[#2d221b]">الجنس</label>
-            <div id="pet-gender-group" class="grid grid-cols-2 gap-3.5 rounded-[28px]">
+          <div class="space-y-1.5 sm:space-y-2">
+            <label class="block text-sm sm:text-base font-bold text-[#2d221b]">الجنس</label>
+            <div id="pet-gender-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 rounded-[20px] sm:rounded-[28px]">
               <button
                 type="button"
                 id="pet-gender-male-btn"
-                class="h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 ${
+                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 ${
                   selectedPetGender === 'male'
                     ? 'border-[#3b82f6] bg-[#eff6ff] text-[#2563eb]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5"
+                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base sm:text-xl px-4 sm:px-5"
               >
                 <span class="font-black">ذكر</span>
               </button>
@@ -1506,11 +1519,11 @@ function renderPetDetailsStep(): string {
               <button
                 type="button"
                 id="pet-gender-female-btn"
-                class="h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 ${
+                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 ${
                   selectedPetGender === 'female'
                     ? 'border-[#ec4899] bg-[#fce7f3] text-[#db2777]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="font-black">انثى</span>
               </button>
@@ -1518,17 +1531,17 @@ function renderPetDetailsStep(): string {
           </div>
 
           <!-- حالة التطعيم -->
-          <div class="space-y-2">
-            <label class="block text-base font-black text-[#2d221b]">حالة التطعيم</label>
-            <div id="pet-vax-group" class="grid grid-cols-2 gap-3.5 h-16 rounded-[28px]">
+          <div class="space-y-1.5 sm:space-y-2">
+            <label class="block text-sm sm:text-base font-black text-[#2d221b]">حالة التطعيم</label>
+            <div id="pet-vax-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 h-12 sm:h-16 rounded-[20px] sm:rounded-[28px]">
               <button
                 type="button"
                 id="vax-yes-btn"
-                class="h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 ${
+                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 ${
                   selectedVaccination === 'yes'
                     ? 'border-[#10b981] bg-[#ecfdf5] text-[#059669]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2"
+                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-2"
               >
                 <i class="fa-solid fa-check"></i>
                 <span class="font-black">مطعم</span>
@@ -1537,11 +1550,11 @@ function renderPetDetailsStep(): string {
               <button
                 type="button"
                 id="vax-no-btn"
-                class="h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 ${
+                class="h-12 sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[20px] sm:rounded-[28px] border-2 ${
                   selectedVaccination === 'no'
                     ? 'border-[#ea580c] bg-[#fff7ed] text-[#c2410c]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="font-black">غير مطعم</span>
               </button>
@@ -1549,15 +1562,15 @@ function renderPetDetailsStep(): string {
           </div>
 
           <!-- سمات الشخصية -->
-          <div id="pet-traits-group" class="space-y-2.5 pt-2 rounded-3xl">
+          <div id="pet-traits-group" class="space-y-2 sm:space-y-2.5 pt-1 sm:pt-2 rounded-3xl">
             <div class="flex items-center justify-between gap-2 pb-1 flex-wrap">
               <div class="flex items-center gap-2">
-                <label class="block text-xl font-black text-[#2d221b]">الشخصية</label>
-                <span class="text-xs sm:text-sm font-bold text-[#8a7663] bg-[#fffbf2] border border-[#d6c7b2]/60 px-3 py-1 rounded-full shadow-sm">(اختر 3 إلى 6 صفات)</span>
+                <label class="block text-lg sm:text-xl font-black text-[#2d221b]">الشخصية</label>
+                <span class="text-[11px] sm:text-sm font-bold text-[#8a7663] bg-[#fffbf2] border border-[#d6c7b2]/60 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-sm">(اختر 3 إلى 6 صفات)</span>
               </div>
               <span
                 id="traits-count-badge"
-                class="text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm ${
+                class="text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border transition-all shadow-sm ${
                   isTraitsValid
                     ? 'bg-[#ecfdf5] text-[#059669] border-[#10b981]/30'
                     : 'bg-[#faecd8] text-[#c25807] border-[#e67e22]/20'
@@ -1567,14 +1580,14 @@ function renderPetDetailsStep(): string {
               </span>
             </div>
 
-            <div class="flex flex-wrap pt-2 gap-2.5 justify-start">
+            <div class="flex flex-wrap pt-1 sm:pt-2 gap-2 sm:gap-2.5 justify-start">
               ${PERSONALITY_TRAITS.map((trait) => {
                 const isSelected = selectedTraits.has(trait);
                 return `
                   <button
                     type="button"
                     data-trait-name="${trait}"
-                    class="trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center ${
+                    class="trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center ${
                       isSelected
                         ? 'border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20'
                         : 'border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50'
@@ -1590,13 +1603,13 @@ function renderPetDetailsStep(): string {
           </div>
 
           <!-- ملاحظات صحية / سلوكية -->
-          <div class="space-y-2">
-            <label for="pet-notes-input" class="block text-base font-bold text-[#2d221b]">ملاحظات صحية / سلوكية</label>
+          <div class="space-y-1.5 sm:space-y-2">
+            <label for="pet-notes-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">ملاحظات صحية / سلوكية</label>
             <div class="relative flex items-center">
               <textarea
                 id="pet-notes-input"
                 rows="3"
-                class="w-full p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
+                class="w-full p-4 sm:p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-base sm:text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
               >${escapeAttr(draftPetNotes)}</textarea>
             </div>
           </div>
@@ -1604,16 +1617,16 @@ function renderPetDetailsStep(): string {
           <!-- Validation Alert -->
           <div
             id="pet-form-error"
-            class="hidden rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 leading-relaxed"
+            class="hidden rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed"
             role="alert"
           ></div>
 
           <!-- CTA Button -->
-          <div class="pt-4">
+          <div class="pt-2 sm:pt-4">
             <button
               id="btn-pet-submit"
               type="submit"
-              class="w-full h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[28px] font-extrabold text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
+              class="w-full h-14 sm:h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[20px] sm:rounded-[28px] font-extrabold text-xl sm:text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
             >
               <span>نونو على الكلام</span>
             </button>
@@ -2046,30 +2059,65 @@ export function attachOnboardingEvents(): void {
           refreshAuthStep();
           return;
         }
-      } else {
-        state.setTermsAccepted(true, true);
+      }
+
+      if (state.isPreviewOnboardingMode()) {
+        authErrorMessage =
+          'أنت الآن في وضع المعاينة. لاختبار المصادقة الحقيقية، افتح التطبيق بدون ?preview=onboarding.';
+        refreshAuthStep();
+        return;
       }
 
       isGoogleSubmitting = true;
       refreshAuthStep();
 
+      let removeBrowserFinishedListener: (() => Promise<void>) | null = null;
       try {
-        const res = await signInWithGoogleOAuth();
-        isGoogleSubmitting = false;
+        removeBrowserFinishedListener = await addNativeAuthBrowserFinishedListener(() => {
+          window.setTimeout(() => {
+            if (removeBrowserFinishedListener) {
+              void removeBrowserFinishedListener();
+              removeBrowserFinishedListener = null;
+            }
+            if (
+              isGoogleSubmitting &&
+              !state.isSupabaseAuthenticated() &&
+              !state.hasPendingAuthDeepLink() &&
+              !state.getSupabaseAuthError()
+            ) {
+              isGoogleSubmitting = false;
+              refreshAuthStep();
+            }
+          }, 700);
+        });
 
-        if (!res.success || !res.account) {
+        const res = await signInWithGoogleSupabaseOAuth();
+        if (!res.success) {
+          if (removeBrowserFinishedListener) {
+            await removeBrowserFinishedListener();
+            removeBrowserFinishedListener = null;
+          }
+          isGoogleSubmitting = false;
           authErrorMessage =
-            res.errorMessage || 'تعذر إتمام تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
+            res.errorMessage || 'تعذر بدء تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
           refreshAuthStep();
           return;
         }
 
-        const completed = state.completeGoogleAuthentication(res.account, authMode);
-        if (!completed) {
-          authErrorMessage = 'تعذر إكمال تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
-          refreshAuthStep();
+        // On Web, Supabase navigates the page to Google OAuth; clear spinner after fallback timeout if navigation was blocked
+        if (!res.launchedExternalBrowser) {
+          window.setTimeout(() => {
+            if (isGoogleSubmitting && !state.isSupabaseAuthenticated()) {
+              isGoogleSubmitting = false;
+              refreshAuthStep();
+            }
+          }, 8000);
         }
       } catch {
+        if (removeBrowserFinishedListener) {
+          await removeBrowserFinishedListener();
+          removeBrowserFinishedListener = null;
+        }
         isGoogleSubmitting = false;
         authErrorMessage = 'تعذر إتمام تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
         refreshAuthStep();
@@ -2163,17 +2211,17 @@ function attachOwnerDetailsFormEvents(
       formState.gender = 'male';
       ownerGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       ownerMaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       ownerFemaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
     });
     ownerFemaleBtn.addEventListener('click', () => {
       formState.gender = 'female';
       ownerGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       ownerFemaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       ownerMaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
     });
   }
 
@@ -2512,14 +2560,14 @@ function attachRemainingOnboardingEvents(): void {
     if (catBtn && dogBtn) {
       if (species === 'cat') {
         catBtn.className =
-          'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-12 sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
         dogBtn.className =
-          'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       } else {
         dogBtn.className =
-          'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
         catBtn.className =
-          'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-12 sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       }
     }
     if (breedSelect) {
@@ -2609,18 +2657,18 @@ function attachRemainingOnboardingEvents(): void {
       selectedPetGender = 'male';
       petGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       petMaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#3b82f6] bg-[#eff6ff] text-[#2563eb] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#3b82f6] bg-[#eff6ff] text-[#2563eb] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base sm:text-xl px-4 sm:px-5';
       petFemaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       applyPetNameGenderColor('male');
     });
     petFemaleBtn.addEventListener('click', () => {
       selectedPetGender = 'female';
       petGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       petFemaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       petMaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base sm:text-xl px-4 sm:px-5';
       applyPetNameGenderColor('female');
     });
   }
@@ -2633,17 +2681,17 @@ function attachRemainingOnboardingEvents(): void {
       selectedVaccination = 'yes';
       petVaxGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       vaxYes.className =
-        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#10b981] bg-[#ecfdf5] text-[#059669] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#10b981] bg-[#ecfdf5] text-[#059669] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-2';
       vaxNo.className =
-        'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
     });
     vaxNo.addEventListener('click', () => {
       selectedVaccination = 'no';
       petVaxGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       vaxNo.className =
-        'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       vaxYes.className =
-        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2';
+        'h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-2';
     });
   }
 
@@ -2659,7 +2707,7 @@ function attachRemainingOnboardingEvents(): void {
       if (selectedTraits.has(trait)) {
         selectedTraits.delete(trait);
         btn.className =
-          'trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50';
+          'trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50';
         if (limitMsg) limitMsg.classList.add('hidden');
       } else {
         if (selectedTraits.size >= 6) {
@@ -2671,7 +2719,7 @@ function attachRemainingOnboardingEvents(): void {
         }
         selectedTraits.add(trait);
         btn.className =
-          'trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20';
+          'trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20';
         if (limitMsg) limitMsg.classList.add('hidden');
       }
 
@@ -2683,10 +2731,10 @@ function attachRemainingOnboardingEvents(): void {
         countBadge.textContent = `المحدد: ${selectedTraits.size} من 6`;
         if (selectedTraits.size >= 3) {
           countBadge.className =
-            'text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm bg-[#ecfdf5] text-[#059669] border-[#10b981]/30';
+            'text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border transition-all shadow-sm bg-[#ecfdf5] text-[#059669] border-[#10b981]/30';
         } else {
           countBadge.className =
-            'text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm bg-[#faecd8] text-[#c25807] border-[#e67e22]/20';
+            'text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border transition-all shadow-sm bg-[#faecd8] text-[#c25807] border-[#e67e22]/20';
         }
       }
     });

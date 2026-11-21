@@ -33,6 +33,7 @@ export function renderSearchableSelect(config: {
   searchPlaceholder?: string;
   disabled?: boolean;
   heightClass?: string;
+  roundedClass?: string;
   textAlignClass?: string;
 }): string {
   const {
@@ -43,6 +44,7 @@ export function renderSearchableSelect(config: {
     searchPlaceholder = 'ابحث هنا...',
     disabled = false,
     heightClass = 'h-16',
+    roundedClass = 'rounded-[28px]',
     textAlignClass = 'text-center',
   } = config;
 
@@ -59,7 +61,7 @@ export function renderSearchableSelect(config: {
         ${disabled ? 'disabled' : ''}
         aria-haspopup="listbox"
         aria-expanded="false"
-        class="ss-trigger w-full ${heightClass} py-3 pr-3 sm:pr-4 pl-9 sm:pl-10 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-sm sm:text-base font-black ${textAlignClass} ${
+        class="ss-trigger w-full ${heightClass} py-3 pr-3 sm:pr-4 pl-9 sm:pl-10 bg-[#fffefc] border-2 border-[#d6c7b2] ${roundedClass} text-sm sm:text-base font-black ${textAlignClass} ${
           isPlaceholder && value === '' ? 'text-[#786555]' : 'text-[#1a1612]'
         } focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm flex items-center justify-center truncate ${
           disabled ? 'opacity-55 cursor-not-allowed bg-[#faf6ed]' : 'cursor-pointer hover:border-[#e67e22]/70'

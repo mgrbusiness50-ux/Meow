@@ -1,5 +1,6 @@
 import type { AuthChangeEvent, AuthError, EmailOtpType, Session, User } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient.ts';
 import {
   DbProfileRow,
@@ -25,6 +26,15 @@ export interface SupabaseAuthActionResult {
 export interface SupabaseBasicResult {
   success: boolean;
   message?: string;
+  errorMessage?: string;
+  errorCode?: string;
+}
+
+export interface SupabaseGoogleOAuthStartResult {
+  success: boolean;
+  startedRedirect: boolean;
+  launchedExternalBrowser: boolean;
+  url?: string;
   errorMessage?: string;
   errorCode?: string;
 }
@@ -240,6 +250,16 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
 
   if (
     code === 'over_email_send_rate_limit' ||
+    rawMessage.includes('email rate limit')
+  ) {
+    return {
+      code: code || 'over_email_send_rate_limit',
+      message:
+        'تجاوز المشروع الحد المؤقت لإرسال رسائل التحقق عبر البريد الإلكتروني. يرجى تعطيل تأكيد البريد (Confirm email) من لوحة تحكم Supabase أو المحاولة بعد قليل.',
+    };
+  }
+
+  if (
     code === 'over_request_rate_limit' ||
     rawMessage.includes('rate limit') ||
     rawMessage.includes('too many requests') ||
@@ -248,6 +268,28 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
     return {
       code: code || 'rate_limited',
       message: 'تم إرسال عدة طلبات خلال وقت قصير. يرجى الانتظار قليلًا ثم المحاولة مرة أخرى.',
+    };
+  }
+
+  if (
+    code === 'validation_failed' &&
+    (rawMessage.includes('provider is not enabled') || rawMessage.includes('unsupported provider'))
+  ) {
+    return {
+      code: 'provider_not_enabled',
+      message: 'تسجيل الدخول عبر Google غير مفعّل حاليًا في إعدادات Supabase Auth.',
+    };
+  }
+
+  if (
+    code === 'access_denied' ||
+    rawMessage.includes('access_denied') ||
+    rawMessage.includes('user cancelled') ||
+    rawMessage.includes('user denied')
+  ) {
+    return {
+      code: 'access_denied',
+      message: 'تم إلغاء تسجيل الدخول عبر Google.',
     };
   }
 
@@ -604,6 +646,131 @@ export async function signInWithEmailPassword(params: {
       errorMessage: mapped.message,
       errorCode: mapped.code,
     };
+  }
+}
+
+/**
+ * 2b. Sign in / Sign up with Google via real Supabase OAuth (PKCE).
+ * - Web: redirects top window via Supabase OAuth and returns to origin.
+ * - Android APK (Capacitor): opens Google OAuth in Chrome Custom Tabs via @capacitor/browser
+ *   with redirectTo = com.meow.app://auth-callback to avoid Android WebView 403 disallowed_useragent.
+ */
+export async function signInWithGoogleSupabaseOAuth(params?: {
+  redirectTo?: string;
+}): Promise<SupabaseGoogleOAuthStartResult> {
+  const { client, errorMessage } = ensureConfiguredClient();
+  if (!client) {
+    return {
+      success: false,
+      startedRedirect: false,
+      launchedExternalBrowser: false,
+      errorMessage,
+      errorCode: 'supabase_not_configured',
+    };
+  }
+
+  const nativeAndroid = isNativeAndroidRuntime();
+  const redirectTo =
+    params?.redirectTo ||
+    (nativeAndroid ? ANDROID_AUTH_CALLBACK_URL : getDefaultRedirectUrl());
+
+  try {
+    const { data, error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        ...(redirectTo ? { redirectTo } : {}),
+        scopes: 'email profile',
+        skipBrowserRedirect: nativeAndroid,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
+      },
+    });
+
+    if (error) {
+      const mapped = mapSupabaseAuthErrorToArabic(
+        error,
+        'تعذر بدء تسجيل الدخول عبر Google. يرجى التحقق من تفعيل Google في لوحة تحكم Supabase.'
+      );
+      return {
+        success: false,
+        startedRedirect: false,
+        launchedExternalBrowser: false,
+        errorMessage: mapped.message,
+        errorCode: mapped.code,
+      };
+    }
+
+    const authUrl = data?.url?.trim();
+    if (!authUrl) {
+      return {
+        success: false,
+        startedRedirect: false,
+        launchedExternalBrowser: false,
+        errorMessage: 'لم يصل رابط المصادقة من Google عبر Supabase. يرجى المحاولة مرة أخرى.',
+        errorCode: 'missing_oauth_url',
+      };
+    }
+
+    if (nativeAndroid) {
+      await Browser.open({
+        url: authUrl,
+        presentationStyle: 'popover',
+      });
+      return {
+        success: true,
+        startedRedirect: true,
+        launchedExternalBrowser: true,
+        url: authUrl,
+      };
+    }
+
+    return {
+      success: true,
+      startedRedirect: true,
+      launchedExternalBrowser: false,
+      url: authUrl,
+    };
+  } catch (err) {
+    const mapped = mapSupabaseAuthErrorToArabic(
+      err,
+      'حدث خطأ أثناء الاتصال بخدمة Google. يرجى المحاولة مرة أخرى.'
+    );
+    return {
+      success: false,
+      startedRedirect: false,
+      launchedExternalBrowser: false,
+      errorMessage: mapped.message,
+      errorCode: mapped.code,
+    };
+  }
+}
+
+export async function closeNativeAuthBrowser(): Promise<void> {
+  if (!isNativeAndroidRuntime()) return;
+  try {
+    await Browser.close();
+  } catch {
+    // Ignore when Chrome Custom Tab is already closed
+  }
+}
+
+export async function addNativeAuthBrowserFinishedListener(
+  onFinished: () => void
+): Promise<() => Promise<void>> {
+  if (!isNativeAndroidRuntime()) {
+    return async () => {};
+  }
+  try {
+    const handle = await Browser.addListener('browserFinished', () => {
+      onFinished();
+    });
+    return async () => {
+      await handle.remove();
+    };
+  } catch {
+    return async () => {};
   }
 }
 
