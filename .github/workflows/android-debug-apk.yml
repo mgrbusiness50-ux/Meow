@@ -62,43 +62,10 @@ jobs:
           java-version: '21'
 
       - name: Setup Android SDK
-        run: |
-          set +o pipefail
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-
-          if [ ! -d "${SDK_ROOT}" ]; then
-            echo "::error::Android SDK root was not found at ${SDK_ROOT}."
-            exit 1
-          fi
-
-          if [ ! -w "${SDK_ROOT}" ] && command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$(id -u):$(id -g)" "${SDK_ROOT}"
-          fi
-
-          SDKMANAGER=""
-          if [ -x "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" ]; then
-            SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-          else
-            SDKMANAGER="$(find "${SDK_ROOT}/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | head -n 1 || true)"
-          fi
-          if [ -z "${SDKMANAGER}" ]; then
-            SDKMANAGER="$(command -v sdkmanager || true)"
-          fi
-
-          if [ -z "${SDKMANAGER}" ] || [ ! -x "${SDKMANAGER}" ]; then
-            echo "::error::Android sdkmanager was not found under ${SDK_ROOT}."
-            exit 1
-          fi
-
-          echo "ANDROID_HOME=${SDK_ROOT}" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=${SDK_ROOT}" >> "$GITHUB_ENV"
-          echo "$(dirname "${SDKMANAGER}")" >> "$GITHUB_PATH"
-          echo "${SDK_ROOT}/platform-tools" >> "$GITHUB_PATH"
-
-          yes | "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --licenses
-          yes | "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-          yes | "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --licenses
-          "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --licenses </dev/null
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          accept-android-sdk-licenses: true
 
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
