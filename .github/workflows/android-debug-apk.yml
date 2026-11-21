@@ -65,7 +65,25 @@ jobs:
         run: |
           set +o pipefail
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDKMANAGER="$(command -v sdkmanager || find "${SDK_ROOT}/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | head -n 1)"
+
+          if [ ! -d "${SDK_ROOT}" ]; then
+            echo "::error::Android SDK root was not found at ${SDK_ROOT}."
+            exit 1
+          fi
+
+          if [ ! -w "${SDK_ROOT}" ] && command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$(id -u):$(id -g)" "${SDK_ROOT}"
+          fi
+
+          SDKMANAGER=""
+          if [ -x "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          else
+            SDKMANAGER="$(find "${SDK_ROOT}/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | head -n 1 || true)"
+          fi
+          if [ -z "${SDKMANAGER}" ]; then
+            SDKMANAGER="$(command -v sdkmanager || true)"
+          fi
 
           if [ -z "${SDKMANAGER}" ] || [ ! -x "${SDKMANAGER}" ]; then
             echo "::error::Android sdkmanager was not found under ${SDK_ROOT}."
