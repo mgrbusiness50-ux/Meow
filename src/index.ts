@@ -2,10 +2,6 @@ import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { MeowApp } from './ui/App.ts';
 import { state } from './state.ts';
-import {
-  closeNativeAuthBrowser,
-  isSupabaseAuthCallbackUrl,
-} from './services/supabaseAuthService.ts';
 
 function setupAndroidBackHandler(): void {
   try {
@@ -30,9 +26,6 @@ function setupAndroidDeepLinkHandler(): void {
     if (Capacitor.isNativePlatform()) {
       void CapApp.addListener('appUrlOpen', ({ url }) => {
         if (url) {
-          if (isSupabaseAuthCallbackUrl(url)) {
-            void closeNativeAuthBrowser();
-          }
           void state.handleAuthDeepLinkUrl(url);
         }
       });
@@ -42,35 +35,27 @@ function setupAndroidDeepLinkHandler(): void {
   }
 }
 
-function shouldBootDevXrPreview(): boolean {
-  if (!import.meta.env.DEV || typeof window === 'undefined') {
-    return false;
+function maybeInitDevXrOverlay(): void {
+  if (!import.meta.env.DEV || Capacitor.isNativePlatform()) {
+    return;
   }
-  try {
-    if (Capacitor.isNativePlatform()) {
-      return false;
-    }
-    return new URLSearchParams(window.location.search).get('xr') === '1';
-  } catch {
-    return false;
+  const hasXrFlag =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('xr');
+  if (!hasXrFlag) {
+    return;
   }
-}
 
-async function initDevXrPreviewIfRequested(): Promise<void> {
-  if (!shouldBootDevXrPreview()) return;
-  try {
-    const [xb, { CatScene }] = await Promise.all([
-      import('xrblocks'),
-      import('./xr/CatScene.ts'),
-    ]);
-    const options = new xb.Options();
-    options.setAppTitle('Meow - مواء');
-    options.setAppDescription('منصة رعاية وتزاوج وتبني الحيوانات الأليفة');
-    xb.add(new CatScene());
-    await xb.init(options);
-  } catch (err) {
-    console.warn('XR preview initialization skipped:', err);
-  }
+  void Promise.all([import('xrblocks'), import('./xr/CatScene.ts')])
+    .then(([xb, { CatScene }]) => {
+      const options = new xb.Options();
+      options.setAppTitle('Meow - مواء');
+      options.setAppDescription('منصة رعاية وتزاوج وتبني الحيوانات الأليفة');
+      xb.add(new CatScene());
+      return xb.init(options);
+    })
+    .catch((err) => {
+      console.warn('XR dev overlay initialization skipped:', err);
+    });
 }
 
 function bootMeowApp(): void {
@@ -85,8 +70,8 @@ function bootMeowApp(): void {
   setupAndroidBackHandler();
   setupAndroidDeepLinkHandler();
 
-  // 3. Optional Dev-Only XR Preview (excluded from production Web & Android APK bundles)
-  void initDevXrPreviewIfRequested();
+  // 3. Optional Dev-Only XR Simulator (?xr) — excluded from production & Android APK builds
+  maybeInitDevXrOverlay();
 }
 
 if (document.readyState === 'loading') {

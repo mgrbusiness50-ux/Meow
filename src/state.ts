@@ -69,7 +69,7 @@ import {
   SupabaseBasicResult,
   SupabaseUserAccountBundle,
   clearSupabasePasswordRecoveryState,
-  closeNativeAuthBrowser,
+  closeExternalAuthBrowserIfOpen,
   fetchSupabaseUserAccountBundle,
   getCurrentSupabaseSession,
   handleSupabaseAuthCallbackUrl,
@@ -817,67 +817,6 @@ class AppStateManager {
     void this.verifyInitialSupabaseSession();
   }
 
-  private stripAuthParamsFromBrowserUrl(): void {
-    if (typeof window === 'undefined' || Capacitor.isNativePlatform()) return;
-    try {
-      const current = new URL(window.location.href);
-      const authQueryKeys = [
-        'code',
-        'token_hash',
-        'type',
-        'access_token',
-        'refresh_token',
-        'error',
-        'error_code',
-        'error_description',
-        'sb_flow_id',
-        'flow_id',
-      ];
-      let mutated = false;
-      for (const key of authQueryKeys) {
-        if (current.searchParams.has(key)) {
-          current.searchParams.delete(key);
-          mutated = true;
-        }
-      }
-      const hashRaw = current.hash.replace(/^#/, '');
-      if (hashRaw) {
-        const hashParams = new URLSearchParams(hashRaw);
-        const hasAuthHash = authQueryKeys.some((k) => hashParams.has(k));
-        if (hasAuthHash) {
-          for (const key of authQueryKeys) {
-            hashParams.delete(key);
-          }
-          const nextHash = hashParams.toString();
-          current.hash = nextHash ? `#${nextHash}` : '';
-          mutated = true;
-        }
-      }
-      if (mutated) {
-        window.history.replaceState({}, document.title, `${current.pathname}${current.search}${current.hash}`);
-      }
-    } catch {
-      // Ignore URL cleanup error
-    }
-  }
-
-  private urlHasAuthErrorParams(rawUrl: string): boolean {
-    try {
-      const parsed = new URL(rawUrl);
-      const hash = new URLSearchParams(parsed.hash.replace(/^#/, ''));
-      return Boolean(
-        parsed.searchParams.get('error') ||
-          parsed.searchParams.get('error_code') ||
-          parsed.searchParams.get('error_description') ||
-          hash.get('error') ||
-          hash.get('error_code') ||
-          hash.get('error_description')
-      );
-    } catch {
-      return false;
-    }
-  }
-
   private async verifyInitialSupabaseSession(): Promise<void> {
     if (!this.deepLinkInitChecked) {
       let launchUrl: string | undefined;
@@ -907,11 +846,6 @@ class AppStateManager {
       }
     }
 
-    const webHref =
-      !Capacitor.isNativePlatform() && typeof window !== 'undefined' ? window.location.href : '';
-    const webHasCallback = Boolean(webHref && isSupabaseAuthCallbackUrl(webHref));
-    const webHasCallbackError = Boolean(webHasCallback && this.urlHasAuthErrorParams(webHref));
-
     const result = await getCurrentSupabaseSession();
     if (!result.configured) {
       this.isSupabaseAuthReady = true;
@@ -924,18 +858,6 @@ class AppStateManager {
       const handled = await this.activeDeepLinkAuthPromise.catch(() => false);
       if (handled || this.supabaseAuthError) {
         return;
-      }
-    }
-
-    if (webHasCallback) {
-      if (webHasCallbackError || !result.session) {
-        const handled = await this.handleAuthDeepLinkUrl(webHref);
-        this.stripAuthParamsFromBrowserUrl();
-        if (handled || this.supabaseAuthError) {
-          return;
-        }
-      } else {
-        this.stripAuthParamsFromBrowserUrl();
       }
     }
 
@@ -1058,7 +980,7 @@ class AppStateManager {
       this.isSupabaseProfileLoading = false;
       this.isSupabaseAuthReady = true;
 
-      if (!res.success || !res.bundle || !res.bundle.exists || !res.bundle.profile) {
+      if (!res.success || !res.bundle) {
         this.loadedSupabaseUserId = null;
         this.supabaseAccountBundle = res.bundle ?? null;
         this.supabaseAuthError =
@@ -1085,12 +1007,54 @@ class AppStateManager {
         return res;
       }
 
+      if (!res.bundle.exists || !res.bundle.profile) {
+        // Brand-new Auth user whose profiles row hasn't been created yet: let them complete owner_details (upsert creates the row)
+        const sessionUser = opts?.session?.user ?? this.supabaseSession?.user ?? null;
+        const metaAvatar =
+          (sessionUser?.user_metadata?.avatar_url as string | undefined) ||
+          (sessionUser?.user_metadata?.picture as string | undefined) ||
+          '';
+        this.rawSupabaseAvatarUrl = metaAvatar;
+        this.loadedSupabaseUserId = userId;
+        this.supabaseAccountBundle = res.bundle;
+        this.supabaseAuthError = null;
+        this.termsAcceptedInOnboarding = true;
+        this.ownerDetailsCompleted = false;
+        this.user = {
+          ...createUnauthenticatedUserProfile(this.notificationsEnabled),
+          id: userId,
+          email: sessionUser?.email || '',
+          name:
+            (sessionUser?.user_metadata?.full_name as string | undefined) ||
+            (sessionUser?.user_metadata?.name as string | undefined) ||
+            '',
+          avatar: metaAvatar || DEFAULT_USER_AVATAR_FALLBACK,
+        };
+        const inRecovery = Boolean(opts?.isPasswordRecovery || this.isSupabasePasswordRecoveryState);
+        if (!this.isOnboardingPreviewSession) {
+          this.pendingSplashAdvance = false;
+          if (inRecovery) {
+            this.onboardingStep = 'auth_method';
+          } else if (
+            this.onboardingStep === 'splash' ||
+            this.onboardingStep === 'welcome' ||
+            this.onboardingStep === 'auth_method' ||
+            this.onboardingStep === 'completed'
+          ) {
+            this.onboardingStep = 'owner_details';
+          }
+        }
+        this.notify();
+        return res;
+      }
+
       this.loadedSupabaseUserId = userId;
       this.supabaseAccountBundle = res.bundle;
       this.supabaseAuthError = null;
       this.applySupabaseAccountBundle(res.bundle, {
         isPasswordRecovery: Boolean(opts?.isPasswordRecovery),
       });
+      this.cleanupWebAuthCallbackParams();
       this.notify();
       return res;
     })();
@@ -1388,7 +1352,7 @@ class AppStateManager {
       isPasswordRecovery: this.isSupabasePasswordRecoveryState,
       forceReload: true,
     });
-    return Boolean(bundleRes.success && bundleRes.bundle?.exists);
+    return Boolean(bundleRes.success && bundleRes.bundle);
   }
 
   public async refreshSupabaseAccount(): Promise<SupabaseAccountBundleResult> {
@@ -1448,8 +1412,32 @@ class AppStateManager {
     });
   }
 
-  public hasPendingAuthDeepLink(): boolean {
+  public isProcessingAuthDeepLink(): boolean {
     return Boolean(this.activeDeepLinkAuthPromise);
+  }
+
+  private cleanupWebAuthCallbackParams(): void {
+    if (typeof window === 'undefined' || Capacitor.isNativePlatform()) return;
+    try {
+      const url = new URL(window.location.href);
+      const authParams = ['code', 'state', 'type', 'token_hash', 'error', 'error_code', 'error_description'];
+      let modified = false;
+      for (const key of authParams) {
+        if (url.searchParams.has(key)) {
+          url.searchParams.delete(key);
+          modified = true;
+        }
+      }
+      if (url.hash && (url.hash.includes('access_token=') || url.hash.includes('error='))) {
+        url.hash = '';
+        modified = true;
+      }
+      if (modified) {
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+      }
+    } catch {
+      // ignore URL cleanup errors
+    }
   }
 
   public async handleAuthDeepLinkUrl(url: string): Promise<boolean> {
@@ -1463,6 +1451,9 @@ class AppStateManager {
       return false;
     }
 
+    // Close external Chrome Custom Tab smoothly as soon as callback deep link opens the app
+    void closeExternalAuthBrowserIfOpen();
+
     if (this.activeDeepLinkAuthPromise) {
       if (this.activeDeepLinkUrl === trimmedUrl) {
         return this.activeDeepLinkAuthPromise;
@@ -1475,7 +1466,6 @@ class AppStateManager {
     }
 
     const runPromise = (async (): Promise<boolean> => {
-      void closeNativeAuthBrowser();
       const cbRes = await handleSupabaseAuthCallbackUrl(trimmedUrl);
       if (!cbRes.handled) {
         return false;

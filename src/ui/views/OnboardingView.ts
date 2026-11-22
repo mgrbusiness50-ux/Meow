@@ -18,7 +18,6 @@ import {
   SearchableSelectController,
 } from '../components/SearchableSelect.ts';
 import {
-  addNativeAuthBrowserFinishedListener,
   resendSignUpConfirmationEmail,
   sendPasswordRecoveryEmail,
   signInWithEmailPassword,
@@ -254,6 +253,7 @@ export function renderOnboardingView(): string {
       resetTransientAuthState();
       resetTransientFormState();
     } else if (step === 'owner_details') {
+      isGoogleSubmitting = false;
       syncOnboardingOwnerDraftIfEmpty();
     }
     if (step !== 'pet_details') {
@@ -262,10 +262,10 @@ export function renderOnboardingView(): string {
     if (step !== 'has_pet') {
       hasPetErrorMessage = '';
     }
-    if (step !== 'auth_method') {
-      isAuthSubmitting = false;
-      isGoogleSubmitting = false;
-    }
+  }
+
+  if (isGoogleSubmitting && (state.getSupabaseAuthError() || state.isSupabaseAuthenticated())) {
+    isGoogleSubmitting = false;
   }
 
   // Splash screen renders standalone without step dots or footer
@@ -291,8 +291,8 @@ export function renderOnboardingView(): string {
       </div>
 
       <!-- Footer Handle Only (@Meow2026) -->
-      <footer class="w-full max-w-md pt-2 pb-1 sm:pt-4 sm:pb-4 text-center z-20">
-        <span dir="ltr" class="inline-block text-xs font-bold text-[#8C827A] tracking-wide font-baloo">@Meow2026</span>
+      <footer class="w-full max-w-md pt-2 sm:pt-4 pb-1 sm:pb-4 text-center z-20">
+        <span dir="ltr" class="inline-block text-[11px] sm:text-xs font-bold text-[#8C827A] tracking-wide font-baloo">@Meow2026</span>
       </footer>
 
     </div>
@@ -423,46 +423,46 @@ function renderSplashScreen(): string {
         <div class="absolute w-52 h-52 sm:w-72 sm:h-72 rounded-full bg-[#F7E1C3] blur-[40px] opacity-40 -z-10"></div>
         <img
           alt="Meow Logo"
-          class="relative z-10 w-44 sm:w-56 md:w-64 h-auto object-contain max-w-[68vw] sm:max-w-[80vw]"
+          class="relative z-10 w-48 sm:w-64 h-auto object-contain max-w-[68vw] sm:max-w-[80vw]"
           src="${SPLASH_LOGO_URL}"
         />
       </div>
 
       <!-- Footer Text: By Mohamed Gamil -->
       <div class="pb-8 sm:pb-12 text-center animate-fade-in" style="font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive;">
-        <p class="text-[10px] uppercase tracking-[0.3em] opacity-40 mb-1.5 font-medium">By</p>
-        <p class="text-sm font-semibold tracking-[0.05em] text-[#3E2723]/80">Mohamed Gamil</p>
+        <p class="text-[10px] uppercase tracking-[0.3em] opacity-40 mb-1 sm:mb-1.5 font-medium">By</p>
+        <p class="text-xs sm:text-sm font-semibold tracking-[0.05em] text-[#3E2723]/80">Mohamed Gamil</p>
       </div>
     </div>
   `;
 }
 
 // -------------------------------------------------------------
-// Step 2: Welcome Screen (Fits cleanly within mobile viewport without scroll; Tablet scales up)
+// Step 2: Welcome Screen (Fits cleanly in 1 mobile viewport without scroll)
 // -------------------------------------------------------------
 function renderWelcomeStep(): string {
   return `
     <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
       
       <!-- Top Official Logo -->
-      <header class="w-full pt-0 sm:pt-2 pb-1 sm:pb-2 flex flex-col items-center text-center">
-        <div class="relative w-24 h-24 sm:w-40 sm:h-40 md:w-44 md:h-44 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-24 sm:w-40 md:w-44 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+      <header class="w-full pt-0.5 sm:pt-2 pb-1 sm:pb-2 flex flex-col items-center text-center">
+        <div class="relative w-28 h-28 sm:w-44 sm:h-44 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-28 sm:w-44 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
         </div>
       </header>
 
       <!-- Center Mascot Card & Headline -->
-      <div class="flex flex-col items-center text-center space-y-3 sm:space-y-6 my-auto">
+      <div class="flex flex-col items-center text-center space-y-3.5 sm:space-y-6 my-auto">
         <div class="relative flex items-center justify-center">
-          <div class="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg border-[3px] sm:border-4 border-white/80 bg-white/40 flex items-center justify-center">
+          <div class="w-36 h-36 sm:w-48 sm:h-48 rounded-3xl overflow-hidden shadow-lg border-4 border-white/80 bg-white/40 flex items-center justify-center">
             <img alt="Meow Mascot" class="w-full h-full object-cover" src="${MASCOT_IMG_URL}">
           </div>
         </div>
 
-        <div class="space-y-1 sm:space-y-3 px-2 sm:px-4 w-full max-w-sm mx-auto">
-          <h1 class="text-xl sm:text-3xl font-extrabold text-[#2d1b10] leading-snug sm:leading-[1.4] font-baloo">
+        <div class="space-y-2 sm:space-y-3 px-2 sm:px-4 w-full max-w-sm mx-auto">
+          <h1 class="text-[1.45rem] leading-[1.35] sm:text-[1.85rem] sm:leading-[1.4] font-extrabold text-[#2d1b10] font-baloo">
             كل الي حيوانك الأليف محتاجه في مكان واحد
-            <span class="block text-lg sm:text-2xl pt-1 sm:pt-2 text-[#895036]">🤎</span>
+            <span class="block text-xl sm:text-2xl pt-1 sm:pt-2 text-[#895036]">🤎</span>
           </h1>
         </div>
       </div>
@@ -472,7 +472,7 @@ function renderWelcomeStep(): string {
         <button
           type="button"
           id="btn-welcome-next"
-          class="w-20 h-16 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl font-bold text-base sm:text-lg text-white shadow-md active:scale-95 transition-all flex flex-col items-center justify-center gap-1 sm:gap-1.5 hover:opacity-95 cursor-pointer bg-[#e67e22]"
+          class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl font-bold text-base sm:text-lg text-white shadow-md active:scale-95 transition-all flex flex-col items-center justify-center gap-1 sm:gap-1.5 hover:opacity-95 cursor-pointer bg-[#e67e22]"
         >
           <span class="text-base sm:text-lg font-baloo">التالي</span>
           <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
@@ -501,19 +501,19 @@ function renderAuthMethodStep(): string {
     return `
       <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
         <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3">
-          <div class="relative w-20 h-20 sm:w-32 sm:h-32 md:w-36 md:h-36 flex items-center justify-center">
-            <img alt="Meow Logo" class="w-20 sm:w-32 md:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+          <div class="relative w-24 h-24 sm:w-36 sm:h-36 flex items-center justify-center">
+            <img alt="Meow Logo" class="w-24 sm:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
           </div>
-          <div class="space-y-1">
+          <div class="space-y-1 sm:space-y-1.5">
             <h1 class="text-xl sm:text-2xl font-extrabold text-[#3E2723] font-baloo">إعادة تعيين كلمة المرور</h1>
             <p class="text-[#3E2723]/75 text-sm sm:text-base font-bold font-baloo">أدخل كلمة المرور الجديدة لحسابك في Meow 🐾</p>
           </div>
         </header>
 
-        <div class="w-full flex-1 flex flex-col justify-center py-2.5 sm:py-4 min-w-0">
+        <div class="w-full flex-1 flex flex-col justify-center py-2 sm:py-4 min-w-0">
           <form id="recovery-password-form" novalidate class="space-y-3 sm:space-y-4 font-baloo">
-            <div class="space-y-1">
-              <label for="recovery-new-password-input" class="block text-sm font-bold text-[#2d221b]">كلمة المرور الجديدة</label>
+            <div class="space-y-1 sm:space-y-1.5">
+              <label for="recovery-new-password-input" class="block text-xs sm:text-sm font-bold text-[#2d221b]">كلمة المرور الجديدة</label>
               <div class="relative flex items-center">
                 <input
                   id="recovery-new-password-input"
@@ -528,15 +528,15 @@ function renderAuthMethodStep(): string {
                   id="btn-toggle-recovery-pw"
                   type="button"
                   aria-label="إظهار أو إخفاء كلمة المرور"
-                  class="absolute left-3.5 w-9 h-9 rounded-full text-[#786555] hover:text-[#e67e22] flex items-center justify-center cursor-pointer"
+                  class="absolute left-3 sm:left-3.5 w-9 h-9 rounded-full text-[#786555] hover:text-[#e67e22] flex items-center justify-center cursor-pointer"
                 >
                   <i class="fa-solid ${showRecoveryPassword ? 'fa-eye-slash' : 'fa-eye'}"></i>
                 </button>
               </div>
             </div>
 
-            <div class="space-y-1">
-              <label for="recovery-confirm-password-input" class="block text-sm font-bold text-[#2d221b]">تأكيد كلمة المرور الجديدة</label>
+            <div class="space-y-1 sm:space-y-1.5">
+              <label for="recovery-confirm-password-input" class="block text-xs sm:text-sm font-bold text-[#2d221b]">تأكيد كلمة المرور الجديدة</label>
               <input
                 id="recovery-confirm-password-input"
                 type="${showRecoveryPassword ? 'text' : 'password'}"
@@ -550,13 +550,13 @@ function renderAuthMethodStep(): string {
 
             <div
               id="auth-error-msg"
-              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
+              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
               role="alert"
             >${escapeAttr(visibleError)}</div>
 
             <div
               id="auth-success-msg"
-              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
+              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
               role="status"
             >${escapeAttr(authSuccessMessage)}</div>
 
@@ -591,19 +591,19 @@ function renderAuthMethodStep(): string {
     return `
       <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
         <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3">
-          <div class="relative w-20 h-20 sm:w-32 sm:h-32 md:w-36 md:h-36 flex items-center justify-center">
-            <img alt="Meow Logo" class="w-20 sm:w-32 md:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+          <div class="relative w-24 h-24 sm:w-36 sm:h-36 flex items-center justify-center">
+            <img alt="Meow Logo" class="w-24 sm:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
           </div>
-          <div class="space-y-1">
+          <div class="space-y-1 sm:space-y-1.5">
             <h1 class="text-xl sm:text-2xl font-extrabold text-[#3E2723] font-baloo">استعادة كلمة المرور</h1>
             <p class="text-[#3E2723]/75 text-sm sm:text-base font-bold font-baloo">أدخل بريدك الإلكتروني لإرسال رابط الاستعادة</p>
           </div>
         </header>
 
-        <div class="w-full flex-1 flex flex-col justify-center py-2.5 sm:py-4 min-w-0">
+        <div class="w-full flex-1 flex flex-col justify-center py-2 sm:py-4 min-w-0">
           <form id="forgot-password-form" novalidate class="space-y-3 sm:space-y-4 font-baloo">
-            <div class="space-y-1">
-              <label for="recovery-email-input" class="block text-sm font-bold text-[#2d221b]">البريد الإلكتروني</label>
+            <div class="space-y-1 sm:space-y-1.5">
+              <label for="recovery-email-input" class="block text-xs sm:text-sm font-bold text-[#2d221b]">البريد الإلكتروني</label>
               <input
                 id="recovery-email-input"
                 type="email"
@@ -617,13 +617,13 @@ function renderAuthMethodStep(): string {
 
             <div
               id="auth-error-msg"
-              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
+              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
               role="alert"
             >${escapeAttr(visibleError)}</div>
 
             <div
               id="auth-success-msg"
-              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
+              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
               role="status"
             >${escapeAttr(authSuccessMessage)}</div>
 
@@ -659,8 +659,8 @@ function renderAuthMethodStep(): string {
       
       <!-- Header Section -->
       <header class="w-full pt-0.5 sm:pt-2 flex flex-col items-center text-center space-y-1.5 sm:space-y-2.5">
-        <div class="relative w-20 h-20 sm:w-32 sm:h-32 md:w-36 md:h-36 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-20 sm:w-32 md:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+        <div class="relative w-24 h-24 sm:w-36 sm:h-36 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-24 sm:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
         </div>
 
         <div class="space-y-0.5 sm:space-y-1">
@@ -674,13 +674,13 @@ function renderAuthMethodStep(): string {
         </div>
       </header>
 
-      <!-- Main Content: Email/Password + Google OAuth -->
+      <!-- Main Content: Email/Password + Confirmation + Google/Apple -->
       <div class="w-full flex-1 flex flex-col justify-center space-y-3 sm:space-y-4 py-1.5 sm:py-3 min-w-0">
 
         ${
           isAuthenticated
             ? `
-              <div class="rounded-[20px] sm:rounded-[24px] border-2 border-emerald-300 bg-emerald-50/90 p-3 sm:p-4 text-center space-y-2.5 sm:space-y-3 font-baloo shadow-sm">
+              <div class="rounded-[20px] sm:rounded-[24px] border-2 border-emerald-300 bg-emerald-50/90 p-3.5 sm:p-4 text-center space-y-2.5 sm:space-y-3 font-baloo shadow-sm">
                 <p class="text-xs sm:text-sm font-black text-emerald-900 m-0">
                   تم التحقق من الحساب${currentSessionEmail ? `: ${escapeAttr(currentSessionEmail)}` : ''}
                 </p>
@@ -697,7 +697,7 @@ function renderAuthMethodStep(): string {
         }
 
         <form id="auth-email-form" novalidate class="space-y-2.5 sm:space-y-3.5 font-baloo">
-          <div class="space-y-1">
+          <div class="space-y-1 sm:space-y-1.5">
             <label for="auth-email-input" class="block text-xs sm:text-sm font-bold text-[#2d221b]">البريد الإلكتروني</label>
             <input
               id="auth-email-input"
@@ -710,7 +710,7 @@ function renderAuthMethodStep(): string {
             />
           </div>
 
-          <div class="space-y-1">
+          <div class="space-y-1 sm:space-y-1.5">
             <div class="flex items-center justify-between gap-2">
               <label for="auth-password-input" class="block text-xs sm:text-sm font-bold text-[#2d221b]">كلمة المرور</label>
               ${
@@ -737,7 +737,7 @@ function renderAuthMethodStep(): string {
                 id="btn-toggle-auth-password"
                 type="button"
                 aria-label="إظهار أو إخفاء كلمة المرور"
-                class="absolute left-3.5 w-9 h-9 rounded-full text-[#786555] hover:text-[#e67e22] flex items-center justify-center cursor-pointer"
+                class="absolute left-3 sm:left-3.5 w-9 h-9 rounded-full text-[#786555] hover:text-[#e67e22] flex items-center justify-center cursor-pointer"
               >
                 <i class="fa-solid ${showAuthPassword ? 'fa-eye-slash' : 'fa-eye'}"></i>
               </button>
@@ -748,10 +748,10 @@ function renderAuthMethodStep(): string {
             !isLogin
               ? `
                 <!-- Agreements (Strictly unchecked by default on signup) -->
-                <div id="terms-agreement-box" class="flex items-start gap-2.5 sm:gap-3 px-2 sm:px-3 py-1 sm:py-2 rounded-2xl border border-transparent transition-all">
+                <div id="terms-agreement-box" class="flex items-start gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl border border-transparent transition-all">
                   <div class="mt-0.5">
                     <input
-                      class="w-5 h-5 rounded border-[#3E2723]/30 text-[#944a00] focus:ring-[#944a00]/20 bg-white/80 transition-colors cursor-pointer"
+                      class="w-4 h-4 sm:w-5 sm:h-5 rounded border-[#3E2723]/30 text-[#944a00] focus:ring-[#944a00]/20 bg-white/80 transition-colors cursor-pointer"
                       id="terms-checkbox"
                       type="checkbox"
                       ${isTermsAccepted ? 'checked' : ''}
@@ -771,10 +771,10 @@ function renderAuthMethodStep(): string {
           ${
             pendingConfirmationEmail
               ? `
-                <div id="email-confirmation-box" class="rounded-[20px] sm:rounded-[24px] border-2 border-[#e67e22]/45 bg-[#fff5ea] p-3 sm:p-4 space-y-2 text-right shadow-sm">
+                <div id="email-confirmation-box" class="rounded-[20px] sm:rounded-[24px] border-2 border-[#e67e22]/45 bg-[#fff5ea] p-3.5 sm:p-4 space-y-2 sm:space-y-2.5 text-right shadow-sm">
                   <div class="flex items-start gap-2.5">
                     <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center shrink-0">
-                      <i class="fa-solid fa-envelope-open-text"></i>
+                      <i class="fa-solid fa-envelope-open-text text-sm"></i>
                     </div>
                     <div class="min-w-0 space-y-1">
                       <p class="text-xs sm:text-sm font-black text-[#2d221b] m-0">تأكيد البريد الإلكتروني مطلوب</p>
@@ -783,7 +783,7 @@ function renderAuthMethodStep(): string {
                       </p>
                     </div>
                   </div>
-                  <div class="flex flex-col sm:flex-row gap-2 pt-1">
+                  <div class="flex flex-col sm:flex-row gap-2 pt-0.5 sm:pt-1">
                     <button
                       id="btn-resend-confirmation"
                       type="button"
@@ -810,13 +810,13 @@ function renderAuthMethodStep(): string {
           <!-- Status / Validation Banners -->
           <div
             id="auth-error-msg"
-            class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
+            class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
             role="alert"
           >${escapeAttr(visibleError)}</div>
 
           <div
             id="auth-success-msg"
-            class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
+            class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
             role="status"
           >${escapeAttr(authSuccessMessage)}</div>
 
@@ -851,7 +851,7 @@ function renderAuthMethodStep(): string {
             id="btn-login-google"
             type="button"
             ${isGoogleSubmitting ? 'disabled' : ''}
-            class="flex items-center justify-center gap-2.5 sm:gap-3 w-full py-2.5 sm:py-3.5 px-4 sm:px-5 bg-white hover:bg-[#fffaf5] text-[#1f1f1f] rounded-xl sm:rounded-2xl font-semibold border border-[#3E2723]/15 shadow-sm transition-all active:scale-[0.98] ${
+            class="flex items-center justify-center gap-2.5 sm:gap-3 w-full py-3 sm:py-3.5 px-4 sm:px-5 bg-white hover:bg-[#fffaf5] text-[#1f1f1f] rounded-xl sm:rounded-2xl font-semibold border border-[#3E2723]/15 shadow-sm transition-all active:scale-[0.98] ${
               isGoogleSubmitting ? 'opacity-70 cursor-wait' : 'cursor-pointer'
             }"
           >
@@ -877,7 +877,7 @@ function renderAuthMethodStep(): string {
             type="button"
             disabled
             aria-disabled="true"
-            class="flex items-center justify-between w-full py-2.5 sm:py-3.5 px-4 sm:px-5 bg-black/75 text-white/80 rounded-xl sm:rounded-2xl font-semibold border border-black/40 shadow-sm opacity-65 cursor-not-allowed select-none"
+            class="flex items-center justify-between w-full py-3 sm:py-3.5 px-4 sm:px-5 bg-black/75 text-white/80 rounded-xl sm:rounded-2xl font-semibold border border-black/40 shadow-sm opacity-65 cursor-not-allowed select-none"
           >
             <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
               <svg class="w-5 h-5 fill-white/80 shrink-0" viewBox="0 0 384 512">
@@ -896,7 +896,7 @@ function renderAuthMethodStep(): string {
       </div>
 
       <!-- Footer Mode Switch Pill -->
-      <div class="w-full pt-1.5 sm:pt-2 pb-0.5 sm:pb-1 text-center">
+      <div class="w-full pt-1.5 sm:pt-2 pb-1 text-center">
         <button
           id="btn-toggle-auth-mode"
           type="button"
@@ -999,10 +999,10 @@ function renderOwnerDetailsFormContent(
   const submitLabel = mode === 'edit' ? 'حفظ التعديلات' : 'اشطا';
 
   return `
-    <div class="flex-1 flex flex-col items-center justify-start py-1 animate-fade-in">
+    <div class="flex-1 flex flex-col items-center justify-start py-0.5 sm:py-1 animate-fade-in">
       
       <!-- Header Section -->
-      <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3 relative">
+      <header class="w-full pt-0.5 sm:pt-2 flex flex-col items-center text-center space-y-1.5 sm:space-y-3 relative">
         ${
           mode === 'edit'
             ? `
@@ -1017,10 +1017,10 @@ function renderOwnerDetailsFormContent(
             `
             : ''
         }
-        <div class="relative w-24 h-24 sm:w-36 sm:h-36 md:w-40 md:h-40 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-24 sm:w-36 md:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
+        <div class="relative w-24 h-24 sm:w-40 sm:h-40 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-24 sm:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
         </div>
-        <h1 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#1a1612] tracking-normal font-baloo">${headingText}</h1>
+        <h1 class="text-xl sm:text-3xl font-extrabold text-[#1a1612] tracking-normal font-baloo">${headingText}</h1>
       </header>
 
       <!-- Main Content: Form directly on #FFF9E9 -->
@@ -1037,7 +1037,7 @@ function renderOwnerDetailsFormContent(
                 placeholder="اكتب اسمك الكامل"
                 value="${escapeAttr(values.name)}"
                 autocomplete="off"
-                class="w-full h-12 sm:h-16 px-4 sm:px-6 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-base sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                class="w-full h-[52px] sm:h-16 px-4 sm:px-6 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-base sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
               />
             </div>
           </div>
@@ -1045,8 +1045,8 @@ function renderOwnerDetailsFormContent(
           <!-- رقم الهاتف -->
           <div class="space-y-1.5 sm:space-y-2">
             <label for="owner-phone-number-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">رقم الهاتف</label>
-            <div id="owner-phone-wrapper" class="relative flex items-center h-12 sm:h-16 rounded-[20px] sm:rounded-[28px]" dir="ltr">
-              <span class="h-full inline-flex items-center justify-center px-3.5 sm:px-5 rounded-l-[20px] sm:rounded-l-[28px] border-2 border-r-0 border-[#d6c7b2] bg-[#F7E1C3] text-[#1a1612] font-black text-sm sm:text-lg tracking-wider select-none shrink-0">+20</span>
+            <div id="owner-phone-wrapper" class="relative flex items-center h-[52px] sm:h-16 rounded-[22px] sm:rounded-[28px]" dir="ltr">
+              <span class="h-full inline-flex items-center justify-center px-3.5 sm:px-5 rounded-l-[22px] sm:rounded-l-[28px] border-2 border-r-0 border-[#d6c7b2] bg-[#F7E1C3] text-[#1a1612] font-black text-base sm:text-lg tracking-wider select-none shrink-0">+20</span>
               <input
                 type="tel"
                 id="owner-phone-number-input"
@@ -1055,7 +1055,7 @@ function renderOwnerDetailsFormContent(
                 value="${escapeAttr(values.phone)}"
                 dir="ltr"
                 autocomplete="off"
-                class="w-full min-w-0 h-full px-3.5 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-r-[20px] sm:rounded-r-[28px] text-sm sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
+                class="w-full min-w-0 h-full px-3.5 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-r-[22px] sm:rounded-r-[28px] text-base sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
               />
             </div>
             <p id="owner-phone-hint" class="hidden text-xs font-bold text-rose-600 px-2"></p>
@@ -1064,15 +1064,15 @@ function renderOwnerDetailsFormContent(
           <!-- الجنس -->
           <div class="space-y-1.5 sm:space-y-2">
             <label class="block text-sm sm:text-base font-bold text-[#2d221b]">الجنس</label>
-            <div id="owner-gender-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 rounded-[20px] sm:rounded-[28px]">
+            <div id="owner-gender-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 rounded-[22px] sm:rounded-[28px]">
               <button
                 type="button"
                 id="owner-gender-male-btn"
-                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 ${
+                class="h-[52px] sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[22px] sm:rounded-[28px] border-2 ${
                   values.gender === 'male'
                     ? 'border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="text-xl sm:text-2xl">♂</span>
                 <span>ذكر</span>
@@ -1081,11 +1081,11 @@ function renderOwnerDetailsFormContent(
               <button
                 type="button"
                 id="owner-gender-female-btn"
-                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 ${
+                class="h-[52px] sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[22px] sm:rounded-[28px] border-2 ${
                   values.gender === 'female'
                     ? 'border-[#ec4899] bg-[#fce7f3] text-[#db2777]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="text-xl sm:text-2xl">♀</span>
                 <span>أنثى</span>
@@ -1097,7 +1097,7 @@ function renderOwnerDetailsFormContent(
           <div class="space-y-2.5 sm:space-y-3.5">
             <div class="flex items-center justify-between gap-2">
               <label class="block text-sm sm:text-base font-bold text-[#2d221b]">الموقع الجغرافي</label>
-              <span class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[11px] sm:text-xs font-black text-[#2d221b]">
+              <span class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full bg-[#fffefc] border border-[#d6c7b2] text-[11px] sm:text-xs font-black text-[#2d221b]">
                 <span>🇪🇬</span>
                 <span>الدولة: مصر</span>
               </span>
@@ -1113,8 +1113,7 @@ function renderOwnerDetailsFormContent(
                   value: values.govId,
                   placeholder: 'اختر المحافظة',
                   searchPlaceholder: 'ابحث عن المحافظة...',
-                  heightClass: 'h-12 sm:h-16',
-                  roundedClass: 'rounded-[20px] sm:rounded-[28px]',
+                  heightClass: 'h-[52px] sm:h-16',
                 })}
               </div>
 
@@ -1128,8 +1127,7 @@ function renderOwnerDetailsFormContent(
                   placeholder: values.govId ? 'اختر المركز أو القسم' : 'اختر المحافظة أولاً',
                   searchPlaceholder: 'ابحث عن المركز أو القسم...',
                   disabled: !values.govId,
-                  heightClass: 'h-12 sm:h-16',
-                  roundedClass: 'rounded-[20px] sm:rounded-[28px]',
+                  heightClass: 'h-[52px] sm:h-16',
                 })}
               </div>
             </div>
@@ -1145,8 +1143,7 @@ function renderOwnerDetailsFormContent(
                   placeholder: values.markazId ? 'اختر المدينة أو الحي' : 'اختر المركز أولاً',
                   searchPlaceholder: 'ابحث عن المدينة أو الحي...',
                   disabled: !values.markazId,
-                  heightClass: 'h-12 sm:h-16',
-                  roundedClass: 'rounded-[20px] sm:rounded-[28px]',
+                  heightClass: 'h-[52px] sm:h-16',
                 })}
               </div>
 
@@ -1160,8 +1157,7 @@ function renderOwnerDetailsFormContent(
                   placeholder: villageMeta.placeholder,
                   searchPlaceholder: 'ابحث عن القرية أو التجمع...',
                   disabled: villageMeta.disabled,
-                  heightClass: 'h-12 sm:h-16',
-                  roundedClass: 'rounded-[20px] sm:rounded-[28px]',
+                  heightClass: 'h-[52px] sm:h-16',
                 })}
               </div>
             </div>
@@ -1170,7 +1166,7 @@ function renderOwnerDetailsFormContent(
           <!-- Validation Alert -->
           <div
             id="owner-form-error"
-            class="hidden rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed"
+            class="hidden rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed"
             role="alert"
           ></div>
 
@@ -1179,7 +1175,7 @@ function renderOwnerDetailsFormContent(
             <button
               id="btn-owner-submit"
               type="submit"
-              class="w-full h-14 sm:h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[20px] sm:rounded-[28px] font-extrabold text-xl sm:text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
+              class="w-full h-[54px] sm:h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[22px] sm:rounded-[28px] font-extrabold text-xl sm:text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
             >
               <span>${submitLabel}</span>
             </button>
@@ -1208,7 +1204,7 @@ export function renderOwnerEditView(): string {
 
   return `
     <div id="edit-owner-overlay" class="fixed inset-0 z-[75] bg-[#FFF9E9] text-[#3E2723] overflow-y-auto overscroll-contain flex flex-col justify-start" dir="rtl">
-      <div class="w-full max-w-md mx-auto flex flex-col px-4 sm:px-6 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div class="w-full max-w-md mx-auto flex flex-col px-4 sm:px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))]">
         ${renderOwnerDetailsFormContent('edit', editOwnerFormState)}
       </div>
     </div>
@@ -1216,23 +1212,24 @@ export function renderOwnerEditView(): string {
 }
 
 // -------------------------------------------------------------
-// Step 5: Has Pet Question
+// Step 5: Has Pet Question (Exact Stitch _2/code.html)
+// No extra subtitle added below heading.
 // -------------------------------------------------------------
 function renderHasPetStep(): string {
   return `
     <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
       
       <!-- Header Logo -->
-      <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center">
-        <div class="relative w-24 h-24 sm:w-36 sm:h-36 md:w-40 md:h-40 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-24 sm:w-36 md:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
+      <header class="w-full pt-0.5 sm:pt-2 flex flex-col items-center text-center">
+        <div class="relative w-28 h-28 sm:w-40 sm:h-40 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-28 sm:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
         </div>
       </header>
 
       <!-- Main Question, Pet Photo, and Action Buttons -->
       <div class="flex-1 flex flex-col items-center justify-center text-center space-y-5 sm:space-y-8 my-auto py-2 sm:py-4 w-full">
         <div>
-          <h2 class="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#2d221b] tracking-normal leading-snug font-baloo">
+          <h2 class="text-2xl sm:text-4xl font-extrabold text-[#2d221b] tracking-normal leading-snug font-baloo">
             هل تمتلك حيواناً أليفاً؟
           </h2>
         </div>
@@ -1241,11 +1238,11 @@ function renderHasPetStep(): string {
           <img
             src="${HAS_PET_IMG_URL}"
             alt="Pet"
-            class="w-40 h-40 sm:w-52 sm:h-52 md:w-56 md:h-56 object-cover rounded-2xl sm:rounded-3xl shadow-md border-[3px] sm:border-4 border-white/60"
+            class="w-44 h-44 sm:w-56 sm:h-56 object-cover rounded-3xl shadow-md border-4 border-white/60"
           />
         </div>
 
-        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full px-2 sm:px-4">
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full px-3 sm:px-4">
           <button
             type="button"
             id="btn-has-pet-yes"
@@ -1272,7 +1269,7 @@ function renderHasPetStep(): string {
 
         <div
           id="has-pet-error"
-          class="${hasPetErrorMessage ? '' : 'hidden'} w-full max-w-sm rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed font-baloo"
+          class="${hasPetErrorMessage ? '' : 'hidden'} w-full max-w-sm rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed font-baloo"
           role="alert"
         >${escapeAttr(hasPetErrorMessage)}</div>
       </div>
@@ -1318,14 +1315,14 @@ function renderPetDetailsStep(): string {
   const petNameColorClass = getPetNameTextColorClass(selectedPetGender);
 
   return `
-    <div class="flex-1 flex flex-col items-center justify-start py-1 animate-fade-in">
+    <div class="flex-1 flex flex-col items-center justify-start py-0.5 sm:py-1 animate-fade-in">
       
       <!-- Header Section -->
-      <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3">
-        <div class="relative w-24 h-24 sm:w-36 sm:h-36 md:w-40 md:h-40 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-24 sm:w-36 md:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
+      <header class="w-full pt-0.5 sm:pt-2 flex flex-col items-center text-center space-y-1.5 sm:space-y-3">
+        <div class="relative w-24 h-24 sm:w-40 sm:h-40 flex items-center justify-center">
+          <img alt="Meow Logo" class="w-24 sm:w-40 h-auto mx-auto object-contain drop-shadow-sm select-none" src="${WELCOME_LOGO_URL}">
         </div>
-        <h1 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#1a1612] tracking-normal font-baloo">تسجيل بيانات المياو</h1>
+        <h1 class="text-xl sm:text-3xl font-extrabold text-[#1a1612] tracking-normal font-baloo">تسجيل بيانات المياو</h1>
       </header>
 
       <!-- Main Form directly on #FFF9E9 -->
@@ -1335,15 +1332,15 @@ function renderPetDetailsStep(): string {
           <!-- نوع الأليف (عندك ايه: قطة / كلب) -->
           <div class="space-y-1.5 sm:space-y-2">
             <label class="block text-sm sm:text-base font-bold text-[#2d221b]">عندك ايه</label>
-            <div id="pet-species-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 rounded-[20px] sm:rounded-[28px]">
+            <div id="pet-species-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 rounded-[22px] sm:rounded-[28px]">
               <button
                 type="button"
                 id="pet-type-cat-btn"
-                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 ${
+                class="h-[52px] sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[22px] sm:rounded-[28px] border-2 ${
                   selectedPetSpecies === 'cat'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="text-xl sm:text-2xl">🐱</span>
                 <span class="font-black">قطة</span>
@@ -1352,11 +1349,11 @@ function renderPetDetailsStep(): string {
               <button
                 type="button"
                 id="pet-type-dog-btn"
-                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 ${
+                class="h-[52px] sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[22px] sm:rounded-[28px] border-2 ${
                   selectedPetSpecies === 'dog'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="text-xl sm:text-2xl">🐶</span>
                 <span class="font-black">كلب</span>
@@ -1399,26 +1396,26 @@ function renderPetDetailsStep(): string {
           <div class="grid grid-cols-2 gap-2.5 sm:gap-3.5">
             <div class="space-y-1.5 sm:space-y-2 min-w-0">
               <label for="pet-name-input" class="block text-xs sm:text-base font-bold text-[#2d221b]">اسم المياو</label>
-              <div class="relative flex items-center h-12 sm:h-16">
+              <div class="relative flex items-center h-[52px] sm:h-16">
                 <input
                   type="text"
                   id="pet-name-input"
                   value="${escapeAttr(draftPetName)}"
                   autocomplete="off"
-                  class="w-full min-w-0 h-12 sm:h-16 py-2.5 sm:py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-sm sm:text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full min-w-0 h-[52px] sm:h-16 py-3 sm:py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
 
             <div class="space-y-1.5 sm:space-y-2 min-w-0">
               <label for="pet-color-input" class="block text-xs sm:text-base font-bold text-[#2d221b]">اللون</label>
-              <div class="relative flex items-center h-12 sm:h-16">
+              <div class="relative flex items-center h-[52px] sm:h-16">
                 <input
                   type="text"
                   id="pet-color-input"
                   value="${escapeAttr(draftPetColor)}"
                   autocomplete="off"
-                  class="w-full min-w-0 h-12 sm:h-16 py-2.5 sm:py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-sm sm:text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full min-w-0 h-[52px] sm:h-16 py-3 sm:py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
@@ -1429,11 +1426,11 @@ function renderPetDetailsStep(): string {
             <div class="grid grid-cols-2 gap-2.5 sm:gap-3.5">
               <div class="space-y-1.5 sm:space-y-2 min-w-0">
                 <label for="pet-breed-select" class="block text-xs sm:text-base font-black text-[#2d221b]">السلالة</label>
-                <div class="relative flex items-center h-12 sm:h-16">
+                <div class="relative flex items-center h-[52px] sm:h-16">
                   <select
                     id="pet-breed-select"
                     ${selectedPetSpecies ? '' : 'disabled'}
-                    class="w-full min-w-0 h-12 sm:h-16 py-2 sm:py-3 pr-3 sm:pr-4 pl-8 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-xs sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                    class="w-full min-w-0 h-[52px] sm:h-16 py-2.5 sm:py-3 pr-3 sm:pr-4 pl-8 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-xs sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
                       selectedPetSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
                     }"
                   >
@@ -1449,11 +1446,11 @@ function renderPetDetailsStep(): string {
 
               <div class="space-y-1.5 sm:space-y-2 min-w-0">
                 <label for="pet-hybrid-select" class="block text-xs sm:text-base font-black text-[#2d221b] truncate">سلالة هجينة (اختياري)</label>
-                <div class="relative flex items-center h-12 sm:h-16">
+                <div class="relative flex items-center h-[52px] sm:h-16">
                   <select
                     id="pet-hybrid-select"
                     ${selectedPetSpecies ? '' : 'disabled'}
-                    class="w-full min-w-0 h-12 sm:h-16 py-2 sm:py-3 pr-3 sm:pr-4 pl-8 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-xs sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
+                    class="w-full min-w-0 h-[52px] sm:h-16 py-2.5 sm:py-3 pr-3 sm:pr-4 pl-8 sm:pl-11 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-xs sm:text-base font-black text-right text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm appearance-none truncate ${
                       selectedPetSpecies ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
                     }"
                   >
@@ -1471,8 +1468,8 @@ function renderPetDetailsStep(): string {
             <!-- العمر -->
             <div class="space-y-1.5 sm:space-y-2">
               <label class="block text-sm sm:text-base font-black text-[#2d221b]">العمر</label>
-              <div id="pet-age-group" class="grid grid-cols-2 gap-2.5 sm:gap-3.5 h-12 sm:h-16 rounded-[20px] sm:rounded-[28px]">
-                <div class="relative flex items-center h-12 sm:h-16">
+              <div id="pet-age-group" class="grid grid-cols-2 gap-2.5 sm:gap-3.5 h-[52px] sm:h-16 rounded-[22px] sm:rounded-[28px]">
+                <div class="relative flex items-center h-[52px] sm:h-16">
                   <input
                     type="number"
                     id="pet-age-years-input"
@@ -1481,10 +1478,10 @@ function renderPetDetailsStep(): string {
                     max="25"
                     placeholder="سنة"
                     value="${escapeAttr(draftPetAgeYears)}"
-                    class="w-full h-12 sm:h-16 py-2.5 sm:py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-base sm:text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                    class="w-full h-[52px] sm:h-16 py-3 sm:py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-base sm:text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                   />
                 </div>
-                <div class="relative flex items-center h-12 sm:h-16">
+                <div class="relative flex items-center h-[52px] sm:h-16">
                   <input
                     type="number"
                     id="pet-age-months-input"
@@ -1493,7 +1490,7 @@ function renderPetDetailsStep(): string {
                     max="11"
                     placeholder="شهر (اختياري)"
                     value="${escapeAttr(draftPetAgeMonths)}"
-                    class="w-full h-12 sm:h-16 py-2.5 sm:py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-sm sm:text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                    class="w-full h-[52px] sm:h-16 py-3 sm:py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                   />
                 </div>
               </div>
@@ -1503,15 +1500,15 @@ function renderPetDetailsStep(): string {
           <!-- الجنس -->
           <div class="space-y-1.5 sm:space-y-2">
             <label class="block text-sm sm:text-base font-bold text-[#2d221b]">الجنس</label>
-            <div id="pet-gender-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 rounded-[20px] sm:rounded-[28px]">
+            <div id="pet-gender-group" class="grid grid-cols-2 gap-2.5 sm:gap-3.5 rounded-[22px] sm:rounded-[28px]">
               <button
                 type="button"
                 id="pet-gender-male-btn"
-                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 ${
+                class="h-[52px] sm:h-16 relative flex items-center justify-center gap-2 rounded-[22px] sm:rounded-[28px] border-2 ${
                   selectedPetGender === 'male'
                     ? 'border-[#3b82f6] bg-[#eff6ff] text-[#2563eb]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base sm:text-xl px-4 sm:px-5"
+                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-lg sm:text-xl px-4 sm:px-5"
               >
                 <span class="font-black">ذكر</span>
               </button>
@@ -1519,11 +1516,11 @@ function renderPetDetailsStep(): string {
               <button
                 type="button"
                 id="pet-gender-female-btn"
-                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 ${
+                class="h-[52px] sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[22px] sm:rounded-[28px] border-2 ${
                   selectedPetGender === 'female'
                     ? 'border-[#ec4899] bg-[#fce7f3] text-[#db2777]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="font-black">انثى</span>
               </button>
@@ -1533,11 +1530,11 @@ function renderPetDetailsStep(): string {
           <!-- حالة التطعيم -->
           <div class="space-y-1.5 sm:space-y-2">
             <label class="block text-sm sm:text-base font-black text-[#2d221b]">حالة التطعيم</label>
-            <div id="pet-vax-group" class="grid grid-cols-2 gap-3 sm:gap-3.5 h-12 sm:h-16 rounded-[20px] sm:rounded-[28px]">
+            <div id="pet-vax-group" class="grid grid-cols-2 gap-2.5 sm:gap-3.5 h-[52px] sm:h-16 rounded-[22px] sm:rounded-[28px]">
               <button
                 type="button"
                 id="vax-yes-btn"
-                class="h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 ${
+                class="h-[52px] sm:h-16 relative flex items-center justify-center gap-2 rounded-[22px] sm:rounded-[28px] border-2 ${
                   selectedVaccination === 'yes'
                     ? 'border-[#10b981] bg-[#ecfdf5] text-[#059669]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
@@ -1550,7 +1547,7 @@ function renderPetDetailsStep(): string {
               <button
                 type="button"
                 id="vax-no-btn"
-                class="h-12 sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[20px] sm:rounded-[28px] border-2 ${
+                class="h-[52px] sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[22px] sm:rounded-[28px] border-2 ${
                   selectedVaccination === 'no'
                     ? 'border-[#ea580c] bg-[#fff7ed] text-[#c2410c]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
@@ -1564,13 +1561,13 @@ function renderPetDetailsStep(): string {
           <!-- سمات الشخصية -->
           <div id="pet-traits-group" class="space-y-2 sm:space-y-2.5 pt-1 sm:pt-2 rounded-3xl">
             <div class="flex items-center justify-between gap-2 pb-1 flex-wrap">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-1.5 sm:gap-2">
                 <label class="block text-lg sm:text-xl font-black text-[#2d221b]">الشخصية</label>
-                <span class="text-[11px] sm:text-sm font-bold text-[#8a7663] bg-[#fffbf2] border border-[#d6c7b2]/60 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-sm">(اختر 3 إلى 6 صفات)</span>
+                <span class="text-[11px] sm:text-sm font-bold text-[#8a7663] bg-[#fffbf2] border border-[#d6c7b2]/60 px-2.5 sm:px-3 py-1 rounded-full shadow-sm">(اختر 3 إلى 6 صفات)</span>
               </div>
               <span
                 id="traits-count-badge"
-                class="text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border transition-all shadow-sm ${
+                class="text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-1 rounded-full border transition-all shadow-sm ${
                   isTraitsValid
                     ? 'bg-[#ecfdf5] text-[#059669] border-[#10b981]/30'
                     : 'bg-[#faecd8] text-[#c25807] border-[#e67e22]/20'
@@ -1589,7 +1586,7 @@ function renderPetDetailsStep(): string {
                     data-trait-name="${trait}"
                     class="trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center ${
                       isSelected
-                        ? 'border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20'
+                        ? 'border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67e22]/20'
                         : 'border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50'
                     }"
                   >
@@ -1609,7 +1606,7 @@ function renderPetDetailsStep(): string {
               <textarea
                 id="pet-notes-input"
                 rows="3"
-                class="w-full p-4 sm:p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[20px] sm:rounded-[28px] text-base sm:text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
+                class="w-full p-3.5 sm:p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
               >${escapeAttr(draftPetNotes)}</textarea>
             </div>
           </div>
@@ -1617,7 +1614,7 @@ function renderPetDetailsStep(): string {
           <!-- Validation Alert -->
           <div
             id="pet-form-error"
-            class="hidden rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed"
+            class="hidden rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed"
             role="alert"
           ></div>
 
@@ -1626,7 +1623,7 @@ function renderPetDetailsStep(): string {
             <button
               id="btn-pet-submit"
               type="submit"
-              class="w-full h-14 sm:h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[20px] sm:rounded-[28px] font-extrabold text-xl sm:text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
+              class="w-full h-[54px] sm:h-16 px-6 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[22px] sm:rounded-[28px] font-extrabold text-xl sm:text-2xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
             >
               <span>نونو على الكلام</span>
             </button>
@@ -1731,7 +1728,7 @@ export function attachOnboardingEvents(): void {
       state.setTermsAccepted(isTermsAccepted, true);
       if (isTermsAccepted && termsBox) {
         termsBox.className =
-          'flex items-start gap-3 px-3 py-2 rounded-2xl border border-transparent transition-all';
+          'flex items-start gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl border border-transparent transition-all';
         if (authErrorMessage.includes('شروط الاستخدام')) {
           authErrorMessage = '';
           const errEl = document.getElementById('auth-error-msg');
@@ -1808,12 +1805,12 @@ export function attachOnboardingEvents(): void {
         return;
       }
       let bundle = state.getSupabaseAccountBundle();
-      if (!bundle?.exists || state.getSupabaseAuthError()) {
+      if (!bundle || state.getSupabaseAuthError()) {
         authContinueBtn.disabled = true;
         authContinueBtn.classList.add('opacity-70', 'cursor-wait');
         authContinueBtn.textContent = 'جاري التحقق من الحساب...';
-        const loaded = await state.retrySupabaseAccountLoad();
-        if (!loaded) {
+        await state.retrySupabaseAccountLoad();
+        if (state.getSupabaseAuthError()) {
           authErrorMessage =
             state.getSupabaseAuthError() ||
             'تعذر تحميل بيانات الحساب من قاعدة البيانات. يرجى المحاولة مرة أخرى.';
@@ -1839,7 +1836,7 @@ export function attachOnboardingEvents(): void {
   if (authEmailForm) {
     authEmailForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (isAuthSubmitting) return;
+      if (isAuthSubmitting || isGoogleSubmitting) return;
 
       authEmail = (authEmailInput?.value || authEmail || '').trim();
       authPassword = authPasswordInput?.value || authPassword || '';
@@ -1862,6 +1859,8 @@ export function attachOnboardingEvents(): void {
         return;
       }
 
+      const submitBtn = document.getElementById('btn-auth-email-submit') as HTMLButtonElement | null;
+      if (submitBtn) submitBtn.disabled = true;
       isAuthSubmitting = true;
       refreshAuthStep();
 
@@ -2059,65 +2058,45 @@ export function attachOnboardingEvents(): void {
           refreshAuthStep();
           return;
         }
+      } else {
+        state.setTermsAccepted(true, true);
       }
 
       if (state.isPreviewOnboardingMode()) {
         authErrorMessage =
-          'أنت الآن في وضع المعاينة. لاختبار المصادقة الحقيقية، افتح التطبيق بدون ?preview=onboarding.';
+          'أنت الآن في وضع المعاينة. لاختبار تسجيل الدخول عبر Google، افتح التطبيق بدون ?preview=onboarding.';
         refreshAuthStep();
         return;
       }
 
+      loginGoogleBtn.disabled = true;
       isGoogleSubmitting = true;
       refreshAuthStep();
 
-      let removeBrowserFinishedListener: (() => Promise<void>) | null = null;
       try {
-        removeBrowserFinishedListener = await addNativeAuthBrowserFinishedListener(() => {
-          window.setTimeout(() => {
-            if (removeBrowserFinishedListener) {
-              void removeBrowserFinishedListener();
-              removeBrowserFinishedListener = null;
-            }
-            if (
-              isGoogleSubmitting &&
-              !state.isSupabaseAuthenticated() &&
-              !state.hasPendingAuthDeepLink() &&
-              !state.getSupabaseAuthError()
-            ) {
-              isGoogleSubmitting = false;
-              refreshAuthStep();
-            }
-          }, 700);
+        const res = await signInWithGoogleSupabaseOAuth({
+          onExternalBrowserClosed: () => {
+            window.setTimeout(() => {
+              if (
+                isGoogleSubmitting &&
+                !state.isSupabaseAuthenticated() &&
+                !state.isProcessingAuthDeepLink() &&
+                state.getOnboardingStep() === 'auth_method'
+              ) {
+                isGoogleSubmitting = false;
+                refreshAuthStep();
+              }
+            }, 500);
+          },
         });
 
-        const res = await signInWithGoogleSupabaseOAuth();
         if (!res.success) {
-          if (removeBrowserFinishedListener) {
-            await removeBrowserFinishedListener();
-            removeBrowserFinishedListener = null;
-          }
           isGoogleSubmitting = false;
           authErrorMessage =
-            res.errorMessage || 'تعذر بدء تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
+            res.errorMessage || 'تعذر إتمام تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
           refreshAuthStep();
-          return;
-        }
-
-        // On Web, Supabase navigates the page to Google OAuth; clear spinner after fallback timeout if navigation was blocked
-        if (!res.launchedExternalBrowser) {
-          window.setTimeout(() => {
-            if (isGoogleSubmitting && !state.isSupabaseAuthenticated()) {
-              isGoogleSubmitting = false;
-              refreshAuthStep();
-            }
-          }, 8000);
         }
       } catch {
-        if (removeBrowserFinishedListener) {
-          await removeBrowserFinishedListener();
-          removeBrowserFinishedListener = null;
-        }
         isGoogleSubmitting = false;
         authErrorMessage = 'تعذر إتمام تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
         refreshAuthStep();
@@ -2211,17 +2190,17 @@ function attachOwnerDetailsFormEvents(
       formState.gender = 'male';
       ownerGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       ownerMaleBtn.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       ownerFemaleBtn.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
     });
     ownerFemaleBtn.addEventListener('click', () => {
       formState.gender = 'female';
       ownerGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       ownerFemaleBtn.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       ownerMaleBtn.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
     });
   }
 
@@ -2560,14 +2539,14 @@ function attachRemainingOnboardingEvents(): void {
     if (catBtn && dogBtn) {
       if (species === 'cat') {
         catBtn.className =
-          'h-12 sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
         dogBtn.className =
-          'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       } else {
         dogBtn.className =
-          'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
         catBtn.className =
-          'h-12 sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       }
     }
     if (breedSelect) {
@@ -2657,18 +2636,18 @@ function attachRemainingOnboardingEvents(): void {
       selectedPetGender = 'male';
       petGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       petMaleBtn.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#3b82f6] bg-[#eff6ff] text-[#2563eb] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base sm:text-xl px-4 sm:px-5';
+        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#3b82f6] bg-[#eff6ff] text-[#2563eb] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5';
       petFemaleBtn.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       applyPetNameGenderColor('male');
     });
     petFemaleBtn.addEventListener('click', () => {
       selectedPetGender = 'female';
       petGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       petFemaleBtn.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[20px] sm:rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-base sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       petMaleBtn.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base sm:text-xl px-4 sm:px-5';
+        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5';
       applyPetNameGenderColor('female');
     });
   }
@@ -2681,17 +2660,17 @@ function attachRemainingOnboardingEvents(): void {
       selectedVaccination = 'yes';
       petVaxGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       vaxYes.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#10b981] bg-[#ecfdf5] text-[#059669] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-2';
+        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#10b981] bg-[#ecfdf5] text-[#059669] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2';
       vaxNo.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
     });
     vaxNo.addEventListener('click', () => {
       selectedVaccination = 'no';
       petVaxGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       vaxNo.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       vaxYes.className =
-        'h-12 sm:h-16 relative flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-2';
+        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2';
     });
   }
 
@@ -2707,7 +2686,7 @@ function attachRemainingOnboardingEvents(): void {
       if (selectedTraits.has(trait)) {
         selectedTraits.delete(trait);
         btn.className =
-          'trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50';
+          'trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50';
         if (limitMsg) limitMsg.classList.add('hidden');
       } else {
         if (selectedTraits.size >= 6) {
@@ -2719,7 +2698,7 @@ function attachRemainingOnboardingEvents(): void {
         }
         selectedTraits.add(trait);
         btn.className =
-          'trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20';
+          'trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20';
         if (limitMsg) limitMsg.classList.add('hidden');
       }
 
@@ -2731,10 +2710,10 @@ function attachRemainingOnboardingEvents(): void {
         countBadge.textContent = `المحدد: ${selectedTraits.size} من 6`;
         if (selectedTraits.size >= 3) {
           countBadge.className =
-            'text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border transition-all shadow-sm bg-[#ecfdf5] text-[#059669] border-[#10b981]/30';
+            'text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm bg-[#ecfdf5] text-[#059669] border-[#10b981]/30';
         } else {
           countBadge.className =
-            'text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border transition-all shadow-sm bg-[#faecd8] text-[#c25807] border-[#e67e22]/20';
+            'text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm bg-[#faecd8] text-[#c25807] border-[#e67e22]/20';
         }
       }
     });

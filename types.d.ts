@@ -3,6 +3,8 @@ declare module 'troika-three-text' {
 }
 
 interface ImportMetaEnv {
+  readonly DEV?: boolean;
+  readonly PROD?: boolean;
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_ANON_KEY?: string;
 }

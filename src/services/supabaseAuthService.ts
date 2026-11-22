@@ -1,5 +1,5 @@
 import type { AuthChangeEvent, AuthError, EmailOtpType, Session, User } from '@supabase/supabase-js';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient.ts';
 import {
@@ -12,6 +12,13 @@ import {
 import type { UserProfile } from '../types.ts';
 
 export const ANDROID_AUTH_CALLBACK_URL = 'com.meow.app://auth-callback';
+
+export interface SupabaseOAuthLaunchResult {
+  success: boolean;
+  launchedExternalBrowser?: boolean;
+  errorMessage?: string;
+  errorCode?: string;
+}
 
 export interface SupabaseAuthActionResult {
   success: boolean;
@@ -26,15 +33,6 @@ export interface SupabaseAuthActionResult {
 export interface SupabaseBasicResult {
   success: boolean;
   message?: string;
-  errorMessage?: string;
-  errorCode?: string;
-}
-
-export interface SupabaseGoogleOAuthStartResult {
-  success: boolean;
-  startedRedirect: boolean;
-  launchedExternalBrowser: boolean;
-  url?: string;
   errorMessage?: string;
   errorCode?: string;
 }
@@ -250,12 +248,12 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
 
   if (
     code === 'over_email_send_rate_limit' ||
-    rawMessage.includes('email rate limit')
+    rawMessage.includes('email rate limit exceeded')
   ) {
     return {
-      code: code || 'over_email_send_rate_limit',
+      code: 'over_email_send_rate_limit',
       message:
-        'تجاوز المشروع الحد المؤقت لإرسال رسائل التحقق عبر البريد الإلكتروني. يرجى تعطيل تأكيد البريد (Confirm email) من لوحة تحكم Supabase أو المحاولة بعد قليل.',
+        'تم الوصول للحد الأقصى المؤقت لإرسال رسائل التفعيل في Supabase. يرجى الانتظار قليلًا أو التسجيل عبر Google.',
     };
   }
 
@@ -266,30 +264,8 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
     rawMessage.includes('security purposes')
   ) {
     return {
-      code: code || 'rate_limited',
+      code: code || 'over_request_rate_limit',
       message: 'تم إرسال عدة طلبات خلال وقت قصير. يرجى الانتظار قليلًا ثم المحاولة مرة أخرى.',
-    };
-  }
-
-  if (
-    code === 'validation_failed' &&
-    (rawMessage.includes('provider is not enabled') || rawMessage.includes('unsupported provider'))
-  ) {
-    return {
-      code: 'provider_not_enabled',
-      message: 'تسجيل الدخول عبر Google غير مفعّل حاليًا في إعدادات Supabase Auth.',
-    };
-  }
-
-  if (
-    code === 'access_denied' ||
-    rawMessage.includes('access_denied') ||
-    rawMessage.includes('user cancelled') ||
-    rawMessage.includes('user denied')
-  ) {
-    return {
-      code: 'access_denied',
-      message: 'تم إلغاء تسجيل الدخول عبر Google.',
     };
   }
 
@@ -393,9 +369,156 @@ export function clearSupabasePasswordRecoveryState(): void {
   passwordRecoveryActive = false;
 }
 
+const RECENT_AUTH_COOLDOWN_MS = 12_000;
+const recentAuthRequests = new Map<string, number>();
+let inFlightSignUpKey: string | null = null;
+let activeBrowserFinishedHandle: PluginListenerHandle | null = null;
+
+function isWithinAuthCooldown(actionKey: string, cooldownMs = RECENT_AUTH_COOLDOWN_MS): number {
+  const lastAt = recentAuthRequests.get(actionKey);
+  if (!lastAt) return 0;
+  const remainingMs = cooldownMs - (Date.now() - lastAt);
+  return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+}
+
+function markAuthRequestAttempt(actionKey: string): void {
+  recentAuthRequests.set(actionKey, Date.now());
+  if (recentAuthRequests.size > 30) {
+    const oldestKey = recentAuthRequests.keys().next().value;
+    if (oldestKey) recentAuthRequests.delete(oldestKey);
+  }
+}
+
+export async function closeExternalAuthBrowserIfOpen(): Promise<void> {
+  if (activeBrowserFinishedHandle) {
+    try {
+      await activeBrowserFinishedHandle.remove();
+    } catch {
+      // ignore listener cleanup errors
+    }
+    activeBrowserFinishedHandle = null;
+  }
+  if (!isNativeAndroidRuntime()) return;
+  try {
+    await Browser.close();
+  } catch {
+    // ignore if browser already dismissed
+  }
+}
+
+/**
+ * 0. Sign in / sign up with Google using Supabase OAuth (PKCE).
+ * - On Native Android (Capacitor): opens Google/Supabase consent in Chrome Custom Tabs and returns to com.meow.app://auth-callback.
+ * - On Web: initiates standard OAuth redirect back to origin + pathname.
+ */
+export async function signInWithGoogleSupabaseOAuth(opts?: {
+  onExternalBrowserClosed?: () => void;
+}): Promise<SupabaseOAuthLaunchResult> {
+  const { client, errorMessage } = ensureConfiguredClient();
+  if (!client) {
+    return {
+      success: false,
+      errorMessage,
+      errorCode: 'supabase_not_configured',
+    };
+  }
+
+  try {
+    passwordRecoveryActive = false;
+
+    if (isNativeAndroidRuntime()) {
+      const { data, error } = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: ANDROID_AUTH_CALLBACK_URL,
+          skipBrowserRedirect: true,
+          queryParams: {
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (error || !data?.url) {
+        const mapped = mapSupabaseAuthErrorToArabic(
+          error || new Error('google_oauth_url_missing'),
+          'تعذر بدء تسجيل الدخول عبر Google. تأكد من تفعيل مزود Google في Supabase.'
+        );
+        return {
+          success: false,
+          errorMessage: mapped.message,
+          errorCode: mapped.code,
+        };
+      }
+
+      if (activeBrowserFinishedHandle) {
+        await activeBrowserFinishedHandle.remove().catch(() => {});
+        activeBrowserFinishedHandle = null;
+      }
+
+      activeBrowserFinishedHandle = await Browser.addListener('browserFinished', () => {
+        const handle = activeBrowserFinishedHandle;
+        activeBrowserFinishedHandle = null;
+        if (handle) {
+          void handle.remove().catch(() => {});
+        }
+        opts?.onExternalBrowserClosed?.();
+      });
+
+      await Browser.open({
+        url: data.url,
+        presentationStyle: 'fullscreen',
+      });
+
+      return {
+        success: true,
+        launchedExternalBrowser: true,
+      };
+    }
+
+    const redirectTo = getDefaultRedirectUrl();
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        ...(redirectTo ? { redirectTo } : {}),
+        queryParams: {
+          prompt: 'select_account',
+        },
+      },
+    });
+
+    if (error) {
+      const mapped = mapSupabaseAuthErrorToArabic(
+        error,
+        'تعذر فتح صفحة تسجيل الدخول عبر Google.'
+      );
+      return {
+        success: false,
+        errorMessage: mapped.message,
+        errorCode: mapped.code,
+      };
+    }
+
+    return {
+      success: true,
+      launchedExternalBrowser: false,
+    };
+  } catch (err) {
+    const mapped = mapSupabaseAuthErrorToArabic(
+      err,
+      'تعذر إتمام تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.'
+    );
+    return {
+      success: false,
+      errorMessage: mapped.message,
+      errorCode: mapped.code,
+    };
+  }
+}
+
 /**
  * 1. Sign up with email & password.
- * Safely handles both email confirmation enabled (session === null) and disabled (session !== null).
+ * Safely handles both email confirmation disabled (session !== null -> immediate onboarding)
+ * and enabled (session === null -> confirmation notice).
  */
 export async function signUpWithEmailPassword(params: {
   email: string;
@@ -441,6 +564,31 @@ export async function signUpWithEmailPassword(params: {
     };
   }
 
+  const requestKey = `signup:${email}`;
+  if (inFlightSignUpKey === requestKey) {
+    return {
+      success: false,
+      user: null,
+      session: null,
+      needsEmailConfirmation: false,
+      errorMessage: 'طلب إنشاء الحساب قيد التنفيذ بالفعل...',
+      errorCode: 'request_in_flight',
+    };
+  }
+
+  const remainingSec = isWithinAuthCooldown(requestKey, 8_000);
+  if (remainingSec > 0) {
+    return {
+      success: false,
+      user: null,
+      session: null,
+      needsEmailConfirmation: false,
+      errorMessage: `يرجى الانتظار ${remainingSec} ثوانٍ قبل إعادة إرسال نفس الطلب لتجنب الحد المؤقت.`,
+      errorCode: 'client_cooldown',
+    };
+  }
+
+  inFlightSignUpKey = requestKey;
   try {
     const redirectTo = params.emailRedirectTo || getDefaultRedirectUrl();
     const { data, error } = await client.auth.signUp({
@@ -457,6 +605,12 @@ export async function signUpWithEmailPassword(params: {
         error,
         'تعذر إنشاء الحساب حاليًا. يرجى المحاولة مرة أخرى.'
       );
+      if (
+        mapped.code === 'over_email_send_rate_limit' ||
+        mapped.code === 'over_request_rate_limit'
+      ) {
+        markAuthRequestAttempt(requestKey);
+      }
       return {
         success: false,
         user: null,
@@ -480,6 +634,7 @@ export async function signUpWithEmailPassword(params: {
       };
     }
 
+    markAuthRequestAttempt(requestKey);
     const session = data.session ?? null;
     const user = data.user ?? session?.user ?? null;
     const needsEmailConfirmation = Boolean(user && !session);
@@ -506,6 +661,10 @@ export async function signUpWithEmailPassword(params: {
       errorMessage: mapped.message,
       errorCode: mapped.code,
     };
+  } finally {
+    if (inFlightSignUpKey === requestKey) {
+      inFlightSignUpKey = null;
+    }
   }
 }
 
@@ -530,6 +689,16 @@ export async function resendSignUpConfirmationEmail(
     };
   }
 
+  const requestKey = `resend:${email}`;
+  const remainingSec = isWithinAuthCooldown(requestKey, 45_000);
+  if (remainingSec > 0) {
+    return {
+      success: false,
+      errorMessage: `تم إرسال رسالة التفعيل مؤخرًا. يرجى الانتظار ${remainingSec} ثانية قبل إعادة المحاولة.`,
+      errorCode: 'client_cooldown',
+    };
+  }
+
   try {
     const redirectTo = emailRedirectTo || getDefaultRedirectUrl();
     const { error } = await client.auth.resend({
@@ -543,9 +712,16 @@ export async function resendSignUpConfirmationEmail(
         error,
         'تعذر إعادة إرسال رابط التفعيل حاليًا. يرجى المحاولة لاحقًا.'
       );
+      if (
+        mapped.code === 'over_email_send_rate_limit' ||
+        mapped.code === 'over_request_rate_limit'
+      ) {
+        markAuthRequestAttempt(requestKey);
+      }
       return { success: false, errorMessage: mapped.message, errorCode: mapped.code };
     }
 
+    markAuthRequestAttempt(requestKey);
     return {
       success: true,
       message: 'تم إرسال رابط التفعيل إلى بريدك الإلكتروني بنجاح.',
@@ -650,131 +826,6 @@ export async function signInWithEmailPassword(params: {
 }
 
 /**
- * 2b. Sign in / Sign up with Google via real Supabase OAuth (PKCE).
- * - Web: redirects top window via Supabase OAuth and returns to origin.
- * - Android APK (Capacitor): opens Google OAuth in Chrome Custom Tabs via @capacitor/browser
- *   with redirectTo = com.meow.app://auth-callback to avoid Android WebView 403 disallowed_useragent.
- */
-export async function signInWithGoogleSupabaseOAuth(params?: {
-  redirectTo?: string;
-}): Promise<SupabaseGoogleOAuthStartResult> {
-  const { client, errorMessage } = ensureConfiguredClient();
-  if (!client) {
-    return {
-      success: false,
-      startedRedirect: false,
-      launchedExternalBrowser: false,
-      errorMessage,
-      errorCode: 'supabase_not_configured',
-    };
-  }
-
-  const nativeAndroid = isNativeAndroidRuntime();
-  const redirectTo =
-    params?.redirectTo ||
-    (nativeAndroid ? ANDROID_AUTH_CALLBACK_URL : getDefaultRedirectUrl());
-
-  try {
-    const { data, error } = await client.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        ...(redirectTo ? { redirectTo } : {}),
-        scopes: 'email profile',
-        skipBrowserRedirect: nativeAndroid,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'select_account',
-        },
-      },
-    });
-
-    if (error) {
-      const mapped = mapSupabaseAuthErrorToArabic(
-        error,
-        'تعذر بدء تسجيل الدخول عبر Google. يرجى التحقق من تفعيل Google في لوحة تحكم Supabase.'
-      );
-      return {
-        success: false,
-        startedRedirect: false,
-        launchedExternalBrowser: false,
-        errorMessage: mapped.message,
-        errorCode: mapped.code,
-      };
-    }
-
-    const authUrl = data?.url?.trim();
-    if (!authUrl) {
-      return {
-        success: false,
-        startedRedirect: false,
-        launchedExternalBrowser: false,
-        errorMessage: 'لم يصل رابط المصادقة من Google عبر Supabase. يرجى المحاولة مرة أخرى.',
-        errorCode: 'missing_oauth_url',
-      };
-    }
-
-    if (nativeAndroid) {
-      await Browser.open({
-        url: authUrl,
-        presentationStyle: 'popover',
-      });
-      return {
-        success: true,
-        startedRedirect: true,
-        launchedExternalBrowser: true,
-        url: authUrl,
-      };
-    }
-
-    return {
-      success: true,
-      startedRedirect: true,
-      launchedExternalBrowser: false,
-      url: authUrl,
-    };
-  } catch (err) {
-    const mapped = mapSupabaseAuthErrorToArabic(
-      err,
-      'حدث خطأ أثناء الاتصال بخدمة Google. يرجى المحاولة مرة أخرى.'
-    );
-    return {
-      success: false,
-      startedRedirect: false,
-      launchedExternalBrowser: false,
-      errorMessage: mapped.message,
-      errorCode: mapped.code,
-    };
-  }
-}
-
-export async function closeNativeAuthBrowser(): Promise<void> {
-  if (!isNativeAndroidRuntime()) return;
-  try {
-    await Browser.close();
-  } catch {
-    // Ignore when Chrome Custom Tab is already closed
-  }
-}
-
-export async function addNativeAuthBrowserFinishedListener(
-  onFinished: () => void
-): Promise<() => Promise<void>> {
-  if (!isNativeAndroidRuntime()) {
-    return async () => {};
-  }
-  try {
-    const handle = await Browser.addListener('browserFinished', () => {
-      onFinished();
-    });
-    return async () => {
-      await handle.remove();
-    };
-  } catch {
-    return async () => {};
-  }
-}
-
-/**
  * 3. Send password recovery email.
  */
 export async function sendPasswordRecoveryEmail(
@@ -795,6 +846,16 @@ export async function sendPasswordRecoveryEmail(
     };
   }
 
+  const requestKey = `recovery:${email}`;
+  const remainingSec = isWithinAuthCooldown(requestKey, 45_000);
+  if (remainingSec > 0) {
+    return {
+      success: false,
+      errorMessage: `تم إرسال طلب استعادة مؤخرًا. يرجى الانتظار ${remainingSec} ثانية قبل إعادة المحاولة.`,
+      errorCode: 'client_cooldown',
+    };
+  }
+
   try {
     const redirectTo = redirectToInput || getDefaultRedirectUrl();
     const { error } = await client.auth.resetPasswordForEmail(email, {
@@ -806,6 +867,12 @@ export async function sendPasswordRecoveryEmail(
         error,
         'تعذر إرسال رابط استعادة كلمة المرور. يرجى المحاولة لاحقًا.'
       );
+      if (
+        mapped.code === 'over_email_send_rate_limit' ||
+        mapped.code === 'over_request_rate_limit'
+      ) {
+        markAuthRequestAttempt(requestKey);
+      }
       return {
         success: false,
         errorMessage: mapped.message,
@@ -813,6 +880,7 @@ export async function sendPasswordRecoveryEmail(
       };
     }
 
+    markAuthRequestAttempt(requestKey);
     return {
       success: true,
       message:
