@@ -2,10 +2,6 @@ name: Build Meow Android Debug APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - master
 
 jobs:
   build-android-debug:

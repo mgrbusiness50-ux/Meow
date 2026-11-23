@@ -1,0 +1,288 @@
+name: Deploy Meow OTA Web Update
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Target update channel'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - testing
+      force_deploy:
+        description: 'Force OTA bundle deploy regardless of path classification'
+        required: false
+        default: false
+        type: boolean
+      mandatory:
+        description: 'Mark OTA update as recommended/mandatory'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  classify-and-deploy-ota:
+    name: Classify & Publish Self-Hosted OTA Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Classify release change scope & check OTA readiness
+        id: classify
+        env:
+          UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL || '' }}
+        run: |
+          if [ -z "${UPDATES_BASE_URL}" ]; then
+            echo "classification=ota_skipped_unconfigured" >> "$GITHUB_OUTPUT"
+            echo "should_deploy_ota=false" >> "$GITHUB_OUTPUT"
+            echo "reason=VITE_UPDATES_BASE_URL is not configured yet. Configure a public HTTPS host variable/secret before publishing OTA." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_deploy }}" = "true" ]; then
+            echo "classification=ota_eligible" >> "$GITHUB_OUTPUT"
+            echo "should_deploy_ota=true" >> "$GITHUB_OUTPUT"
+            echo "reason=Manual force_deploy enabled via workflow_dispatch." >> "$GITHUB_OUTPUT"
+          elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+            node scripts/classify-release-change.mjs --base HEAD~1 --head HEAD
+          else
+            echo "classification=no_baseline_commit" >> "$GITHUB_OUTPUT"
+            echo "should_deploy_ota=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Initial commit without HEAD~1 baseline; skipping automatic OTA deploy." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summarize skipped OTA deploy
+        if: steps.classify.outputs.should_deploy_ota != 'true'
+        run: |
+          echo "Skipping OTA deploy: ${{ steps.classify.outputs.classification }} — ${{ steps.classify.outputs.reason }}"
+
+      - name: Validate version.json semver increment & native compatibility
+        id: meta
+        if: steps.classify.outputs.should_deploy_ota == 'true'
+        env:
+          UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const { execSync } = require("child_process");
+            const semverRe = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+            const parse = (raw) => {
+              const cleaned = String(raw || "").trim().replace(/^v/i, "");
+              const [core, pre = ""] = cleaned.split("-", 2);
+              const [maj = 0, min = 0, pat = 0] = core.split(".").map((n) => parseInt(n, 10) || 0);
+              return { maj, min, pat, pre: pre.trim() };
+            };
+            const cmp = (a, b) => {
+              const pa = parse(a), pb = parse(b);
+              if (pa.maj !== pb.maj) return pa.maj > pb.maj ? 1 : -1;
+              if (pa.min !== pb.min) return pa.min > pb.min ? 1 : -1;
+              if (pa.pat !== pb.pat) return pa.pat > pb.pat ? 1 : -1;
+              if (!pa.pre && pb.pre) return 1;
+              if (pa.pre && !pb.pre) return -1;
+              return pa.pre === pb.pre ? 0 : (pa.pre > pb.pre ? 1 : -1);
+            };
+
+            const v = JSON.parse(fs.readFileSync("version.json", "utf8"));
+            if (!semverRe.test(String(v.appVersion || ""))) {
+              throw new Error(`Invalid appVersion in version.json: ${v.appVersion}`);
+            }
+            const minNative = v.minNativeVersion || v.appVersion;
+            if (!semverRe.test(String(minNative))) {
+              throw new Error(`Invalid minNativeVersion in version.json: ${minNative}`);
+            }
+            if (cmp(v.appVersion, minNative) < 0) {
+              throw new Error(`appVersion (${v.appVersion}) cannot be lower than minNativeVersion (${minNative}).`);
+            }
+            if (v.maxNativeVersion) {
+              if (!semverRe.test(String(v.maxNativeVersion))) {
+                throw new Error(`Invalid maxNativeVersion in version.json: ${v.maxNativeVersion}`);
+              }
+              if (cmp(v.maxNativeVersion, minNative) < 0) {
+                throw new Error(`maxNativeVersion (${v.maxNativeVersion}) cannot be lower than minNativeVersion (${minNative}).`);
+              }
+            }
+
+            let versionBumped = true;
+            try {
+              const prevRaw = execSync("git show HEAD~1:version.json", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+              const prev = JSON.parse(prevRaw);
+              if (prev?.appVersion && cmp(v.appVersion, prev.appVersion) <= 0) {
+                versionBumped = false;
+              }
+            } catch {
+              // No previous version.json in HEAD~1
+            }
+
+            const channel = process.env.INPUT_CHANNEL || v.channel || "production";
+            const out = process.env.GITHUB_OUTPUT;
+            fs.appendFileSync(out, `app_version=${v.appVersion}\n`);
+            fs.appendFileSync(out, `build_number=${v.buildNumber}\n`);
+            fs.appendFileSync(out, `min_native_version=${minNative}\n`);
+            fs.appendFileSync(out, `max_native_version=${v.maxNativeVersion || ""}\n`);
+            fs.appendFileSync(out, `channel=${channel}\n`);
+            fs.appendFileSync(out, `version_bumped=${versionBumped}\n`);
+          '
+
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ steps.meta.outputs.version_bumped }}" != "true" ]; then
+            echo "::notice::version.json appVersion (${{ steps.meta.outputs.app_version }}) was not incremented compared to HEAD~1. Skipping automatic OTA deploy until version.json is bumped."
+            echo "allow_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "${UPDATES_BASE_URL}" ]; then
+            MANIFEST_NAME=$([ "${{ steps.meta.outputs.channel }}" = "testing" ] && echo "ota-manifest-testing.json" || echo "ota-manifest.json")
+            LIVE_VER=$(curl -fsSL "${UPDATES_BASE_URL%/}/${MANIFEST_NAME}" 2>/dev/null | node -e 'const fs=require("fs"); try{const d=JSON.parse(fs.readFileSync(0,"utf8")); console.log(d.version||"");}catch{}' || true)
+            if [ -n "${LIVE_VER}" ]; then
+              CMP_LIVE=$(node -e '
+                const parse = (raw) => { const [core, pre=""] = String(raw||"").trim().replace(/^v/i,"").split("-",2); const [a=0,b=0,c=0] = core.split(".").map(x=>parseInt(x,10)||0); return {a,b,c,pre}; };
+                const cmp = (x,y) => { const px=parse(x), py=parse(y); if(px.a!==py.a) return px.a>py.a?1:-1; if(px.b!==py.b) return px.b>py.b?1:-1; if(px.c!==py.c) return px.c>py.c?1:-1; if(!px.pre&&py.pre) return 1; if(px.pre&&!py.pre) return -1; return px.pre===py.pre?0:(px.pre>py.pre?1:-1); };
+                console.log(cmp(process.argv[1], process.argv[2]));
+              ' "${{ steps.meta.outputs.app_version }}" "${LIVE_VER}")
+              if [ "${CMP_LIVE}" -le 0 ]; then
+                echo "::error::version.json appVersion (${{ steps.meta.outputs.app_version }}) must be strictly greater than currently published version (${LIVE_VER})."
+                exit 1
+              fi
+            fi
+          fi
+
+          echo "allow_publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Supabase secrets
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "${VITE_SUPABASE_URL:-}" ] || [ -z "${VITE_SUPABASE_ANON_KEY:-}" ]; then
+            echo "::error::Missing required GitHub Secrets: VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY."
+            exit 1
+          fi
+          case "${VITE_SUPABASE_URL}" in
+            https://*) ;;
+            *)
+              echo "::error::VITE_SUPABASE_URL must be an https:// URL for release/OTA builds."
+              exit 1
+              ;;
+          esac
+          case "${VITE_SUPABASE_URL}" in
+            *your-project-id*)
+              echo "::error::VITE_SUPABASE_URL appears to be a placeholder."
+              exit 1
+              ;;
+          esac
+
+      - name: Setup Node.js 22
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
+        run: npm install
+
+      - name: Run quality gates before OTA publish
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
+        run: |
+          npm run typecheck
+          npm run lint:eslint
+          npm test
+
+      - name: Build production web bundle for OTA
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_APP_CHANNEL: ${{ steps.meta.outputs.channel }}
+          VITE_UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL }}
+        run: |
+          npm run build
+          if grep -rnE "xrblocks|@dimforge/rapier|CatScene|SERVICE_ROLE_KEY|BEGIN PRIVATE KEY" dist; then
+            echo "::error::Forbidden dev/XR module or secret pattern detected in OTA dist/"
+            exit 1
+          fi
+
+      - name: Package OTA zip and generate static manifest
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
+        id: package
+        env:
+          UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL }}
+          APP_VERSION: ${{ steps.meta.outputs.app_version }}
+          BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
+          MIN_NATIVE_VERSION: ${{ steps.meta.outputs.min_native_version }}
+          MAX_NATIVE_VERSION: ${{ steps.meta.outputs.max_native_version }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          MANDATORY: ${{ inputs.mandatory == true && 'true' || 'false' }}
+        run: |
+          mkdir -p ota-stage/updates/bundles
+          BUNDLE_DIR="updates/bundles/${APP_VERSION}-b${BUILD_NUMBER}-${CHANNEL}"
+          mkdir -p "ota-stage/${BUNDLE_DIR}"
+          (cd dist && zip -r -q "../ota-stage/${BUNDLE_DIR}/bundle.zip" .)
+          CHECKSUM=$(sha256sum "ota-stage/${BUNDLE_DIR}/bundle.zip" | awk '{print $1}')
+          PUBLISHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          export BASE_CLEAN="${UPDATES_BASE_URL%/}"
+          export MANIFEST_NAME=$([ "$CHANNEL" = "testing" ] && echo "ota-manifest-testing.json" || echo "ota-manifest.json")
+          export BUNDLE_DIR
+          export CHECKSUM
+          export PUBLISHED_AT
+
+          node -e '
+            const fs = require("fs");
+            const v = JSON.parse(fs.readFileSync("version.json", "utf8"));
+            const manifest = {
+              version: process.env.APP_VERSION,
+              buildNumber: Number(process.env.BUILD_NUMBER),
+              bundleUrl: `${process.env.BASE_CLEAN}/${process.env.BUNDLE_DIR}/bundle.zip`,
+              checksum: process.env.CHECKSUM,
+              minNativeVersion: process.env.MIN_NATIVE_VERSION,
+              ...(process.env.MAX_NATIVE_VERSION ? { maxNativeVersion: process.env.MAX_NATIVE_VERSION } : {}),
+              channel: process.env.CHANNEL,
+              releaseNotes: v.releaseNotes || "",
+              mandatory: process.env.MANDATORY === "true",
+              publishedAt: process.env.PUBLISHED_AT
+            };
+            fs.writeFileSync(`ota-stage/updates/${process.env.MANIFEST_NAME}`, JSON.stringify(manifest, null, 2) + "\n");
+          '
+
+      - name: Upload OTA bundle artifact
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: meow-ota-bundle-${{ steps.meta.outputs.channel }}-${{ steps.meta.outputs.app_version }}
+          path: ota-stage/updates/
+          retention-days: 30
+
+      - name: Publish OTA bundle to configured external public GitHub Pages repo
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true' && vars.OTA_PUBLISH_TARGET == 'external_github_pages' && vars.OTA_UPDATES_REPO != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.OTA_UPDATES_DEPLOY_TOKEN }}
+          external_repository: ${{ vars.OTA_UPDATES_REPO }}
+          publish_branch: gh-pages
+          publish_dir: ./ota-stage
+          keep_files: true
+          commit_message: "chore(ota): publish ${{ steps.meta.outputs.channel }} v${{ steps.meta.outputs.app_version }} (build ${{ steps.meta.outputs.build_number }})"
+
+      - name: Publish OTA bundle to same-repo gh-pages (only when explicitly enabled)
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true' && vars.OTA_PUBLISH_TARGET == 'gh_pages'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./ota-stage
+          publish_branch: gh-pages
+          keep_files: true
+          commit_message: "chore(ota): publish ${{ steps.meta.outputs.channel }} v${{ steps.meta.outputs.app_version }} (build ${{ steps.meta.outputs.build_number }})"

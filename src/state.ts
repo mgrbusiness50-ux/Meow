@@ -64,6 +64,15 @@ import type { Session } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { isSupabaseConfigured } from './services/supabaseClient.ts';
+import { isSafeDeepLink } from './utils/sanitize.ts';
+import { APP_VERSION_INFO } from './config/appVersion.ts';
+import {
+  OtaManifest,
+  applyOtaUpdate,
+  checkForUpdates,
+  reloadAppToApplyStagedUpdate,
+  UpdateCheckResult,
+} from './services/updateService.ts';
 import {
   SupabaseAccountBundleResult,
   SupabaseBasicResult,
@@ -80,6 +89,33 @@ import {
   subscribeToSupabaseAuthChanges,
   updateSupabaseAccountPreferences,
 } from './services/supabaseAuthService.ts';
+
+const SPLASH_MIN_DURATION_MS = 7000;
+const SPLASH_MAX_WAIT_MS = 15000;
+const OTA_DISMISSED_VERSION_STORAGE_KEY = 'meow_dismissed_ota_version';
+
+function readStoredDismissedOtaVersion(): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const val = localStorage.getItem(OTA_DISMISSED_VERSION_STORAGE_KEY);
+    return val && val.trim() ? val.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDismissedOtaVersion(key: string | null): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (key) {
+      localStorage.setItem(OTA_DISMISSED_VERSION_STORAGE_KEY, key);
+    } else {
+      localStorage.removeItem(OTA_DISMISSED_VERSION_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage quota / privacy mode errors
+  }
+}
 
 const DEFAULT_USER_AVATAR_FALLBACK =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Ccircle cx='60' cy='60' r='60' fill='%23F7E1C3'/%3E%3Ccircle cx='42' cy='46' r='8' fill='%23E67E22'/%3E%3Ccircle cx='60' cy='38' r='8' fill='%23E67E22'/%3E%3Ccircle cx='78' cy='46' r='8' fill='%23E67E22'/%3E%3Cpath d='M60 54c-13 0-23 9-23 20 0 9 9 15 23 15s23-6 23-15c0-11-10-20-23-20z' fill='%23E67E22'/%3E%3C/svg%3E";
@@ -311,12 +347,42 @@ class AppStateManager {
   } | null = null;
   private loadedSupabaseUserId: string | null = null;
   private pendingSplashAdvance: boolean = false;
+  private splashStartedAt: number = Date.now();
+  private splashViewMounted: boolean = false;
+  private splashTransitionLocked: boolean = false;
+  private splashLoadingDelayed: boolean = false;
+  private deferredSplashTargetStep: OnboardingStep | null = null;
+  private splashMinTimer: ReturnType<typeof setTimeout> | null = null;
+  private splashMaxTimer: ReturnType<typeof setTimeout> | null = null;
   private isSigningOutSupabase: boolean = false;
   private supabaseAccountWriteQueue: Promise<unknown> = Promise.resolve();
   private activeDeepLinkAuthPromise: Promise<boolean> | null = null;
   private activeDeepLinkUrl: string | null = null;
   private deepLinkInitChecked: boolean = false;
   private handledDeepLinkUrls: Set<string> = new Set();
+
+  // 4.2 OTA & RELEASE APK UPDATE STATE
+  private updateCheckResult: UpdateCheckResult = {
+    configured: false,
+    status: 'up_to_date',
+    currentNativeVersion: APP_VERSION_INFO.appVersion,
+    currentBuildNumber: APP_VERSION_INFO.buildNumber,
+    currentBundleVersion: APP_VERSION_INFO.appVersion,
+    otaUpdate: null,
+    apkUpdate: null,
+  };
+  private isCheckingUpdates: boolean = false;
+  private isApplyingOtaUpdate: boolean = false;
+  private isApkUpdateModalOpen: boolean = false;
+  private apkUpdateDismissedVersion: string | null = null;
+  private isOtaNoticeVisible: boolean = false;
+  private otaUpdateDismissedVersion: string | null = readStoredDismissedOtaVersion();
+  private isOtaStagedForRestart: boolean = false;
+  private stagedOtaVersion: string | null = null;
+  private updateActionFeedback: {
+    kind: 'success' | 'error' | 'info';
+    message: string;
+  } | null = null;
 
   // Calm filtering/search loading state
   private isFilteringLoading: boolean = false;
@@ -414,6 +480,9 @@ class AppStateManager {
       }
     }
     this.initRealtimeSync();
+    if (this.onboardingStep === 'splash' && !this.isOnboardingPreviewSession) {
+      this.scheduleSplashAutoTransition();
+    }
   }
 
   private loadPersistedOwnerProfile(): void {
@@ -850,6 +919,7 @@ class AppStateManager {
     if (!result.configured) {
       this.isSupabaseAuthReady = true;
       this.isSupabaseProfileLoading = false;
+      this.tryFinalizeSplashTransition();
       this.notify();
       return;
     }
@@ -868,6 +938,7 @@ class AppStateManager {
         markReady: true,
         preserveOnboardingSubstep: true,
       });
+      this.tryFinalizeSplashTransition();
       this.notify();
       return;
     }
@@ -907,10 +978,13 @@ class AppStateManager {
         preserveOnboardingSubstep: event !== 'SIGNED_OUT' && !this.isSigningOutSupabase,
       });
       if (!this.isOnboardingPreviewSession && this.isSigningOutSupabase) {
+        this.clearSplashTimers();
+        this.splashTransitionLocked = true;
         this.onboardingStep = 'auth_method';
-      } else if (!this.isOnboardingPreviewSession && this.pendingSplashAdvance && this.onboardingStep === 'splash') {
+      } else if (!this.isOnboardingPreviewSession && this.onboardingStep === 'splash') {
+        this.deferredSplashTargetStep = 'welcome';
         this.pendingSplashAdvance = false;
-        this.onboardingStep = 'welcome';
+        this.tryFinalizeSplashTransition();
       }
       this.notify();
       return;
@@ -927,6 +1001,8 @@ class AppStateManager {
       this.supabaseAccountBundle?.exists
     ) {
       this.isSupabaseAuthReady = true;
+      this.isSupabaseProfileLoading = false;
+      this.tryFinalizeSplashTransition();
       this.notify();
       return;
     }
@@ -939,6 +1015,7 @@ class AppStateManager {
     ) {
       this.isSupabaseAuthReady = true;
       this.isSupabaseProfileLoading = false;
+      this.tryFinalizeSplashTransition();
       this.notify();
       return;
     }
@@ -997,10 +1074,10 @@ class AppStateManager {
         };
         const inRecovery = Boolean(opts?.isPasswordRecovery || this.isSupabasePasswordRecoveryState);
         if (!this.isOnboardingPreviewSession) {
-          if (inRecovery) {
-            this.onboardingStep = 'auth_method';
-          } else if (this.onboardingStep === 'completed') {
-            this.onboardingStep = 'splash';
+          if (inRecovery || this.onboardingStep === 'splash') {
+            this.deferOrSetOnboardingStep('auth_method');
+          } else {
+            this.tryFinalizeSplashTransition();
           }
         }
         this.notify();
@@ -1034,14 +1111,14 @@ class AppStateManager {
         if (!this.isOnboardingPreviewSession) {
           this.pendingSplashAdvance = false;
           if (inRecovery) {
-            this.onboardingStep = 'auth_method';
+            this.deferOrSetOnboardingStep('auth_method');
           } else if (
             this.onboardingStep === 'splash' ||
             this.onboardingStep === 'welcome' ||
             this.onboardingStep === 'auth_method' ||
             this.onboardingStep === 'completed'
           ) {
-            this.onboardingStep = 'owner_details';
+            this.deferOrSetOnboardingStep('owner_details');
           }
         }
         this.notify();
@@ -1118,10 +1195,10 @@ class AppStateManager {
       const inRecovery = Boolean(opts?.isPasswordRecovery || this.isSupabasePasswordRecoveryState);
       if (inRecovery) {
         this.ownerDetailsCompleted = Boolean(bundle.onboardingDone || hasCompletedOwnerFields);
-        this.onboardingStep = 'auth_method';
+        this.deferOrSetOnboardingStep('auth_method');
       } else if (bundle.onboardingDone) {
         this.ownerDetailsCompleted = true;
-        this.onboardingStep = 'completed';
+        this.deferOrSetOnboardingStep('completed');
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem('meow_onboarding_done', 'true');
         }
@@ -1133,7 +1210,7 @@ class AppStateManager {
           this.onboardingStep === 'auth_method' ||
           this.onboardingStep === 'completed'
         ) {
-          this.onboardingStep = hasCompletedOwnerFields ? 'has_pet' : 'owner_details';
+          this.deferOrSetOnboardingStep(hasCompletedOwnerFields ? 'has_pet' : 'owner_details');
         }
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('meow_onboarding_done');
@@ -1392,13 +1469,16 @@ class AppStateManager {
 
     if (
       this.loadedSupabaseUserId === userId &&
-      this.supabaseAccountBundle?.exists &&
-      this.supabaseAccountBundle.profile &&
+      this.supabaseAccountBundle &&
       !this.supabaseAuthError
     ) {
-      this.applySupabaseAccountBundle(this.supabaseAccountBundle, {
-        isPasswordRecovery: recovery,
-      });
+      if (this.supabaseAccountBundle.exists && this.supabaseAccountBundle.profile) {
+        this.applySupabaseAccountBundle(this.supabaseAccountBundle, {
+          isPasswordRecovery: recovery,
+        });
+      } else if (!this.isOnboardingPreviewSession) {
+        this.deferOrSetOnboardingStep(recovery ? 'auth_method' : 'owner_details');
+      }
       this.notify();
       return {
         success: true,
@@ -1446,6 +1526,7 @@ class AppStateManager {
       !trimmedUrl ||
       this.isOnboardingPreviewSession ||
       !isSupabaseConfigured() ||
+      !isSafeDeepLink(trimmedUrl) ||
       !isSupabaseAuthCallbackUrl(trimmedUrl)
     ) {
       return false;
@@ -1478,6 +1559,9 @@ class AppStateManager {
         this.supabaseAuthError =
           cbRes.errorMessage || 'تعذر التحقق من رابط المصادقة. يرجى طلب رابط جديد.';
         if (!this.isOnboardingPreviewSession && !this.isSupabaseAuthenticated()) {
+          this.clearSplashTimers();
+          this.splashTransitionLocked = true;
+          this.splashLoadingDelayed = false;
           this.onboardingStep = 'auth_method';
         }
         this.notify();
@@ -1703,9 +1787,11 @@ class AppStateManager {
     };
     this.notifications = [notif, ...this.notifications.filter((n) => n.id !== notif.id)].slice(0, 60);
     this.persistNotifications();
-    void syncNotificationToFirestore(notif).catch((err) =>
-      console.warn('Firestore notification sync skipped:', err)
-    );
+    if (!isSupabaseConfigured()) {
+      void syncNotificationToFirestore(notif).catch((err) =>
+        console.warn('Firestore notification sync skipped:', err)
+      );
+    }
     if (this.notificationsEnabled && !notif.read) {
       void showSystemNotification(notif);
     }
@@ -1728,9 +1814,11 @@ class AppStateManager {
       if (!n.read) {
         n.read = true;
         changed = true;
-        void syncNotificationToFirestore(n).catch((err) =>
-          console.warn('Firestore notification read sync skipped:', err)
-        );
+        if (!isSupabaseConfigured()) {
+          void syncNotificationToFirestore(n).catch((err) =>
+            console.warn('Firestore notification read sync skipped:', err)
+          );
+        }
       }
     });
     if (readIdsAdded) {
@@ -1766,9 +1854,11 @@ class AppStateManager {
     this.persistReadNotificationIds();
     this.notifications = this.notifications.filter((n) => n.id !== notificationId);
     this.persistNotifications();
-    void deleteNotificationFromFirestore(notificationId).catch((err) =>
-      console.warn('Firestore notification delete skipped:', err)
-    );
+    if (!isSupabaseConfigured()) {
+      void deleteNotificationFromFirestore(notificationId).catch((err) =>
+        console.warn('Firestore notification delete skipped:', err)
+      );
+    }
     this.notify();
   }
 
@@ -2220,16 +2310,173 @@ class AppStateManager {
     return { success: true };
   }
 
+  private clearSplashTimers(): void {
+    if (this.splashMinTimer) {
+      clearTimeout(this.splashMinTimer);
+      this.splashMinTimer = null;
+    }
+    if (this.splashMaxTimer) {
+      clearTimeout(this.splashMaxTimer);
+      this.splashMaxTimer = null;
+    }
+  }
+
+  public resetSplashState(): void {
+    this.clearSplashTimers();
+    this.onboardingStep = 'splash';
+    this.splashStartedAt = Date.now();
+    this.splashViewMounted = false;
+    this.splashTransitionLocked = false;
+    this.splashLoadingDelayed = false;
+    this.deferredSplashTargetStep = null;
+    if (!this.isOnboardingPreviewSession) {
+      this.scheduleSplashAutoTransition();
+    }
+  }
+
+  public markSplashViewMounted(): void {
+    if (
+      this.splashViewMounted ||
+      this.isOnboardingPreviewSession ||
+      this.onboardingStep !== 'splash' ||
+      this.splashTransitionLocked
+    ) {
+      return;
+    }
+    this.splashViewMounted = true;
+    this.splashStartedAt = Date.now();
+    this.clearSplashTimers();
+    this.scheduleSplashAutoTransition();
+  }
+
+  private computeDefaultSplashTarget(): OnboardingStep {
+    if (this.isSupabasePasswordRecoveryState) return 'auth_method';
+    if (this.deferredSplashTargetStep && this.deferredSplashTargetStep !== 'splash') {
+      return this.deferredSplashTargetStep;
+    }
+    if (this.isSupabaseAuthenticated()) {
+      return this.ownerDetailsCompleted ? 'completed' : 'owner_details';
+    }
+    if (
+      !isSupabaseConfigured() &&
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('meow_onboarding_done') === 'true'
+    ) {
+      return 'completed';
+    }
+    return 'welcome';
+  }
+
+  private deferOrSetOnboardingStep(target: OnboardingStep): void {
+    if (this.onboardingStep === 'splash' && !this.isOnboardingPreviewSession) {
+      this.deferredSplashTargetStep = target;
+      this.tryFinalizeSplashTransition();
+      return;
+    }
+    this.onboardingStep = target;
+  }
+
+  private completeSplashTransition(): void {
+    if (
+      this.splashTransitionLocked ||
+      this.onboardingStep !== 'splash' ||
+      this.isOnboardingPreviewSession
+    ) {
+      return;
+    }
+    this.splashTransitionLocked = true;
+    this.clearSplashTimers();
+    this.splashLoadingDelayed = false;
+    this.pendingSplashAdvance = false;
+    this.onboardingStep = this.computeDefaultSplashTarget();
+    this.notify();
+  }
+
+  private tryFinalizeSplashTransition(): void {
+    if (
+      this.splashTransitionLocked ||
+      this.onboardingStep !== 'splash' ||
+      this.isOnboardingPreviewSession
+    ) {
+      return;
+    }
+    const elapsed = Date.now() - this.splashStartedAt;
+    const authReady = this.isSupabaseAuthReady && !this.isSupabaseProfileLoading;
+    if (elapsed >= SPLASH_MIN_DURATION_MS && authReady) {
+      this.completeSplashTransition();
+    }
+  }
+
+  public isSplashLoadingDelayed(): boolean {
+    return this.splashLoadingDelayed && this.onboardingStep === 'splash';
+  }
+
+  public getSplashMinDurationMs(): number {
+    return SPLASH_MIN_DURATION_MS;
+  }
+
+  public scheduleSplashAutoTransition(): void {
+    if (
+      this.isOnboardingPreviewSession ||
+      this.onboardingStep !== 'splash' ||
+      this.splashTransitionLocked ||
+      this.splashMinTimer !== null
+    ) {
+      return;
+    }
+
+    const elapsed = Date.now() - this.splashStartedAt;
+    const minRemaining = Math.max(0, SPLASH_MIN_DURATION_MS - elapsed);
+    const maxRemaining = Math.max(minRemaining + 500, SPLASH_MAX_WAIT_MS - elapsed);
+
+    this.splashMinTimer = setTimeout(() => {
+      this.splashMinTimer = null;
+      if (
+        this.splashTransitionLocked ||
+        this.onboardingStep !== 'splash' ||
+        this.isOnboardingPreviewSession
+      ) {
+        return;
+      }
+      if (this.isSupabaseAuthReady && !this.isSupabaseProfileLoading) {
+        this.completeSplashTransition();
+      } else {
+        this.splashLoadingDelayed = true;
+        this.notify();
+      }
+    }, minRemaining);
+
+    this.splashMaxTimer = setTimeout(() => {
+      this.splashMaxTimer = null;
+      if (
+        this.splashTransitionLocked ||
+        this.onboardingStep !== 'splash' ||
+        this.isOnboardingPreviewSession
+      ) {
+        return;
+      }
+      this.isSupabaseAuthReady = true;
+      this.isSupabaseProfileLoading = false;
+      this.completeSplashTransition();
+    }, maxRemaining);
+  }
+
   public setOnboardingStep(step: OnboardingStep): void {
     if (
       step !== 'splash' &&
       this.onboardingStep === 'splash' &&
-      isSupabaseConfigured() &&
-      !this.isOnboardingPreviewSession &&
-      !this.isSupabaseAuthReady
+      !this.isOnboardingPreviewSession
     ) {
-      this.pendingSplashAdvance = true;
-      return;
+      const elapsed = Date.now() - this.splashStartedAt;
+      if (
+        elapsed < SPLASH_MIN_DURATION_MS ||
+        (isSupabaseConfigured() && (!this.isSupabaseAuthReady || this.isSupabaseProfileLoading))
+      ) {
+        this.deferredSplashTargetStep = step;
+        this.pendingSplashAdvance = true;
+        this.scheduleSplashAutoTransition();
+        return;
+      }
     }
 
     if (
@@ -2275,10 +2522,15 @@ class AppStateManager {
       }
     }
 
-    if (step === 'splash' || step === 'auth_method') {
+    if ((step === 'splash' || step === 'auth_method') && this.onboardingStep !== step) {
       this.termsAcceptedInOnboarding = false;
     }
     this.onboardingStep = step;
+    if (step !== 'splash') {
+      this.clearSplashTimers();
+      this.splashTransitionLocked = true;
+      this.splashLoadingDelayed = false;
+    }
     if (step === 'completed' && !this.isOnboardingPreviewSession) {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('meow_onboarding_done', 'true');
@@ -2295,14 +2547,185 @@ class AppStateManager {
       void this.signOutSupabaseAccount();
       return;
     }
-    this.onboardingStep = 'splash';
     this.authenticatedGoogleAccount = null;
     this.termsAcceptedInOnboarding = false;
     this.ownerDetailsCompleted = false;
     if (!this.isOnboardingPreviewSession && typeof localStorage !== 'undefined') {
       localStorage.removeItem('meow_onboarding_done');
     }
+    this.resetSplashState();
     this.notify();
+  }
+
+  // OTA & APK Release Update Actions
+  public getUpdateState(): {
+    result: UpdateCheckResult;
+    isChecking: boolean;
+    isApplyingOta: boolean;
+    isApkModalOpen: boolean;
+    isOtaNoticeVisible: boolean;
+    isOtaStagedForRestart: boolean;
+    stagedOtaVersion: string | null;
+    feedback: { kind: 'success' | 'error' | 'info'; message: string } | null;
+  } {
+    return {
+      result: this.updateCheckResult,
+      isChecking: this.isCheckingUpdates,
+      isApplyingOta: this.isApplyingOtaUpdate,
+      isApkModalOpen: this.isApkUpdateModalOpen,
+      isOtaNoticeVisible: this.isOtaNoticeVisible,
+      isOtaStagedForRestart: this.isOtaStagedForRestart,
+      stagedOtaVersion: this.stagedOtaVersion,
+      feedback: this.updateActionFeedback,
+    };
+  }
+
+  private buildOtaDismissKey(ota: OtaManifest): string {
+    const channel = ota.channel || APP_VERSION_INFO.channel;
+    return `${channel}:${ota.version}`;
+  }
+
+  public clearUpdateFeedback(): void {
+    this.updateActionFeedback = null;
+    this.notify();
+  }
+
+  public dismissApkUpdateModal(): void {
+    const apk = this.updateCheckResult.apkUpdate;
+    if (apk?.isMandatory) return;
+    if (apk?.latestVersion) {
+      this.apkUpdateDismissedVersion = apk.latestVersion;
+    }
+    this.isApkUpdateModalOpen = false;
+    this.notify();
+  }
+
+  public dismissOtaNotice(): void {
+    const ota = this.updateCheckResult.otaUpdate;
+    if (ota && !ota.mandatory) {
+      const key = this.buildOtaDismissKey(ota);
+      this.otaUpdateDismissedVersion = key;
+      writeStoredDismissedOtaVersion(key);
+    }
+    this.isOtaNoticeVisible = false;
+    this.notify();
+  }
+
+  public async checkForAppUpdates(interactive = false): Promise<UpdateCheckResult> {
+    if (this.isCheckingUpdates) return this.updateCheckResult;
+    this.isCheckingUpdates = true;
+    if (interactive) {
+      this.updateActionFeedback = null;
+      this.notify();
+    }
+
+    try {
+      const result = await checkForUpdates();
+      this.updateCheckResult = result;
+      this.otaUpdateDismissedVersion = readStoredDismissedOtaVersion();
+
+      if (
+        result.apkUpdate &&
+        (interactive ||
+          result.apkUpdate.isMandatory ||
+          this.apkUpdateDismissedVersion !== result.apkUpdate.latestVersion)
+      ) {
+        this.isApkUpdateModalOpen = true;
+        this.isOtaNoticeVisible = false;
+      } else if (result.otaUpdate && !this.isApkUpdateModalOpen) {
+        const dismissKey = this.buildOtaDismissKey(result.otaUpdate);
+        const alreadyDismissed = this.otaUpdateDismissedVersion === dismissKey;
+        const alreadyStaged =
+          this.isOtaStagedForRestart && this.stagedOtaVersion === result.otaUpdate.version;
+
+        if (alreadyStaged) {
+          this.isOtaNoticeVisible = !alreadyDismissed && !this.isSettingsOpen();
+        } else if (interactive) {
+          this.isOtaNoticeVisible = !this.isSettingsOpen();
+        } else {
+          this.isOtaNoticeVisible = Boolean(result.otaUpdate.mandatory) || !alreadyDismissed;
+        }
+      } else if (!this.isOtaStagedForRestart) {
+        this.isOtaNoticeVisible = false;
+      }
+
+      if (interactive) {
+        if (!result.configured) {
+          this.updateActionFeedback = {
+            kind: 'info',
+            message: 'أنت تستخدم أحدث إصدار مضمّن حالياً.',
+          };
+        } else if (result.status === 'up_to_date') {
+          this.updateActionFeedback = {
+            kind: 'success',
+            message: `التطبيق محدّث لأحدث إصدار (${result.currentBundleVersion}).`,
+          };
+        } else if (result.status === 'ota_available' && result.otaUpdate) {
+          this.updateActionFeedback = {
+            kind: 'info',
+            message: `يتوفر تحديث متوافق جديد (${result.otaUpdate.version}) بدون الحاجة لتنزيل APK.`,
+          };
+        } else if (result.status === 'apk_required' && result.apkUpdate) {
+          this.updateActionFeedback = {
+            kind: 'info',
+            message: `يتوفر تحديث APK جديد (${result.apkUpdate.latestVersion}).`,
+          };
+        } else if (result.status === 'error') {
+          this.updateActionFeedback = {
+            kind: 'error',
+            message: result.errorMessage || 'تعذر التحقق من التحديثات حالياً.',
+          };
+        }
+      }
+      return result;
+    } finally {
+      this.isCheckingUpdates = false;
+      this.notify();
+    }
+  }
+
+  public async applyOtaUpdateNow(): Promise<void> {
+    const ota = this.updateCheckResult.otaUpdate;
+    if (!ota || this.isApplyingOtaUpdate) return;
+    this.isApplyingOtaUpdate = true;
+    this.updateActionFeedback = null;
+    this.notify();
+
+    try {
+      const res = await applyOtaUpdate(ota);
+      if (res.success) {
+        const targetVer = res.version || ota.version;
+        this.isOtaStagedForRestart = true;
+        this.stagedOtaVersion = targetVer;
+        const key = this.buildOtaDismissKey(ota);
+        this.otaUpdateDismissedVersion = key;
+        writeStoredDismissedOtaVersion(key);
+        this.updateActionFeedback = {
+          kind: 'success',
+          message: `تم تنزيل وتجهيز التحديث (${targetVer}) بنجاح. سيُفعّل تلقائيًا عند وضع التطبيق في الخلفية أو إعادة فتحه، أو يمكنك إعادة التشغيل الآن.`,
+        };
+      } else {
+        this.updateActionFeedback = {
+          kind: 'error',
+          message: res.errorMessage || 'تعذر تنزيل التحديث الهوائي. تأكد من الاتصال وحاول لاحقًا.',
+        };
+      }
+    } finally {
+      this.isApplyingOtaUpdate = false;
+      this.notify();
+    }
+  }
+
+  public async restartForStagedOtaUpdate(): Promise<void> {
+    if (!this.isOtaStagedForRestart) return;
+    const res = await reloadAppToApplyStagedUpdate();
+    if (!res.success) {
+      this.updateActionFeedback = {
+        kind: 'error',
+        message: res.errorMessage || 'تعذر إعادة تشغيل التطبيق لتفعيل التحديث.',
+      };
+      this.notify();
+    }
   }
 
   // Meow Advice Dismissal
@@ -5300,54 +5723,56 @@ class AppStateManager {
     );
     this.notify();
 
-    // Auto reply simulation
-    setTimeout(() => {
-      if (
-        !this.isUserBlocked(conv.otherUserId) &&
-        this.conversations.some((c) => c.id === conv.id)
-      ) {
-        const replyText =
-          newMsg.type === 'sticker'
-            ? 'ملصق لطيف ومميز جداً! 😻 محادثة ممتعة ومبشرة بالخير.'
-            : newMsg.type === 'audio'
-            ? 'سمعت رسالتك الصوتية! صوتك واضح وشاكر لاهتمامك ومحبتك للمياو 🐾.'
-            : newMsg.type === 'image'
-            ? 'ما شاء الله! الصورة جميلة جداً، أليف مميز ورائع 💛.'
-            : 'أهلاً بك! شاكر لاهتمامك وتواصلك الراقي، أنا جاهز لأي استفسار أو لترتيب موعد المقابلة المناسبة.';
+    // Auto reply simulation strictly limited to local DEV sandbox mode
+    if (import.meta.env.DEV) {
+      setTimeout(() => {
+        if (
+          !this.isUserBlocked(conv.otherUserId) &&
+          this.conversations.some((c) => c.id === conv.id)
+        ) {
+          const replyText =
+            newMsg.type === 'sticker'
+              ? 'ملصق لطيف ومميز جداً! 😻 محادثة ممتعة ومبشرة بالخير.'
+              : newMsg.type === 'audio'
+              ? 'سمعت رسالتك الصوتية! صوتك واضح وشاكر لاهتمامك ومحبتك للمياو 🐾.'
+              : newMsg.type === 'image'
+              ? 'ما شاء الله! الصورة جميلة جداً، أليف مميز ورائع 💛.'
+              : 'أهلاً بك! شاكر لاهتمامك وتواصلك الراقي، أنا جاهز لأي استفسار أو لترتيب موعد المقابلة المناسبة.';
 
-        const replyMsg: ChatMessage = {
-          id: `msg_rep_${Date.now()}`,
-          conversationId: conv.id,
-          senderId: conv.otherUserId,
-          senderName: conv.otherUserName,
-          text: replyText,
-          type: 'text',
-          timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
-          isFromUser: false,
-          status: 'read',
-        };
-        conv.messages.push(replyMsg);
-        conv.lastMessage = replyMsg.text || '';
-        conv.lastMessageTime = 'الآن';
-        conv.updatedAt = Date.now();
-        const isViewingConv =
-          this.currentTab === 'chat' && this.activeConversationId === conv.id;
-        if (!isViewingConv) {
-          conv.unreadCount = (conv.unreadCount || 0) + 1;
+          const replyMsg: ChatMessage = {
+            id: `msg_rep_${Date.now()}`,
+            conversationId: conv.id,
+            senderId: conv.otherUserId,
+            senderName: conv.otherUserName,
+            text: replyText,
+            type: 'text',
+            timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+            isFromUser: false,
+            status: 'read',
+          };
+          conv.messages.push(replyMsg);
+          conv.lastMessage = replyMsg.text || '';
+          conv.lastMessageTime = 'الآن';
+          conv.updatedAt = Date.now();
+          const isViewingConv =
+            this.currentTab === 'chat' && this.activeConversationId === conv.id;
+          if (!isViewingConv) {
+            conv.unreadCount = (conv.unreadCount || 0) + 1;
+          }
+          this.addNotification({
+            id: `notif_msg_${replyMsg.id}`,
+            type: 'new_message',
+            title: `رسالة جديدة من ${conv.otherUserName}`,
+            body: replyText,
+            read: isViewingConv,
+            targetTab: 'chat',
+            targetSubTab: 'chats',
+            targetConversationId: conv.id,
+            targetPetId: conv.petId,
+          });
         }
-        this.addNotification({
-          id: `notif_msg_${replyMsg.id}`,
-          type: 'new_message',
-          title: `رسالة جديدة من ${conv.otherUserName}`,
-          body: replyText,
-          read: isViewingConv,
-          targetTab: 'chat',
-          targetSubTab: 'chats',
-          targetConversationId: conv.id,
-          targetPetId: conv.petId,
-        });
-      }
-    }, 1200);
+      }, 1200);
+    }
   }
 
   public addHealthRecord(record: Omit<HealthRecordItem, 'id'>): void {
@@ -5504,6 +5929,12 @@ class AppStateManager {
   }
 
   public handleHardwareBack(): boolean {
+    if (this.isApkUpdateModalOpen) {
+      if (!this.updateCheckResult.apkUpdate?.isMandatory) {
+        this.dismissApkUpdateModal();
+      }
+      return true;
+    }
     if (this.isNotificationsModalOpen) {
       this.setNotificationsOpen(false);
       return true;

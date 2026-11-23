@@ -1,5 +1,6 @@
 import { state } from '../../state.ts';
 import { PendingBlockTarget, PendingReportTarget, ReportReason } from '../../types.ts';
+import { escapeAttr, escapeHtml } from '../../utils/sanitize.ts';
 
 export interface ThreeDotsMenuOptions {
   userId: string;
@@ -26,15 +27,6 @@ const REPORT_REASONS: { id: ReportReason; label: string }[] = [
 
 let selectedReportReason: ReportReason = 'inappropriate_content';
 let draftReportDetails = '';
-
-function escapeAttr(val: string): string {
-  return val
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
 
 export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
   const alignClass = opts.dropdownAlign === 'right' ? 'right-0' : 'left-0';
@@ -269,13 +261,13 @@ export function renderBlockConfirmModal(): string {
               تأكيد الحظر
             </h3>
             <p class="text-xs font-bold text-brand-subtleGray m-0 mt-0.5 truncate">
-              ${target.userName}
+              ${escapeHtml(target.userName)}
             </p>
           </div>
         </div>
 
         <p class="text-xs sm:text-sm font-semibold text-brand-dark/90 leading-relaxed">
-          هل أنت متأكد من رغبتك في حظر <strong class="text-red-600">${target.userName}</strong>؟
+          هل أنت متأكد من رغبتك في حظر <strong class="text-red-600">${escapeHtml(target.userName)}</strong>؟
           سيتم منع التواصل بين الحسابين ولن تظهر لك حيوانات أو محادثات هذا الحساب بعد الآن، ويمكنك إلغاء الحظر لاحقاً من الإعدادات.
         </p>
 
@@ -357,7 +349,7 @@ export function renderReportModal(): string {
                 تقديم بلاغ
               </h3>
               <p class="text-xs font-bold text-brand-subtleGray m-0 mt-0.5 truncate">
-                ${contextLabel}
+                ${escapeHtml(contextLabel)}
               </p>
             </div>
           </div>
@@ -406,7 +398,7 @@ export function renderReportModal(): string {
             rows="3"
             placeholder="اكتب أي تفاصيل تساعد في مراجعة البلاغ..."
             class="w-full rounded-2xl border-2 border-brand-peachBorder/80 bg-[#FFF9E9]/60 p-3 text-xs sm:text-sm font-semibold text-brand-dark placeholder-brand-subtleGray focus:outline-none focus:border-brand-orange font-baloo resize-none"
-          >${escapeAttr(draftReportDetails)}</textarea>
+          >${escapeHtml(draftReportDetails)}</textarea>
         </div>
 
         <div class="grid grid-cols-2 gap-3 pt-1">
@@ -508,7 +500,7 @@ export function renderReportSubmittedToast(): string {
             تم استلام بلاغك وحفظه للمراجعة
           </p>
           <p class="text-[11px] font-bold text-brand-subtleGray m-0 mt-0.5">
-            السبب: ${notice.reasonLabel} • بخصوص: ${notice.targetUserName}
+            السبب: ${escapeHtml(notice.reasonLabel)} • بخصوص: ${escapeHtml(notice.targetUserName)}
           </p>
         </div>
       </div>

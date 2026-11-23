@@ -272,12 +272,14 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
   if (
     code === 'otp_expired' ||
     code === 'flow_state_expired' ||
+    code === 'token_expired' ||
     rawMessage.includes('expired') ||
-    rawMessage.includes('invalid token')
+    rawMessage.includes('invalid token') ||
+    rawMessage.includes('token has expired')
   ) {
     return {
-      code: code || 'token_expired',
-      message: 'انتهت صلاحية الرابط أو رمز التحقق. يرجى طلب رابط جديد.',
+      code: code || 'otp_expired',
+      message: 'انتهت صلاحية رمز التحقق أو الرابط. يرجى طلب رمز جديد.',
     };
   }
 
@@ -300,9 +302,59 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
   }
 
   if (
+    code === 'access_denied' ||
+    code === 'user_cancelled' ||
+    rawMessage.includes('access_denied') ||
+    rawMessage.includes('user cancelled') ||
+    rawMessage.includes('user canceled')
+  ) {
+    return {
+      code: 'oauth_cancelled',
+      message: 'تم إلغاء تسجيل الدخول عبر Google قبل إتمامه. يمكنك المحاولة مرة أخرى.',
+    };
+  }
+
+  if (
+    code === 'provider_disabled' ||
+    rawMessage.includes('unsupported provider') ||
+    rawMessage.includes('provider is not enabled')
+  ) {
+    return {
+      code: 'provider_disabled',
+      message:
+        'تسجيل الدخول عبر Google غير مفعّل حاليًا في إعدادات Supabase. يرجى تفعيله من لوحة التحكم.',
+    };
+  }
+
+  if (
+    rawMessage.includes('redirect') &&
+    (rawMessage.includes('not allowed') || rawMessage.includes('mismatch') || rawMessage.includes('invalid'))
+  ) {
+    return {
+      code: 'redirect_url_not_allowed',
+      message:
+        'رابط العودة بعد تسجيل الدخول غير مضاف في قائمة Redirect URLs المسموح بها في Supabase.',
+    };
+  }
+
+  if (
+    code === 'otp_disabled' ||
+    rawMessage.includes('invalid otp') ||
+    rawMessage.includes('token not found') ||
+    rawMessage.includes('otp expired')
+  ) {
+    return {
+      code: 'otp_expired',
+      message: 'رمز التحقق غير صحيح أو منتهي الصلاحية. يرجى التأكد من الأرقام أو طلب رمز جديد.',
+    };
+  }
+
+  if (
     rawMessage.includes('failed to fetch') ||
     rawMessage.includes('network') ||
-    rawMessage.includes('fetch')
+    rawMessage.includes('fetch') ||
+    rawMessage.includes('timeout') ||
+    rawMessage.includes('timed out')
   ) {
     return {
       code: code || 'network_error',
@@ -464,10 +516,18 @@ export async function signInWithGoogleSupabaseOAuth(opts?: {
         opts?.onExternalBrowserClosed?.();
       });
 
-      await Browser.open({
-        url: data.url,
-        presentationStyle: 'fullscreen',
-      });
+      try {
+        await Browser.open({
+          url: data.url,
+          presentationStyle: 'fullscreen',
+        });
+      } catch (openErr) {
+        if (activeBrowserFinishedHandle) {
+          await activeBrowserFinishedHandle.remove().catch(() => {});
+          activeBrowserFinishedHandle = null;
+        }
+        throw openErr;
+      }
 
       return {
         success: true,
@@ -826,7 +886,9 @@ export async function signInWithEmailPassword(params: {
 }
 
 /**
- * 3. Send password recovery email.
+ * 3. Send password recovery email (triggers Supabase Reset Password template).
+ * When Supabase Reset Password template contains {{ .Token }}, users receive a 6-digit OTP
+ * that can be verified directly inside the app via verifyPasswordRecoveryOtp().
  */
 export async function sendPasswordRecoveryEmail(
   emailInput: string,
@@ -841,7 +903,7 @@ export async function sendPasswordRecoveryEmail(
   if (!email || !isValidEmailFormat(email)) {
     return {
       success: false,
-      errorMessage: 'يرجى إدخال البريد الإلكتروني الصحيح لإرسال رابط الاستعادة.',
+      errorMessage: 'يرجى إدخال البريد الإلكتروني الصحيح لإرسال رمز الاستعادة.',
       errorCode: 'invalid_email',
     };
   }
@@ -851,7 +913,7 @@ export async function sendPasswordRecoveryEmail(
   if (remainingSec > 0) {
     return {
       success: false,
-      errorMessage: `تم إرسال طلب استعادة مؤخرًا. يرجى الانتظار ${remainingSec} ثانية قبل إعادة المحاولة.`,
+      errorMessage: `تم إرسال رمز التحقق مؤخرًا. يرجى الانتظار ${remainingSec} ثانية قبل إعادة الإرسال.`,
       errorCode: 'client_cooldown',
     };
   }
@@ -865,7 +927,7 @@ export async function sendPasswordRecoveryEmail(
     if (error) {
       const mapped = mapSupabaseAuthErrorToArabic(
         error,
-        'تعذر إرسال رابط استعادة كلمة المرور. يرجى المحاولة لاحقًا.'
+        'تعذر إرسال رمز استعادة كلمة المرور. يرجى المحاولة لاحقًا.'
       );
       if (
         mapped.code === 'over_email_send_rate_limit' ||
@@ -884,15 +946,112 @@ export async function sendPasswordRecoveryEmail(
     return {
       success: true,
       message:
-        'إذا كان البريد الإلكتروني مسجلًا لدينا، فقد تم إرسال رابط استعادة كلمة المرور إليه.',
+        'إذا كان البريد الإلكتروني مسجلًا لدينا، فقد تم إرسال رمز تحقق مكون من 6 أرقام إليه.',
     };
   } catch (err) {
     const mapped = mapSupabaseAuthErrorToArabic(
       err,
-      'حدث خطأ أثناء طلب استعادة كلمة المرور.'
+      'حدث خطأ أثناء طلب رمز استعادة كلمة المرور.'
     );
     return {
       success: false,
+      errorMessage: mapped.message,
+      errorCode: mapped.code,
+    };
+  }
+}
+
+export async function sendPasswordRecoveryOtp(
+  emailInput: string,
+  redirectToInput?: string
+): Promise<SupabaseBasicResult> {
+  return sendPasswordRecoveryEmail(emailInput, redirectToInput);
+}
+
+/**
+ * 3b. Verify 6-digit recovery OTP inside the app without leaving to a browser link.
+ */
+export async function verifyPasswordRecoveryOtp(params: {
+  email: string;
+  token: string;
+}): Promise<SupabaseAuthActionResult> {
+  const { client, errorMessage } = ensureConfiguredClient();
+  if (!client) {
+    return {
+      success: false,
+      user: null,
+      session: null,
+      needsEmailConfirmation: false,
+      errorMessage,
+      errorCode: 'supabase_not_configured',
+    };
+  }
+
+  const email = normalizeEmail(params.email);
+  const cleanedToken = (params.token || '').replace(/\D/g, '').trim();
+
+  if (!email || !isValidEmailFormat(email)) {
+    return {
+      success: false,
+      user: null,
+      session: null,
+      needsEmailConfirmation: false,
+      errorMessage: 'يرجى إدخال البريد الإلكتروني الصحيح أولًا.',
+      errorCode: 'invalid_email',
+    };
+  }
+
+  if (!/^\d{6}$/.test(cleanedToken)) {
+    return {
+      success: false,
+      user: null,
+      session: null,
+      needsEmailConfirmation: false,
+      errorMessage: 'يرجى إدخال رمز التحقق المكون من 6 أرقام فقط.',
+      errorCode: 'invalid_otp_format',
+    };
+  }
+
+  try {
+    const { data, error } = await client.auth.verifyOtp({
+      email,
+      token: cleanedToken,
+      type: 'recovery',
+    });
+
+    if (error || !data.session) {
+      const mapped = mapSupabaseAuthErrorToArabic(
+        error,
+        'رمز التحقق غير صحيح أو منتهي الصلاحية. يرجى التأكد من الأرقام أو طلب رمز جديد.'
+      );
+      return {
+        success: false,
+        user: null,
+        session: null,
+        needsEmailConfirmation: false,
+        errorMessage: mapped.message,
+        errorCode: mapped.code,
+      };
+    }
+
+    passwordRecoveryActive = true;
+    return {
+      success: true,
+      user: data.user ?? data.session.user ?? null,
+      session: data.session,
+      needsEmailConfirmation: false,
+      message: 'تم التحقق من الرمز بنجاح. يمكنك الآن تعيين كلمة المرور الجديدة.',
+    };
+  } catch (err) {
+    const mapped = mapSupabaseAuthErrorToArabic(
+      err,
+      'تعذر التحقق من رمز الاستعادة. يرجى المحاولة مرة أخرى.'
+    );
+    return {
+      success: false,
+      user: null,
+      session: null,
+      needsEmailConfirmation: false,
       errorMessage: mapped.message,
       errorCode: mapped.code,
     };
@@ -1744,7 +1903,9 @@ export async function handleSupabaseAuthCallbackUrl(
 
   const promise = processSupabaseAuthCallbackUrl(parsed)
     .then((res) => {
-      cacheCompletedAuthCallback(dedupeKey, res);
+      if (res.success || res.errorCode !== 'network_error') {
+        cacheCompletedAuthCallback(dedupeKey, res);
+      }
       return res;
     })
     .finally(() => {

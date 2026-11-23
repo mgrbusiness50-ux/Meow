@@ -19,22 +19,28 @@ import {
 } from '../components/SearchableSelect.ts';
 import {
   resendSignUpConfirmationEmail,
-  sendPasswordRecoveryEmail,
+  sendPasswordRecoveryOtp,
   signInWithEmailPassword,
   signInWithGoogleSupabaseOAuth,
   signUpWithEmailPassword,
   updateSupabasePassword,
+  verifyPasswordRecoveryOtp,
 } from '../../services/supabaseAuthService.ts';
 import { validateEgyptianMobile } from '../../utils/validation.ts';
+import {
+  SAFE_FALLBACK_PET_SVG,
+  escapeAttr,
+  escapeHtml,
+  sanitizeImageSrc,
+  validateUploadedFile,
+} from '../../utils/sanitize.ts';
 
-const SPLASH_LOGO_URL =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuBkUboxHVAVTpJU18DOk8LGxlZINhBS3GyspVpAnljo_ufEzmybRtZjfwD2izQ4ck6QZJszfzEROi_8GSqmxgIs8nfh6X9a2weRQJHugsh7tIjzldPRXfASsGwL1ed96d1NI3PLfkVzY7jisJPkE-wbo5VsxogWc5MkQYTEdiFPaSO2GHSv4O7QhUswU9KT4XnE4sieTVurv6MPIAjNrs3MPskxA07TFv2ZDQdowVrUfuT6-BTLSIhQKmYp7q5sJcab';
+const SPLASH_LOGO_URL = '/assets/meow-logo.png';
 
 const MASCOT_IMG_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuBjCmSu0xDxJXyrHUBK1tLOi3THUHNrBykChM-wCkfFmb7-SylOoi2gZy7q_0EhekEOoSWaq1XAW437WsLx2Q-8LdB5VeHq3alZjh5JUU5lAdHpKERnUOvvsVZHitTZTkE0WfQaUjnb15I4u4ZRg-k6nKAGaMLGRGvlkBmmux8JCsxfcFhuyG6PsA2X6yQCLhFb6xjiq2en0tv84Rc-_1K1_Iz8Ksk-G_oCqvhJR4epnBXI3Nb8P4VJGtYl5QeTGeaj';
 
-const WELCOME_LOGO_URL =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuAWUkBSCToKuvsTzQdLeDgwewWrq25QuzlXIMyGRB-Io9sku--2d3rTcZCl6XZF69mO-W6kLkpbWijMmbnBhZlr96SK1xym8KWRRwcSdB8eG2gUQx5yRozTUYvWbUiRkg1vcpkatS1wxB3IgxzpC-b_yVuh9f3pVi_2uo_Gf95WQrWe8elhb3rg8B95vh6Qy2i7uhWh2lwB01rwZrliMckY1uDIvnwkaTKPZtS7CJw';
+const WELCOME_LOGO_URL = '/assets/meow-logo.png';
 
 const HAS_PET_IMG_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuDkbGNMk8BmUCkQwfJzMRgVLJ6YM4ZQ2xa1Kx7XTjZmZOxi7v4fKZlOLD_AbvHf4xoMJyUQrj-e2KOl1quHveOGec2YsESHyr1RnDqxUrz_GAW3ONfw1SQOvqYyw0BXrQAhejT3PFjgSGvfBdn5XqRlC9nQtG4cpsMao_3MPClhD_-dqZwCURM7xLoaVj5YB4ibED4FGnoq6fxYLGSa6XdpXLFPA--BuLrBVFjS1E5bd2S7y1VFJ5mi';
@@ -65,19 +71,24 @@ export const PERSONALITY_TRAITS = [
 
 let lastRenderedStep: OnboardingStep | null = null;
 let authMode: 'login' | 'signup' = 'signup';
-let authSubView: 'main' | 'forgot_password' = 'main';
+let authSubView: 'main' | 'forgot_password' | 'forgot_otp' = 'main';
 let authEmail = '';
 let authPassword = '';
 let showAuthPassword = false;
 let authNewPassword = '';
 let authConfirmPassword = '';
 let showRecoveryPassword = false;
+let recoveryOtpCode = '';
+let recoveryResendSeconds = 0;
+let recoveryCooldownTimer: ReturnType<typeof setInterval> | null = null;
 let pendingConfirmationEmail = '';
 let isTermsAccepted = false;
 let isAuthSubmitting = false;
 let isGoogleSubmitting = false;
 let isResendingConfirmation = false;
 let isSendingRecovery = false;
+let isVerifyingOtp = false;
+let isResendingRecoveryOtp = false;
 let isUpdatingPassword = false;
 let authErrorMessage = '';
 let authSuccessMessage = '';
@@ -85,6 +96,43 @@ let isSavingOwnerDetails = false;
 let isCompletingOnboarding = false;
 let hasSavedOnboardingPet = false;
 let hasPetErrorMessage = '';
+
+function stopRecoveryCooldownTimer(): void {
+  if (recoveryCooldownTimer !== null) {
+    clearInterval(recoveryCooldownTimer);
+    recoveryCooldownTimer = null;
+  }
+  recoveryResendSeconds = 0;
+}
+
+function startRecoveryCooldown(seconds = 45): void {
+  stopRecoveryCooldownTimer();
+  recoveryResendSeconds = seconds;
+  recoveryCooldownTimer = setInterval(() => {
+    if (recoveryResendSeconds <= 1) {
+      stopRecoveryCooldownTimer();
+    } else {
+      recoveryResendSeconds -= 1;
+    }
+    const resendBtn = document.getElementById(
+      'btn-resend-recovery-otp'
+    ) as HTMLButtonElement | null;
+    if (resendBtn && !isResendingRecoveryOtp) {
+      resendBtn.disabled = recoveryResendSeconds > 0;
+      resendBtn.textContent =
+        recoveryResendSeconds > 0
+          ? `إعادة إرسال الرمز (${recoveryResendSeconds} ث)`
+          : 'إعادة إرسال رمز التحقق';
+      if (recoveryResendSeconds > 0) {
+        resendBtn.classList.add('opacity-65', 'cursor-not-allowed');
+        resendBtn.classList.remove('cursor-pointer');
+      } else {
+        resendBtn.classList.remove('opacity-65', 'cursor-not-allowed');
+        resendBtn.classList.add('cursor-pointer');
+      }
+    }
+  }, 1000);
+}
 
 interface OwnerDetailsFormValues {
   name: string;
@@ -137,11 +185,15 @@ function resetTransientAuthState(opts?: { preserveMessages?: boolean }): void {
   authNewPassword = '';
   authConfirmPassword = '';
   showRecoveryPassword = false;
+  recoveryOtpCode = '';
+  stopRecoveryCooldownTimer();
   isTermsAccepted = false;
   isAuthSubmitting = false;
   isGoogleSubmitting = false;
   isResendingConfirmation = false;
   isSendingRecovery = false;
+  isVerifyingOtp = false;
+  isResendingRecoveryOtp = false;
   isUpdatingPassword = false;
   if (!opts?.preserveMessages) {
     authEmail = '';
@@ -215,13 +267,6 @@ function syncOnboardingOwnerDraftIfEmpty(): void {
   onboardingOwnerFormState.villageId = lineage.village?.id || user.villageId || '';
 }
 
-function escapeAttr(val: string): string {
-  return (val || '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
 
 function getPetNameTextColorClass(gender: 'male' | 'female' | null): string {
   if (gender === 'male') return 'text-[#60A5FA]';
@@ -248,13 +293,16 @@ export function renderOnboardingView(): string {
         resetTransientAuthState();
         resetTransientFormState();
       }
-    } else if (step === 'splash') {
-      authMode = 'signup';
-      resetTransientAuthState();
-      resetTransientFormState();
-    } else if (step === 'owner_details') {
-      isGoogleSubmitting = false;
-      syncOnboardingOwnerDraftIfEmpty();
+    } else {
+      stopRecoveryCooldownTimer();
+      if (step === 'splash') {
+        authMode = 'signup';
+        resetTransientAuthState();
+        resetTransientFormState();
+      } else if (step === 'owner_details') {
+        isGoogleSubmitting = false;
+        syncOnboardingOwnerDraftIfEmpty();
+      }
     }
     if (step !== 'pet_details') {
       hasSavedOnboardingPet = false;
@@ -406,30 +454,48 @@ function renderStepContent(step: OnboardingStep): string {
   }
 }
 
+export function renderSplashLoadingIndicatorHtml(isDelayed: boolean): string {
+  if (!isDelayed) return '';
+  return `
+    <div
+      id="splash-loading-indicator"
+      class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/85 border border-[#d6c7b2]/70 shadow-sm text-xs font-bold text-[#786555] font-baloo animate-fade-in"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="w-2 h-2 rounded-full bg-[#e67e22] animate-ping"></span>
+      <span>جاري تجهيز الحساب...</span>
+    </div>
+  `;
+}
+
 // -------------------------------------------------------------
-// Step 1: Splash Screen (Exact Stitch splash_screen/code.html)
-// No text below logo, no added elements.
+// Step 1: Splash Screen (Minimum 7000ms + automatic transition)
 // -------------------------------------------------------------
 function renderSplashScreen(): string {
+  const isDelayed = state.isSplashLoadingDelayed();
+
   return `
     <div
       id="splash-screen-container"
-      class="relative h-[100dvh] w-full flex flex-col items-center justify-center px-6 sm:px-8 text-[#3E2723] overflow-hidden cursor-pointer select-none"
+      class="relative h-[100dvh] w-full flex flex-col items-center justify-center px-6 sm:px-8 text-[#3E2723] overflow-hidden select-none"
       style="background: radial-gradient(circle at center, #FFFBEB 0%, #FFF8E7 100%);"
       dir="rtl"
     >
       <!-- Center Logo Section with Soft Aura -->
-      <div class="relative flex-grow flex items-center justify-center animate-fade-in">
+      <div class="relative flex-grow flex flex-col items-center justify-center">
         <div class="absolute w-52 h-52 sm:w-72 sm:h-72 rounded-full bg-[#F7E1C3] blur-[40px] opacity-40 -z-10"></div>
         <img
+          id="splash-logo-img"
           alt="Meow Logo"
           class="relative z-10 w-48 sm:w-64 h-auto object-contain max-w-[68vw] sm:max-w-[80vw]"
           src="${SPLASH_LOGO_URL}"
         />
+        <div id="splash-loading-slot" class="mt-6 min-h-[34px] flex items-center justify-center">${renderSplashLoadingIndicatorHtml(isDelayed)}</div>
       </div>
 
       <!-- Footer Text: By Mohamed Gamil -->
-      <div class="pb-8 sm:pb-12 text-center animate-fade-in" style="font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive;">
+      <div class="pb-8 sm:pb-12 text-center" style="font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive;">
         <p class="text-[10px] uppercase tracking-[0.3em] opacity-40 mb-1 sm:mb-1.5 font-medium">By</p>
         <p class="text-xs sm:text-sm font-semibold tracking-[0.05em] text-[#3E2723]/80">Mohamed Gamil</p>
       </div>
@@ -492,6 +558,7 @@ function renderAuthMethodStep(): string {
   const isLogin = authMode === 'login';
   const isRecoveryActive = state.isSupabasePasswordRecovery();
   const isForgotPassword = !isRecoveryActive && authSubView === 'forgot_password';
+  const isForgotOtp = !isRecoveryActive && authSubView === 'forgot_otp';
   const stateAuthError = !authErrorMessage && !authSuccessMessage ? state.getSupabaseAuthError() || '' : '';
   const visibleError = authErrorMessage || stateAuthError;
   const isAuthenticated = state.isSupabaseAuthenticated() && !isRecoveryActive;
@@ -552,13 +619,13 @@ function renderAuthMethodStep(): string {
               id="auth-error-msg"
               class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
               role="alert"
-            >${escapeAttr(visibleError)}</div>
+            >${escapeHtml(visibleError)}</div>
 
             <div
               id="auth-success-msg"
               class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
               role="status"
-            >${escapeAttr(authSuccessMessage)}</div>
+            >${escapeHtml(authSuccessMessage)}</div>
 
             <button
               id="btn-update-recovery-password"
@@ -587,6 +654,108 @@ function renderAuthMethodStep(): string {
     `;
   }
 
+  if (isForgotOtp) {
+    return `
+      <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
+        <header class="w-full pt-1 sm:pt-2 flex flex-col items-center text-center space-y-2 sm:space-y-3">
+          <div class="relative w-24 h-24 sm:w-36 sm:h-36 flex items-center justify-center">
+            <img alt="Meow Logo" class="w-24 sm:w-36 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+          </div>
+          <div class="space-y-1 sm:space-y-1.5">
+            <h1 class="text-xl sm:text-2xl font-extrabold text-[#3E2723] font-baloo">أدخل رمز التحقق</h1>
+            <p class="text-[#3E2723]/75 text-xs sm:text-sm font-bold font-baloo leading-relaxed">
+              أدخل الرمز المكون من 6 أرقام المرسل إلى
+              <span dir="ltr" class="inline-block text-[#2d221b] font-black">${escapeHtml(authEmail)}</span>
+            </p>
+          </div>
+        </header>
+
+        <div class="w-full flex-1 flex flex-col justify-center py-2 sm:py-4 min-w-0">
+          <form id="recovery-otp-form" novalidate class="space-y-3 sm:space-y-4 font-baloo">
+            <div class="space-y-1.5">
+              <label for="recovery-otp-input" class="block text-xs sm:text-sm font-bold text-[#2d221b]">رمز التحقق (6 أرقام)</label>
+              <input
+                id="recovery-otp-input"
+                type="text"
+                inputmode="numeric"
+                maxlength="6"
+                pattern="[0-9]*"
+                autocomplete="one-time-code"
+                dir="ltr"
+                placeholder="000000"
+                value="${escapeAttr(recoveryOtpCode)}"
+                class="w-full h-14 px-4 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[24px] text-2xl font-black tracking-[0.45em] text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+              />
+            </div>
+
+            <div
+              id="auth-error-msg"
+              class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
+              role="alert"
+            >${escapeHtml(visibleError)}</div>
+
+            <div
+              id="auth-success-msg"
+              class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
+              role="status"
+            >${escapeHtml(authSuccessMessage)}</div>
+
+            <button
+              id="btn-verify-recovery-otp"
+              type="submit"
+              ${isVerifyingOtp ? 'disabled' : ''}
+              class="w-full h-12 sm:h-14 text-white bg-[#e67e22] hover:bg-[#ea580c] rounded-[20px] sm:rounded-[24px] text-base sm:text-lg shadow-sm transition-all font-extrabold font-baloo active:scale-[0.98] ${
+                isVerifyingOtp ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+              }"
+            >
+              ${isVerifyingOtp ? 'جاري التحقق من الرمز...' : 'تحقق من الرمز'}
+            </button>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                id="btn-resend-recovery-otp"
+                type="button"
+                ${isResendingRecoveryOtp || recoveryResendSeconds > 0 ? 'disabled' : ''}
+                class="w-full h-11 bg-white hover:bg-[#fffaf2] text-[#c25807] border-2 border-[#e67e22]/50 rounded-[20px] text-xs font-black transition-all font-baloo ${
+                  isResendingRecoveryOtp || recoveryResendSeconds > 0
+                    ? 'opacity-65 cursor-not-allowed'
+                    : 'cursor-pointer'
+                }"
+              >
+                ${
+                  isResendingRecoveryOtp
+                    ? 'جاري إعادة الإرسال...'
+                    : recoveryResendSeconds > 0
+                    ? `إعادة إرسال الرمز (${recoveryResendSeconds} ث)`
+                    : 'إعادة إرسال رمز التحقق'
+                }
+              </button>
+              <button
+                id="btn-change-recovery-email"
+                type="button"
+                ${isVerifyingOtp ? 'disabled' : ''}
+                class="w-full h-11 bg-[#F3EBDD] hover:bg-[#eae0d0] text-[#564337] border-2 border-[#d6c7b2] rounded-[20px] text-xs font-bold transition-all cursor-pointer font-baloo"
+              >
+                تغيير البريد الإلكتروني
+              </button>
+            </div>
+
+            <button
+              id="btn-back-to-auth-main"
+              type="button"
+              ${isVerifyingOtp ? 'disabled' : ''}
+              class="w-full h-11 bg-white/80 hover:bg-[#eae0d0] text-[#564337] border border-[#d6c7b2] rounded-[20px] text-xs sm:text-sm font-bold transition-all cursor-pointer font-baloo"
+            >
+              العودة لتسجيل الدخول
+            </button>
+          </form>
+        </div>
+
+        <div class="w-full pb-1 sm:pb-2"></div>
+      </div>
+    `;
+  }
+
   if (isForgotPassword) {
     return `
       <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
@@ -596,7 +765,7 @@ function renderAuthMethodStep(): string {
           </div>
           <div class="space-y-1 sm:space-y-1.5">
             <h1 class="text-xl sm:text-2xl font-extrabold text-[#3E2723] font-baloo">استعادة كلمة المرور</h1>
-            <p class="text-[#3E2723]/75 text-sm sm:text-base font-bold font-baloo">أدخل بريدك الإلكتروني لإرسال رابط الاستعادة</p>
+            <p class="text-[#3E2723]/75 text-sm sm:text-base font-bold font-baloo">أدخل بريدك الإلكتروني لإرسال رمز تحقق مكون من 6 أرقام</p>
           </div>
         </header>
 
@@ -619,13 +788,13 @@ function renderAuthMethodStep(): string {
               id="auth-error-msg"
               class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
               role="alert"
-            >${escapeAttr(visibleError)}</div>
+            >${escapeHtml(visibleError)}</div>
 
             <div
               id="auth-success-msg"
               class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
               role="status"
-            >${escapeAttr(authSuccessMessage)}</div>
+            >${escapeHtml(authSuccessMessage)}</div>
 
             <button
               id="btn-send-recovery-email"
@@ -635,7 +804,7 @@ function renderAuthMethodStep(): string {
                 isSendingRecovery ? 'opacity-70 cursor-wait' : 'cursor-pointer'
               }"
             >
-              ${isSendingRecovery ? 'جاري إرسال الرابط...' : 'إرسال رابط الاستعادة'}
+              ${isSendingRecovery ? 'جاري إرسال الرمز...' : 'إرسال رمز التحقق'}
             </button>
 
             <button
@@ -682,7 +851,7 @@ function renderAuthMethodStep(): string {
             ? `
               <div class="rounded-[20px] sm:rounded-[24px] border-2 border-emerald-300 bg-emerald-50/90 p-3.5 sm:p-4 text-center space-y-2.5 sm:space-y-3 font-baloo shadow-sm">
                 <p class="text-xs sm:text-sm font-black text-emerald-900 m-0">
-                  تم التحقق من الحساب${currentSessionEmail ? `: ${escapeAttr(currentSessionEmail)}` : ''}
+                  تم التحقق من الحساب${currentSessionEmail ? `: ${escapeHtml(currentSessionEmail)}` : ''}
                 </p>
                 <button
                   id="btn-auth-continue"
@@ -779,7 +948,7 @@ function renderAuthMethodStep(): string {
                     <div class="min-w-0 space-y-1">
                       <p class="text-xs sm:text-sm font-black text-[#2d221b] m-0">تأكيد البريد الإلكتروني مطلوب</p>
                       <p class="text-[11px] sm:text-xs font-bold text-[#786555] leading-relaxed m-0">
-                        أرسلنا رابط التفعيل إلى <span dir="ltr" class="text-[#2d221b]">${escapeAttr(pendingConfirmationEmail)}</span>. افتح الرابط في بريدك أولاً قبل المتابعة.
+                        أرسلنا رابط التفعيل إلى <span dir="ltr" class="text-[#2d221b]">${escapeHtml(pendingConfirmationEmail)}</span>. افتح الرابط في بريدك أولاً قبل المتابعة.
                       </p>
                     </div>
                   </div>
@@ -812,13 +981,13 @@ function renderAuthMethodStep(): string {
             id="auth-error-msg"
             class="${visibleError ? '' : 'hidden'} rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-rose-700 font-baloo"
             role="alert"
-          >${escapeAttr(visibleError)}</div>
+          >${escapeHtml(visibleError)}</div>
 
           <div
             id="auth-success-msg"
             class="${authSuccessMessage ? '' : 'hidden'} rounded-2xl border border-emerald-300 bg-emerald-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-bold text-emerald-800 font-baloo"
             role="status"
-          >${escapeAttr(authSuccessMessage)}</div>
+          >${escapeHtml(authSuccessMessage)}</div>
 
           <button
             id="btn-auth-email-submit"
@@ -1271,7 +1440,7 @@ function renderHasPetStep(): string {
           id="has-pet-error"
           class="${hasPetErrorMessage ? '' : 'hidden'} w-full max-w-sm rounded-2xl border border-rose-300 bg-rose-50 px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-rose-700 leading-relaxed font-baloo"
           role="alert"
-        >${escapeAttr(hasPetErrorMessage)}</div>
+        >${escapeHtml(hasPetErrorMessage)}</div>
       </div>
 
     </div>
@@ -1297,7 +1466,8 @@ function renderBreedOptionsHtml(
     return [
       `<option value="" ${selectedValue === '' ? 'selected' : ''}>بدون هجين</option>`,
       ...breeds.map(
-        (breed) => `<option value="${breed}" ${breed === selectedValue ? 'selected' : ''}>${breed}</option>`
+        (breed) =>
+          `<option value="${escapeAttr(breed)}" ${breed === selectedValue ? 'selected' : ''}>${escapeHtml(breed)}</option>`
       ),
     ].join('');
   }
@@ -1305,7 +1475,8 @@ function renderBreedOptionsHtml(
   return [
     `<option value="" ${selectedValue === '' ? 'selected' : ''}>اختر السلالة</option>`,
     ...breeds.map(
-      (breed) => `<option value="${breed}" ${breed === selectedValue ? 'selected' : ''}>${breed}</option>`
+      (breed) =>
+        `<option value="${escapeAttr(breed)}" ${breed === selectedValue ? 'selected' : ''}>${escapeHtml(breed)}</option>`
     ),
   ].join('');
 }
@@ -1380,7 +1551,7 @@ function renderPetDetailsStep(): string {
                       <input accept="image/*" class="hidden pet-photo-file-input" data-photo-slot="${idx}" type="file" />
                       ${
                         photo
-                          ? `<img src="${photo}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`
+                          ? `<img src="${escapeAttr(sanitizeImageSrc(photo, SAFE_FALLBACK_PET_SVG))}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`
                           : `<span class="text-3xl sm:text-4xl font-black ${
                               isPrimary ? 'text-[#e67e22]' : 'text-[#998b7c]'
                             } group-hover:scale-110 transition-transform">+</span>`
@@ -1583,14 +1754,14 @@ function renderPetDetailsStep(): string {
                 return `
                   <button
                     type="button"
-                    data-trait-name="${trait}"
+                    data-trait-name="${escapeAttr(trait)}"
                     class="trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center ${
                       isSelected
                         ? 'border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67e22]/20'
                         : 'border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50'
                     }"
                   >
-                    ${trait}
+                    ${escapeHtml(trait)}
                   </button>
                 `;
               }).join('')}
@@ -1607,7 +1778,7 @@ function renderPetDetailsStep(): string {
                 id="pet-notes-input"
                 rows="3"
                 class="w-full p-3.5 sm:p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
-              >${escapeAttr(draftPetNotes)}</textarea>
+              >${escapeHtml(draftPetNotes)}</textarea>
             </div>
           </div>
 
@@ -1640,12 +1811,9 @@ function renderPetDetailsStep(): string {
 // Attach Events
 // -------------------------------------------------------------
 export function attachOnboardingEvents(): void {
-  // Splash Screen Click anywhere -> goes to welcome
-  const splashContainer = document.getElementById('splash-screen-container');
-  if (splashContainer) {
-    splashContainer.addEventListener('click', () => {
-      state.setOnboardingStep('welcome');
-    });
+  // Splash Screen automatically transitions after >=7000ms and auth readiness
+  if (state.getOnboardingStep() === 'splash') {
+    state.scheduleSplashAutoTransition();
   }
 
   // Step indicator dots navigation (backwards only — disallow skipping required steps)
@@ -1671,7 +1839,7 @@ export function attachOnboardingEvents(): void {
     });
   }
 
-  // Auth Method: Email/Password SignUp & SignIn + Confirmation + Forgot/Recovery Password
+  // Auth Method: Email/Password SignUp & SignIn + Confirmation + OTP Recovery
   const authEmailInput = document.getElementById('auth-email-input') as HTMLInputElement | null;
   const authPasswordInput = document.getElementById('auth-password-input') as HTMLInputElement | null;
   const toggleAuthPasswordBtn = document.getElementById('btn-toggle-auth-password');
@@ -1687,6 +1855,10 @@ export function attachOnboardingEvents(): void {
 
   const forgotPasswordForm = document.getElementById('forgot-password-form');
   const recoveryEmailInput = document.getElementById('recovery-email-input') as HTMLInputElement | null;
+  const recoveryOtpForm = document.getElementById('recovery-otp-form');
+  const recoveryOtpInput = document.getElementById('recovery-otp-input') as HTMLInputElement | null;
+  const resendRecoveryOtpBtn = document.getElementById('btn-resend-recovery-otp') as HTMLButtonElement | null;
+  const changeRecoveryEmailBtn = document.getElementById('btn-change-recovery-email') as HTMLButtonElement | null;
   const backToAuthMainBtn = document.getElementById('btn-back-to-auth-main');
 
   const recoveryPasswordForm = document.getElementById('recovery-password-form');
@@ -1743,6 +1915,9 @@ export function attachOnboardingEvents(): void {
 
   if (forgotPasswordBtn) {
     forgotPasswordBtn.addEventListener('click', () => {
+      stopRecoveryCooldownTimer();
+      recoveryOtpCode = '';
+      pendingConfirmationEmail = '';
       authSubView = 'forgot_password';
       authErrorMessage = '';
       authSuccessMessage = '';
@@ -1752,6 +1927,8 @@ export function attachOnboardingEvents(): void {
 
   if (backToAuthMainBtn) {
     backToAuthMainBtn.addEventListener('click', () => {
+      stopRecoveryCooldownTimer();
+      recoveryOtpCode = '';
       authSubView = 'main';
       authErrorMessage = '';
       authSuccessMessage = '';
@@ -1954,15 +2131,105 @@ export function attachOnboardingEvents(): void {
       isSendingRecovery = true;
       refreshAuthStep();
 
-      const res = await sendPasswordRecoveryEmail(authEmail);
+      const res = await sendPasswordRecoveryOtp(authEmail);
       isSendingRecovery = false;
       if (res.success) {
+        authSubView = 'forgot_otp';
+        recoveryOtpCode = '';
+        startRecoveryCooldown(45);
         authSuccessMessage =
           res.message ||
-          'إذا كان البريد الإلكتروني مسجلًا لدينا، فقد تم إرسال رابط استعادة كلمة المرور إليه.';
+          'إذا كان البريد الإلكتروني مسجلًا لدينا، فقد تم إرسال رمز تحقق مكون من 6 أرقام إليه.';
       } else {
-        authErrorMessage = res.errorMessage || 'تعذر إرسال رابط استعادة كلمة المرور.';
+        authErrorMessage = res.errorMessage || 'تعذر إرسال رمز استعادة كلمة المرور.';
       }
+      refreshAuthStep();
+    });
+  }
+
+  if (recoveryOtpInput) {
+    recoveryOtpInput.addEventListener('input', () => {
+      const cleaned = recoveryOtpInput.value.replace(/\D/g, '').slice(0, 6);
+      recoveryOtpInput.value = cleaned;
+      recoveryOtpCode = cleaned;
+    });
+  }
+
+  if (recoveryOtpForm) {
+    recoveryOtpForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (isVerifyingOtp || isResendingRecoveryOtp) return;
+      const cleaned = (recoveryOtpInput?.value || recoveryOtpCode || '')
+        .replace(/\D/g, '')
+        .slice(0, 6);
+      recoveryOtpCode = cleaned;
+      authErrorMessage = '';
+      authSuccessMessage = '';
+
+      if (!/^\d{6}$/.test(cleaned)) {
+        authErrorMessage = 'يرجى إدخال رمز التحقق المكون من 6 أرقام.';
+        refreshAuthStep();
+        return;
+      }
+
+      isVerifyingOtp = true;
+      refreshAuthStep();
+
+      const res = await verifyPasswordRecoveryOtp({
+        email: authEmail,
+        token: cleaned,
+      });
+      isVerifyingOtp = false;
+
+      if (!res.success || !res.session) {
+        authErrorMessage =
+          res.errorMessage ||
+          'رمز التحقق غير صحيح أو منتهي الصلاحية. يرجى التأكد من الأرقام أو طلب رمز جديد.';
+        refreshAuthStep();
+        return;
+      }
+
+      stopRecoveryCooldownTimer();
+      recoveryOtpCode = '';
+      authSubView = 'main';
+      authNewPassword = '';
+      authConfirmPassword = '';
+      authSuccessMessage =
+        res.message || 'تم التحقق من الرمز بنجاح. يمكنك الآن تعيين كلمة المرور الجديدة.';
+      await state.handleDirectSupabaseAuthSuccess(res.session, {
+        isPasswordRecovery: true,
+      });
+    });
+  }
+
+  if (resendRecoveryOtpBtn) {
+    resendRecoveryOtpBtn.addEventListener('click', async () => {
+      if (isResendingRecoveryOtp || isVerifyingOtp || recoveryResendSeconds > 0) return;
+      authErrorMessage = '';
+      authSuccessMessage = '';
+      isResendingRecoveryOtp = true;
+      refreshAuthStep();
+
+      const res = await sendPasswordRecoveryOtp(authEmail);
+      isResendingRecoveryOtp = false;
+      if (res.success) {
+        startRecoveryCooldown(45);
+        authSuccessMessage =
+          res.message || 'تم إرسال رمز تحقق جديد مكون من 6 أرقام إلى بريدك الإلكتروني.';
+      } else {
+        authErrorMessage = res.errorMessage || 'تعذر إعادة إرسال رمز التحقق حاليًا.';
+      }
+      refreshAuthStep();
+    });
+  }
+
+  if (changeRecoveryEmailBtn) {
+    changeRecoveryEmailBtn.addEventListener('click', () => {
+      stopRecoveryCooldownTimer();
+      recoveryOtpCode = '';
+      authSubView = 'forgot_password';
+      authErrorMessage = '';
+      authSuccessMessage = '';
       refreshAuthStep();
     });
   }
@@ -1999,6 +2266,14 @@ export function attachOnboardingEvents(): void {
     recoveryPasswordForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (isUpdatingPassword) return;
+
+      if (!state.isSupabasePasswordRecovery() || !state.isSupabaseAuthenticated()) {
+        authErrorMessage = 'يرجى التحقق من رمز الاستعادة المكون من 6 أرقام أولًا قبل تعيين كلمة المرور.';
+        authSuccessMessage = '';
+        refreshAuthStep();
+        return;
+      }
+
       authNewPassword = recoveryNewPasswordInput?.value || authNewPassword || '';
       authConfirmPassword = recoveryConfirmPasswordInput?.value || authConfirmPassword || '';
       authErrorMessage = '';
@@ -2084,9 +2359,13 @@ export function attachOnboardingEvents(): void {
                 state.getOnboardingStep() === 'auth_method'
               ) {
                 isGoogleSubmitting = false;
+                if (!authErrorMessage && !state.getSupabaseAuthError()) {
+                  authErrorMessage =
+                    'تم إغلاق متصفح Google قبل إتمام تسجيل الدخول. يمكنك المحاولة مرة أخرى.';
+                }
                 refreshAuthStep();
               }
-            }, 500);
+            }, 1200);
           },
         });
 
@@ -2106,8 +2385,11 @@ export function attachOnboardingEvents(): void {
 
   if (toggleAuthModeBtn) {
     toggleAuthModeBtn.addEventListener('click', () => {
+      stopRecoveryCooldownTimer();
       authMode = authMode === 'login' ? 'signup' : 'login';
       authSubView = 'main';
+      pendingConfirmationEmail = '';
+      recoveryOtpCode = '';
       authErrorMessage = '';
       authSuccessMessage = '';
       state.setOnboardingStep('auth_method');
@@ -2358,7 +2640,7 @@ function attachOwnerDetailsFormEvents(
 
       if (errors.length > 0) {
         if (ownerFormError) {
-          ownerFormError.innerHTML = errors.join('<br />');
+          ownerFormError.innerHTML = errors.map(escapeHtml).join('<br />');
           ownerFormError.classList.remove('hidden');
           ownerFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
@@ -2577,23 +2859,40 @@ function attachRemainingOnboardingEvents(): void {
       const file = input.files?.[0];
       if (!file || slot < 0 || slot > 2) return;
 
+      const validation = validateUploadedFile(file, 'image');
+      if (!validation.valid) {
+        input.value = '';
+        if (petFormError) {
+          petFormError.textContent =
+            validation.errorMessage || 'ملف الصورة غير مدعوم أو يتجاوز الحد المسموح.';
+          petFormError.classList.remove('hidden');
+          petFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return;
+      }
+
+      if (petFormError) {
+        petFormError.innerHTML = '';
+        petFormError.classList.add('hidden');
+      }
       photosGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
 
       const reader = new FileReader();
       reader.onload = () => {
-        const result = typeof reader.result === 'string' ? reader.result : null;
-        if (!result) return;
-        uploadedPetPhotos[slot] = result;
+        const rawResult = typeof reader.result === 'string' ? reader.result : '';
+        const safeResult = sanitizeImageSrc(rawResult, '');
+        if (!safeResult) return;
+        uploadedPetPhotos[slot] = safeResult;
         const labelEl = input.closest('label');
         if (labelEl) {
           const existingImg = labelEl.querySelector('img');
           const plusSpan = labelEl.querySelector('span');
           if (plusSpan) plusSpan.remove();
           if (existingImg) {
-            existingImg.src = result;
+            existingImg.src = safeResult;
           } else {
             const img = document.createElement('img');
-            img.src = result;
+            img.src = safeResult;
             img.alt = `صورة ${slot + 1}`;
             img.className = 'w-full h-full object-cover';
             labelEl.appendChild(img);
@@ -2788,7 +3087,7 @@ function attachRemainingOnboardingEvents(): void {
 
       if (errors.length > 0) {
         if (petFormError) {
-          petFormError.innerHTML = errors.join('<br />');
+          petFormError.innerHTML = errors.map(escapeHtml).join('<br />');
           petFormError.classList.remove('hidden');
           petFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }

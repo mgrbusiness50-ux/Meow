@@ -1,5 +1,13 @@
+import { APP_VERSION_INFO } from '../../config/appVersion.ts';
 import { state } from '../../state.ts';
-import { PetStatus, PrivacySetting } from '../../types.ts';
+import { PetStatus } from '../../types.ts';
+import {
+  SAFE_FALLBACK_AVATAR_SVG,
+  SAFE_FALLBACK_PET_SVG,
+  escapeAttr,
+  escapeHtml,
+  sanitizeImageSrc,
+} from '../../utils/sanitize.ts';
 import { attachSheetDragToDismiss, attachSwipeToCloseDrawer } from '../../utils/touchGestures.ts';
 
 let activeModalType: 'settings' | 'blocked' | 'contact' | 'notifications' | 'privacy' | 'terms' | null = null;
@@ -24,8 +32,8 @@ export function renderProfileView(): string {
           <div class="relative mb-3.5">
             <div class="w-28 h-28 rounded-full p-1.5 bg-gradient-to-tr from-brand-orange to-brand-peachBorder shadow-soft overflow-hidden">
               <img
-                src="${user.avatar}"
-                alt="${user.name}"
+                src="${escapeAttr(sanitizeImageSrc(user.avatar, SAFE_FALLBACK_AVATAR_SVG))}"
+                alt="${escapeAttr(user.name)}"
                 class="w-full h-full rounded-full object-cover"
               />
             </div>
@@ -33,14 +41,14 @@ export function renderProfileView(): string {
 
           <!-- Name & Location -->
           <div class="flex items-center gap-2 mb-1">
-            <h2 class="text-2xl font-black font-baloo text-brand-dark dark:text-white">${user.name}</h2>
+            <h2 class="text-2xl font-black font-baloo text-brand-dark dark:text-white">${escapeHtml(user.name)}</h2>
             <button id="edit-user-info-btn" type="button" class="w-10 h-10 rounded-full bg-brand-orange/10 text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-sm transition cursor-pointer active:scale-90 shrink-0" title="تعديل البيانات" aria-label="تعديل بيانات المالك">
               <i class="fa-solid fa-pen-to-square"></i>
             </button>
           </div>
           <p class="text-xs sm:text-sm font-bold text-brand-subtleGray dark:text-[#A89F91] flex items-center gap-1.5 mb-4">
             <i class="fa-solid fa-location-dot text-brand-orange text-xs"></i>
-            <span>${user.city} • ${user.showPhoneInProfile && user.phone ? user.phone : 'رقم الهاتف مخفي عن الآخرين'}</span>
+            <span>${escapeHtml(user.city)} • ${user.showPhoneInProfile && user.phone ? escapeHtml(user.phone) : 'رقم الهاتف مخفي عن الآخرين'}</span>
           </p>
 
           <!-- Total Pets Badge -->
@@ -103,7 +111,7 @@ export function renderProfileView(): string {
                               }
                             </div>
                             <h3 class="text-base sm:text-lg font-black text-[#1a1612] mt-2 m-0 font-baloo truncate">
-                              ${groupListing.name}
+                              ${escapeHtml(groupListing.name)}
                             </h3>
                             <p class="text-xs font-bold text-[#786555] m-0 mt-0.5 leading-relaxed">
                               ${indivCount} صور منفصلة${sharedCount > 0 ? ` + ${sharedCount} جماعية` : ' (بدون صور جماعية)'} • ${
@@ -180,9 +188,9 @@ export function renderProfileView(): string {
                         
                         <!-- Top Row: Clickable Area to Open Full Screen Detail Modal -->
                         <div class="flex items-center justify-between gap-2.5 sm:gap-3.5">
-                          <div class="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1 cursor-pointer view-own-pet-detail-btn" data-pet-detail-id="${pet.id}">
+                          <div class="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1 cursor-pointer view-own-pet-detail-btn" data-pet-detail-id="${escapeAttr(pet.id)}">
                             <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-[26px] overflow-hidden bg-brand-cream dark:bg-[#342A24] flex-shrink-0 border-2 border-brand-peachBorder dark:border-warm-darkBorder shadow-sm relative group-hover:border-brand-orange transition-colors">
-                              <img src="${pet.photos[0]}" alt="${pet.name}" class="w-full h-full object-cover" />
+                              <img src="${escapeAttr(sanitizeImageSrc(pet.photos[0], SAFE_FALLBACK_PET_SVG))}" alt="${escapeAttr(pet.name)}" class="w-full h-full object-cover" />
                               <span class="absolute bottom-1.5 right-1.5 bg-black/65 backdrop-blur-sm text-white text-[11px] px-2 py-0.5 rounded-full font-bold">
                                 ${pet.photos.length} 📸
                               </span>
@@ -190,21 +198,21 @@ export function renderProfileView(): string {
                             <div class="flex flex-col min-w-0 gap-1.5 text-right">
                               <div class="flex items-center gap-1.5 sm:gap-2 min-w-0">
                                 <span class="text-base sm:text-xl font-black font-baloo text-brand-dark dark:text-white truncate hover:text-brand-orange transition">
-                                  ${pet.name}
+                                  ${escapeHtml(pet.name)}
                                 </span>
                                 <button
                                   type="button"
-                                  data-edit-pet-id="${pet.id}"
+                                  data-edit-pet-id="${escapeAttr(pet.id)}"
                                   class="edit-pet-btn w-9 h-9 rounded-full bg-brand-orange/15 hover:bg-brand-orange text-brand-orange hover:text-white flex items-center justify-center text-xs transition cursor-pointer shrink-0 border border-brand-orange/35 shadow-sm active:scale-90"
-                                  title="تعديل بيانات ${pet.name}"
-                                  aria-label="تعديل بيانات ${pet.name}"
+                                  title="تعديل بيانات ${escapeAttr(pet.name)}"
+                                  aria-label="تعديل بيانات ${escapeAttr(pet.name)}"
                                 >
                                   <i class="fa-solid fa-pen"></i>
                                 </button>
                                 <span class="text-xs text-brand-orange shrink-0">❯</span>
                               </div>
                               <span class="text-xs sm:text-sm font-bold text-brand-subtleGray dark:text-[#A89F91] truncate">
-                                ${pet.breed} • ${pet.ageYears > 0 ? `${pet.ageYears} سنة` : `${pet.ageMonths} شهر`} • ${pet.color || 'أبيض'}
+                                ${escapeHtml(pet.breed)} • ${pet.ageYears > 0 ? `${pet.ageYears} سنة` : `${pet.ageMonths} شهر`} • ${escapeHtml(pet.color || 'أبيض')}
                               </span>
                               <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-0.5">
                                 <span class="inline-flex items-center text-[11px] sm:text-xs font-black px-3 sm:px-3.5 py-1 rounded-full font-baloo shadow-sm ${
@@ -239,7 +247,7 @@ export function renderProfileView(): string {
                           <!-- Action buttons (Edit & Delete - Fuller Bubble Style) -->
                           <div class="flex flex-col gap-2 flex-shrink-0">
                             <button
-                              data-edit-pet-id="${pet.id}"
+                              data-edit-pet-id="${escapeAttr(pet.id)}"
                               class="edit-pet-btn h-11 px-3 sm:px-4 rounded-full bg-brand-orange/15 hover:bg-brand-orange text-brand-orange hover:text-white flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-black transition cursor-pointer active:scale-95 font-baloo border-2 border-brand-orange/35 shadow-sm"
                               title="تعديل بيانات الأليف"
                               type="button"
@@ -248,7 +256,7 @@ export function renderProfileView(): string {
                               <span>تعديل</span>
                             </button>
                             <button
-                              data-delete-pet-id="${pet.id}"
+                              data-delete-pet-id="${escapeAttr(pet.id)}"
                               class="delete-pet-btn h-11 px-3 sm:px-4 rounded-full bg-brand-cream/90 dark:bg-[#342A24] border-2 border-brand-peachBorder text-brand-subtleGray dark:text-[#D1C7BD] flex items-center justify-center gap-1.5 text-xs sm:text-sm font-black hover:bg-brand-peachBorder/50 hover:text-brand-dark transition cursor-pointer active:scale-95 shadow-sm"
                               title="حذف الأليف"
                               type="button"
@@ -274,7 +282,7 @@ export function renderProfileView(): string {
                                 </span>
                                 <button
                                   type="button"
-                                  data-toggle-individual-pet-id="${pet.id}"
+                                  data-toggle-individual-pet-id="${escapeAttr(pet.id)}"
                                   data-individual-action="${pet.alsoListedIndividually ? 'stop_individual' : 'enable_individual'}"
                                   class="toggle-individual-dual-btn h-10 px-4 rounded-full bg-white border-2 border-brand-peachBorder text-[#2d221b] hover:bg-[#fff5ea] hover:border-brand-orange text-xs font-black shrink-0 cursor-pointer transition font-baloo active:scale-95 shadow-sm self-start sm:self-auto"
                                 >
@@ -288,7 +296,7 @@ export function renderProfileView(): string {
                         <!-- Status Switcher for Pet (Bubble Pills) -->
                         <div class="grid grid-cols-3 gap-1.5 sm:gap-2.5 pt-3 border-t border-brand-peachBorder/50 dark:border-warm-darkBorder text-xs sm:text-sm font-black font-baloo">
                           <button
-                            data-pet-id="${pet.id}"
+                            data-pet-id="${escapeAttr(pet.id)}"
                             data-target-status="mating"
                             class="pet-status-toggle-btn min-w-0 h-11 py-2.5 px-1.5 sm:px-3 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
                               pet.status === 'mating'
@@ -300,7 +308,7 @@ export function renderProfileView(): string {
                             للتزاوج ❤️
                           </button>
                           <button
-                            data-pet-id="${pet.id}"
+                            data-pet-id="${escapeAttr(pet.id)}"
                             data-target-status="adoption"
                             class="pet-status-toggle-btn min-w-0 h-11 py-2.5 px-1.5 sm:px-3 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
                               pet.status === 'adoption'
@@ -312,7 +320,7 @@ export function renderProfileView(): string {
                             للتبني 🏠
                           </button>
                           <button
-                            data-pet-id="${pet.id}"
+                            data-pet-id="${escapeAttr(pet.id)}"
                             data-target-status="not_available"
                             class="pet-status-toggle-btn min-w-0 h-11 py-2.5 px-1.5 sm:px-3 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
                               pet.status === 'not_available'
@@ -355,6 +363,12 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
   if (!state.isSettingsOpen()) return '';
   const notificationsEnabled = state.getNotificationsEnabled();
   const showPhone = state.getShowPhoneInProfile();
+  const updateState = state.getUpdateState();
+  const updateResult = updateState.result;
+  const activeBundleVersion =
+    updateResult.currentBundleVersion || APP_VERSION_INFO.appVersion;
+  const hasOtaBundleDiff =
+    activeBundleVersion !== APP_VERSION_INFO.appVersion;
 
   return `
     <div id="profile-drawer-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
@@ -588,6 +602,112 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
               </button>
             </div>
 
+            <!-- 6.5 التحديثات والإصدار -->
+            <div class="pt-3 pb-1 border-t-2 border-brand-peachBorder/50 space-y-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class="inline-flex items-center px-3 py-1 rounded-full bg-white/90 border border-brand-peachBorder text-xs font-black text-brand-subtleGray font-baloo">
+                  التحديثات والإصدار
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full bg-brand-orange/10 border border-brand-orange/30 text-[11px] font-black text-brand-orange font-baloo">
+                  ${APP_VERSION_INFO.channel === 'testing' ? 'قناة الاختبار' : 'الإصدار المستقر'}
+                </span>
+              </div>
+
+              <div class="p-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/85 space-y-2.5 shadow-sm">
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="font-bold text-brand-subtleGray">إصدار التطبيق</span>
+                  <span class="font-mono font-black text-brand-dark" dir="ltr">
+                    v${escapeHtml(APP_VERSION_INFO.appVersion)} (${APP_VERSION_INFO.buildNumber})
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="font-bold text-brand-subtleGray">حزمة الواجهة</span>
+                  <span class="font-mono font-black ${hasOtaBundleDiff ? 'text-emerald-700' : 'text-brand-dark'}" dir="ltr">
+                    v${escapeHtml(activeBundleVersion)}${hasOtaBundleDiff ? ' (OTA)' : ''}
+                  </span>
+                </div>
+
+                ${
+                  updateState.feedback
+                    ? `
+                      <div
+                        id="drawer-update-feedback"
+                        class="rounded-2xl px-3 py-2 text-[11px] font-bold leading-relaxed border ${
+                          updateState.feedback.kind === 'success'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                            : updateState.feedback.kind === 'error'
+                            ? 'bg-rose-50 border-rose-200 text-rose-700'
+                            : 'bg-[#fff5ea] border-brand-peachBorder text-brand-dark'
+                        }"
+                      >
+                        ${escapeHtml(updateState.feedback.message)}
+                      </div>
+                    `
+                    : ''
+                }
+
+                <button
+                  id="drawer-check-updates-btn"
+                  type="button"
+                  ${updateState.isChecking || updateState.isApplyingOta ? 'disabled' : ''}
+                  class="w-full h-11 px-4 rounded-full bg-[#fff5ea] hover:bg-brand-orange hover:text-white border-2 border-brand-orange/40 text-brand-orange text-xs font-black transition font-baloo flex items-center justify-center gap-2 active:scale-95 ${
+                    updateState.isChecking ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+                  }"
+                >
+                  <i class="fa-solid ${updateState.isChecking ? 'fa-spinner fa-spin' : 'fa-arrows-rotate'} text-xs"></i>
+                  <span>${updateState.isChecking ? 'جاري التحقق...' : 'التحقق من التحديثات'}</span>
+                </button>
+
+                ${
+                  updateState.isOtaStagedForRestart
+                    ? `
+                      <button
+                        id="drawer-restart-ota-btn"
+                        type="button"
+                        class="w-full h-11 px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-soft transition font-baloo flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                      >
+                        <i class="fa-solid fa-rotate text-xs"></i>
+                        <span>إعادة التشغيل لتفعيل التحديث (${escapeHtml(updateState.stagedOtaVersion || '')})</span>
+                      </button>
+                    `
+                    : updateResult.otaUpdate
+                    ? `
+                      <button
+                        id="drawer-apply-ota-btn"
+                        type="button"
+                        ${updateState.isApplyingOta ? 'disabled' : ''}
+                        class="w-full h-11 px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-soft transition font-baloo flex items-center justify-center gap-2 active:scale-95 ${
+                          updateState.isApplyingOta ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+                        }"
+                      >
+                        <i class="fa-solid ${updateState.isApplyingOta ? 'fa-spinner fa-spin' : 'fa-bolt'} text-xs"></i>
+                        <span>${
+                          updateState.isApplyingOta
+                            ? 'جاري تنزيل وتجهيز التحديث...'
+                            : `تنزيل وتجهيز التحديث (${escapeHtml(updateResult.otaUpdate.version)})`
+                        }</span>
+                      </button>
+                    `
+                    : ''
+                }
+
+                ${
+                  updateResult.apkUpdate
+                    ? `
+                      <button
+                        id="drawer-open-apk-modal-btn"
+                        type="button"
+                        class="w-full h-11 px-4 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white text-xs font-black shadow-soft transition font-baloo flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                      >
+                        <i class="fa-solid fa-download text-xs"></i>
+                        <span>إصدار APK جديد (${escapeHtml(updateResult.apkUpdate.latestVersion)})</span>
+                      </button>
+                    `
+                    : ''
+                }
+              </div>
+            </div>
+
             <!-- 7. تسجيل الخروج -->
             <div class="pt-3 pb-2 border-t-2 border-brand-peachBorder/50">
               <button
@@ -602,7 +722,7 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                   <div class="min-w-0">
                     <span class="text-sm font-black font-baloo text-rose-700 block">تسجيل الخروج</span>
                     <span class="text-[11px] font-bold text-brand-subtleGray block truncate">
-                      ${user.email ? user.email : 'الخروج من حسابك الحالي'}
+                      ${user.email ? escapeHtml(user.email) : 'الخروج من حسابك الحالي'}
                     </span>
                   </div>
                 </div>
@@ -617,8 +737,8 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
               <p class="text-xs font-black text-brand-dark m-0 font-baloo" dir="ltr">
                 @Meow2026
               </p>
-              <span class="text-[11px] font-mono font-bold text-brand-orange block">
-                الإصدار 1.2.0
+              <span class="text-[11px] font-mono font-bold text-brand-orange block" dir="ltr">
+                v${escapeHtml(APP_VERSION_INFO.appVersion)} (${APP_VERSION_INFO.buildNumber})
               </span>
             </div>
           </div>
@@ -664,9 +784,9 @@ function renderActiveDrawerModal(user: ReturnType<typeof state.getUser>): string
             activeModalType === 'settings'
               ? `
               <div class="p-4 rounded-[28px] bg-white border-2 border-brand-peachBorder/70 space-y-2 shadow-sm">
-                <p><strong>اسم المالك:</strong> ${user.name}</p>
-                <p><strong>رقم الهاتف:</strong> ${user.showPhoneInProfile ? user.phone : `${user.phone} (مخفي عن الآخرين)`}</p>
-                <p><strong>المحافظة / المدينة:</strong> ${user.city}</p>
+                <p><strong>اسم المالك:</strong> ${escapeHtml(user.name)}</p>
+                <p><strong>رقم الهاتف:</strong> ${user.showPhoneInProfile ? escapeHtml(user.phone) : `${escapeHtml(user.phone)} (مخفي عن الآخرين)`}</p>
+                <p><strong>المحافظة / المدينة:</strong> ${escapeHtml(user.city)}</p>
                 <p><strong>إظهار رقم الهاتف في الملف الشخصي:</strong> ${user.showPhoneInProfile ? 'مفعل (ظاهر)' : 'مغلق افتراضياً (مخفي)'}</p>
               </div>
               `
@@ -691,17 +811,17 @@ function renderActiveDrawerModal(user: ReturnType<typeof state.getUser>): string
                           <div class="flex items-center gap-2.5 min-w-0">
                             ${
                               b.userAvatar
-                                ? `<img src="${b.userAvatar}" alt="${b.userName}" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shrink-0" />`
+                                ? `<img src="${escapeAttr(sanitizeImageSrc(b.userAvatar, SAFE_FALLBACK_AVATAR_SVG))}" alt="${escapeAttr(b.userName)}" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shrink-0" />`
                                 : `<div class="w-11 h-11 rounded-full bg-red-500/15 text-red-600 flex items-center justify-center shrink-0"><i class="fa-solid fa-user-slash text-sm"></i></div>`
                             }
                             <div class="min-w-0 text-right">
-                              <p class="text-sm font-black text-brand-dark truncate m-0 font-baloo">${b.userName}</p>
-                              <span class="text-[11px] text-brand-subtleGray font-bold block">${b.petName ? `بخصوص: ${b.petName}` : `تاريخ الحظر: ${b.blockedAt}`}</span>
+                              <p class="text-sm font-black text-brand-dark truncate m-0 font-baloo">${escapeHtml(b.userName)}</p>
+                              <span class="text-[11px] text-brand-subtleGray font-bold block">${b.petName ? `بخصوص: ${escapeHtml(b.petName)}` : `تاريخ الحظر: ${escapeHtml(b.blockedAt)}`}</span>
                             </div>
                           </div>
                           <button
                             type="button"
-                            data-unblock-user-id="${b.userId}"
+                            data-unblock-user-id="${escapeAttr(b.userId)}"
                             class="unblock-user-btn h-10 px-4 rounded-full bg-[#fff5ea] border-2 border-brand-orange/40 text-xs font-black text-brand-orange hover:bg-brand-orange hover:text-white transition cursor-pointer shrink-0 font-baloo active:scale-95"
                           >
                             إلغاء الحظر
@@ -971,6 +1091,33 @@ export function attachProfileEvents(): void {
     });
   }
 
+  // Updates & OTA actions in Drawer
+  const checkUpdatesBtn = document.getElementById('drawer-check-updates-btn');
+  if (checkUpdatesBtn) {
+    checkUpdatesBtn.addEventListener('click', () => {
+      void state.checkForAppUpdates(true);
+    });
+  }
+  const applyOtaBtn = document.getElementById('drawer-apply-ota-btn');
+  if (applyOtaBtn) {
+    applyOtaBtn.addEventListener('click', () => {
+      void state.applyOtaUpdateNow();
+    });
+  }
+  const restartOtaBtn = document.getElementById('drawer-restart-ota-btn');
+  if (restartOtaBtn) {
+    restartOtaBtn.addEventListener('click', () => {
+      void state.restartForStagedOtaUpdate();
+    });
+  }
+  const openApkModalBtn = document.getElementById('drawer-open-apk-modal-btn');
+  if (openApkModalBtn) {
+    openApkModalBtn.addEventListener('click', () => {
+      state.setSettingsOpen(false);
+      void state.checkForAppUpdates(true);
+    });
+  }
+
   // Drawer Action Items (Blocked, Privacy, Terms)
   const drawerActionBtns = document.querySelectorAll<HTMLButtonElement>('[data-drawer-action]');
   drawerActionBtns.forEach((btn) => {
@@ -1094,7 +1241,7 @@ function renderSignOutConfirmModal(user: ReturnType<typeof state.getUser>): stri
           <div class="min-w-0">
             <h3 class="text-lg font-black text-[#1a1612] m-0">تأكيد تسجيل الخروج</h3>
             <p class="text-xs font-bold text-[#786555] m-0 truncate">
-              ${user.email || user.name || 'حسابك الحالي'}
+              ${escapeHtml(user.email || user.name || 'حسابك الحالي')}
             </p>
           </div>
         </div>
@@ -1110,7 +1257,7 @@ function renderSignOutConfirmModal(user: ReturnType<typeof state.getUser>): stri
 
         ${
           signOutErrorMessage
-            ? `<div id="sign-out-error-msg" class="rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-xs font-bold text-rose-700 leading-relaxed" role="alert">${signOutErrorMessage}</div>`
+            ? `<div id="sign-out-error-msg" class="rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-xs font-bold text-rose-700 leading-relaxed" role="alert">${escapeHtml(signOutErrorMessage)}</div>`
             : ''
         }
 
@@ -1152,18 +1299,18 @@ function renderDeletePetConfirmModal(): string {
         <div class="flex items-center gap-3 pb-3 border-b border-[#d6c7b2]/60">
           ${
             pet.photos?.[0]
-              ? `<img src="${pet.photos[0]}" alt="${pet.name}" class="w-14 h-14 rounded-2xl object-cover border-2 border-[#d6c7b2] shrink-0" />`
+              ? `<img src="${escapeAttr(sanitizeImageSrc(pet.photos[0], SAFE_FALLBACK_PET_SVG))}" alt="${escapeAttr(pet.name)}" class="w-14 h-14 rounded-2xl object-cover border-2 border-[#d6c7b2] shrink-0" />`
               : `<div class="w-14 h-14 rounded-2xl bg-[#fff5ea] border-2 border-[#d6c7b2] text-[#e67e22] flex items-center justify-center text-2xl shrink-0"><i class="fa-solid fa-paw"></i></div>`
           }
           <div class="min-w-0">
             <h3 class="text-lg font-black text-[#1a1612] m-0">تأكيد حذف الأليف</h3>
-            <p class="text-xs font-bold text-[#786555] m-0 truncate">${pet.name} • ${pet.breed}</p>
+            <p class="text-xs font-bold text-[#786555] m-0 truncate">${escapeHtml(pet.name)} • ${escapeHtml(pet.breed)}</p>
           </div>
         </div>
 
         <div class="p-3.5 rounded-2xl bg-[#fffefc] border border-[#d6c7b2] space-y-1.5">
           <p class="text-sm font-black text-[#1a1612] m-0">
-            هل تريد حذف ملف «${pet.name}» من حسابك؟
+            هل تريد حذف ملف «${escapeHtml(pet.name)}» من حسابك؟
           </p>
           <p class="text-xs font-bold text-[#786555] leading-relaxed m-0">
             سيؤدي تأكيد الحذف إلى إزالة ملف الحيوان وصوره وبياناته من حسابك نهائياً${
@@ -1212,18 +1359,19 @@ function renderStatusChangeConfirmModal(): string {
     .getUserPets()
     .filter((p) => p.status === 'adoption' && p.id !== pet.id).length;
 
+  const safePetName = escapeHtml(pet.name);
   let detailMessage = '';
   if (targetStatus === 'mating') {
-    detailMessage = `سيظهر ملف «${pet.name}» في قسم التزاوج للمستخدمين المناسبين${
+    detailMessage = `سيظهر ملف «${safePetName}» في قسم التزاوج للمستخدمين المناسبين${
       isInGroup ? '، كما سيتم إزالته من إعلان التبني الجماعي النشط.' : '.'
     }`;
   } else if (targetStatus === 'adoption') {
     detailMessage =
       otherAdoptionCount > 0 || groupListing
-        ? `سيتم تحويل حالة «${pet.name}» للتبني، ثم ستختار بين الإعلان الجماعي فقط أو إعلانات منفصلة أو الاثنان معاً.`
-        : `سيتم عرض «${pet.name}» في قسم التبني كإعلان مستقل ليتمكن المهتمون بالتبني من التواصل معك.`;
+        ? `سيتم تحويل حالة «${safePetName}» للتبني، ثم ستختار بين الإعلان الجماعي فقط أو إعلانات منفصلة أو الاثنان معاً.`
+        : `سيتم عرض «${safePetName}» في قسم التبني كإعلان مستقل ليتمكن المهتمون بالتبني من التواصل معك.`;
   } else {
-    detailMessage = `سيتم إيقاف عرض «${pet.name}» مؤقتاً وإخفاؤه من قوائم التزاوج والتبني دون حذف بياناته${
+    detailMessage = `سيتم إيقاف عرض «${safePetName}» مؤقتاً وإخفاؤه من قوائم التزاوج والتبني دون حذف بياناته${
       isInGroup ? '، كما سيتم إزالته من إعلان التبني الجماعي الحالي.' : '.'
     }`;
   }
@@ -1237,7 +1385,7 @@ function renderStatusChangeConfirmModal(): string {
           </div>
           <div class="min-w-0">
             <h3 class="text-lg font-black text-[#1a1612] m-0">تأكيد تغيير الحالة</h3>
-            <p class="text-xs font-bold text-[#786555] m-0 truncate">${pet.name}</p>
+            <p class="text-xs font-bold text-[#786555] m-0 truncate">${safePetName}</p>
           </div>
         </div>
 
@@ -1292,12 +1440,14 @@ function renderAdoptionActionConfirmModal(): string {
       'سيتم إيقاف الإعلان الجماعي وتحويل جميع الحيوانات داخل المجموعة إلى إعلانات تبنٍ فردية مستقلة.';
     confirmLabel = 'تأكيد الفصل';
   } else if (pending.kind === 'stop_individual' && pending.pet) {
-    title = `إيقاف الإعلان الفردي: ${pending.pet.name}`;
-    message = `سيتم إيقاف الإعلان الفردي المستقل لـ «${pending.pet.name}»، مع بقائه ظاهراً ضمن إعلان التبني الجماعي الحالي.`;
+    const safeName = escapeHtml(pending.pet.name);
+    title = `إيقاف الإعلان الفردي: ${safeName}`;
+    message = `سيتم إيقاف الإعلان الفردي المستقل لـ «${safeName}»، مع بقائه ظاهراً ضمن إعلان التبني الجماعي الحالي.`;
     confirmLabel = 'إيقاف الفردي';
   } else if (pending.kind === 'enable_individual' && pending.pet) {
-    title = `تفعيل إعلان فردي: ${pending.pet.name}`;
-    message = `سيظهر «${pending.pet.name}» في إعلان تبنٍ فردي مستقل بالإضافة إلى وجوده داخل الإعلان الجماعي.`;
+    const safeName = escapeHtml(pending.pet.name);
+    title = `تفعيل إعلان فردي: ${safeName}`;
+    message = `سيظهر «${safeName}» في إعلان تبنٍ فردي مستقل بالإضافة إلى وجوده داخل الإعلان الجماعي.`;
     confirmLabel = 'تفعيل الإعلان';
   }
 

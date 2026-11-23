@@ -1,5 +1,31 @@
 apply plugin: 'com.android.application'
 
+import groovy.json.JsonSlurper
+
+def versionMetaFile = file('../../version.json')
+def versionMeta = versionMetaFile.exists()
+    ? new JsonSlurper().parse(versionMetaFile)
+    : [appVersion: '1.2.0', buildNumber: 2]
+
+def resolveConfigValue = { String propName, String envName, String fallback = '' ->
+    if (project.hasProperty(propName) && project.property(propName)?.toString()?.trim()) {
+        return project.property(propName).toString().trim()
+    }
+    def envVal = System.getenv(envName)
+    return (envVal != null && envVal.trim()) ? envVal.trim() : fallback
+}
+
+def resolvedVersionCode = (resolveConfigValue('MEOW_VERSION_CODE', 'MEOW_VERSION_CODE', "${versionMeta.buildNumber ?: 2}") as Integer)
+def resolvedVersionName = resolveConfigValue('MEOW_VERSION_NAME', 'MEOW_VERSION_NAME', "${versionMeta.appVersion ?: '1.2.0'}")
+
+def releaseStorePath = resolveConfigValue('ANDROID_KEYSTORE_PATH', 'ANDROID_KEYSTORE_PATH')
+def releaseStorePassword = resolveConfigValue('ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEYSTORE_PASSWORD')
+def releaseKeyAlias = resolveConfigValue('ANDROID_KEY_ALIAS', 'ANDROID_KEY_ALIAS')
+def releaseKeyPassword = resolveConfigValue('ANDROID_KEY_PASSWORD', 'ANDROID_KEY_PASSWORD')
+def hasReleaseSigning = Boolean.valueOf(
+    releaseStorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+)
+
 android {
     namespace = "com.meow.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +33,8 @@ android {
         applicationId "com.meow.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode resolvedVersionCode
+        versionName resolvedVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +42,46 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    buildTypes {
+    signingConfigs {
         release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+            }
+        }
+    }
+    buildTypes {
+        debug {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def buildingRelease = taskGraph.allTasks.any {
+        it.name.toLowerCase().contains('release') &&
+        (it.name.toLowerCase().contains('assemble') || it.name.toLowerCase().contains('bundle') || it.name.toLowerCase().contains('package'))
+    }
+    if (buildingRelease) {
+        if (!hasReleaseSigning) {
+            throw new GradleException(
+                'Release signing credentials missing. Set ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD before building Release APK/AAB.'
+            )
+        }
+        if (!file(releaseStorePath).exists()) {
+            throw new GradleException("Release keystore file not found at: ${releaseStorePath}")
         }
     }
 }

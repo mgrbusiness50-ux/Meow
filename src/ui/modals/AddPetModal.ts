@@ -2,15 +2,13 @@ import { state } from '../../state.ts';
 import { Pet, PetSpecies, PetGender, VaccinationStatus } from '../../types.ts';
 import { CAT_BREEDS, DOG_BREEDS } from '../../data/egyptLocations.ts';
 import { PERSONALITY_TRAITS } from '../views/OnboardingView.ts';
+import {
+  escapeAttr,
+  escapeHtml,
+  sanitizeImageSrc,
+  validateUploadedFile,
+} from '../../utils/sanitize.ts';
 import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
-
-function escapeAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
 
 function getPetNameTextColorClass(gender: PetGender | null): string {
   if (gender === 'male') return 'text-[#60A5FA]';
@@ -39,7 +37,7 @@ function renderBreedOptionsHtml(
       `<option value="" ${normalizedSelected === '' ? 'selected' : ''}>بدون هجين</option>`,
       ...breeds.map(
         (breed) =>
-          `<option value="${escapeAttr(breed)}" ${breed === normalizedSelected ? 'selected' : ''}>${breed}</option>`
+          `<option value="${escapeAttr(breed)}" ${breed === normalizedSelected ? 'selected' : ''}>${escapeHtml(breed)}</option>`
       ),
     ].join('');
   }
@@ -48,7 +46,7 @@ function renderBreedOptionsHtml(
     `<option value="" ${normalizedSelected === '' ? 'selected' : ''}>اختر السلالة</option>`,
     ...breeds.map(
       (breed) =>
-        `<option value="${escapeAttr(breed)}" ${breed === normalizedSelected ? 'selected' : ''}>${breed}</option>`
+        `<option value="${escapeAttr(breed)}" ${breed === normalizedSelected ? 'selected' : ''}>${escapeHtml(breed)}</option>`
     ),
   ].join('');
 }
@@ -104,7 +102,7 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                 <i class="fa-solid fa-paw"></i>
               </div>
               <h3 class="text-xl sm:text-2xl font-extrabold font-baloo text-[#1a1612] m-0 truncate">
-                ${isEdit ? `تعديل بيانات: ${escapeAttr(petToEdit!.name)}` : 'تسجيل بيانات المياو'}
+                ${isEdit ? `تعديل بيانات: ${escapeHtml(petToEdit!.name)}` : 'تسجيل بيانات المياو'}
               </h3>
             </div>
             <button
@@ -172,7 +170,7 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                         <input accept="image/*" class="hidden add-pet-photo-input" data-photo-slot="${idx}" type="file" />
                         ${
                           photo
-                            ? `<img src="${photo}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`
+                            ? `<img src="${escapeAttr(sanitizeImageSrc(photo))}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`
                             : `<span class="text-4xl font-black ${
                                 isPrimary ? 'text-[#e67e22]' : 'text-[#998b7c]'
                               } group-hover:scale-110 transition-transform">+</span>`
@@ -404,7 +402,7 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                           : 'border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50'
                       }"
                     >
-                      ${trait}
+                      ${escapeHtml(trait)}
                     </button>
                   `;
                 })
@@ -422,7 +420,7 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                 id="form-pet-health-notes"
                 rows="3"
                 class="w-full p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
-              >${escapeAttr(petNotes)}</textarea>
+              >${escapeHtml(petNotes)}</textarea>
             </div>
           </div>
 
@@ -577,12 +575,14 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
       const existingImg = label.querySelector('img');
       const existingPlus = label.querySelector('span');
       if (photoUrl) {
+        const safeUrl = sanitizeImageSrc(photoUrl, '');
+        if (!safeUrl) return;
         if (existingPlus) existingPlus.remove();
         if (existingImg) {
-          existingImg.src = photoUrl;
+          existingImg.src = safeUrl;
         } else {
           const img = document.createElement('img');
-          img.src = photoUrl;
+          img.src = safeUrl;
           img.alt = `صورة ${idx + 1}`;
           img.className = 'w-full h-full object-cover';
           label.appendChild(img);
@@ -628,16 +628,33 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
       const slot = slotStr ? parseInt(slotStr, 10) : -1;
       const file = input.files?.[0];
       if (!file || slot < 0 || slot > 2) return;
+
+      const check = validateUploadedFile(file, 'image');
+      if (!check.valid) {
+        input.value = '';
+        if (formError) {
+          formError.textContent = check.errorMessage || 'صيغة أو حجم الصورة غير مدعوم.';
+          formError.classList.remove('hidden');
+          formError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return;
+      }
+
       photosGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
+      if (formError) {
+        formError.innerHTML = '';
+        formError.classList.add('hidden');
+      }
 
       const reader = new FileReader();
       reader.onload = () => {
-        const result = typeof reader.result === 'string' ? reader.result : undefined;
-        if (!result) return;
-        uploadedSlots[slot] = result;
+        const rawResult = typeof reader.result === 'string' ? reader.result : undefined;
+        const safeResult = rawResult ? sanitizeImageSrc(rawResult, '') : '';
+        if (!safeResult) return;
+        uploadedSlots[slot] = safeResult;
         const slotWrapper = input.closest('div');
         if (slotWrapper) {
-          renderSlotState(slotWrapper, slot, result);
+          renderSlotState(slotWrapper, slot, safeResult);
         }
       };
       reader.readAsDataURL(file);
@@ -832,7 +849,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
 
       if (errors.length > 0) {
         if (formError) {
-          formError.innerHTML = errors.join('<br />');
+          formError.innerHTML = errors.map((err) => escapeHtml(err)).join('<br />');
           formError.classList.remove('hidden');
           formError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }

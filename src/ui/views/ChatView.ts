@@ -1,11 +1,21 @@
 import { state } from '../../state.ts';
-import { Conversation, Pet } from '../../types.ts';
 import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
 import {
   formatPetAgeFull,
   formatPetSpeciesShort,
   formatVaccinationStatus,
 } from '../../utils/petFormatters.ts';
+import {
+  SAFE_FALLBACK_AVATAR_SVG,
+  SAFE_FALLBACK_PET_SVG,
+  escapeAttr,
+  escapeHtml,
+  sanitizeAudioSrc,
+  sanitizeImageSrc,
+  sanitizeTelUrl,
+  sanitizeUrl,
+  validateUploadedFile,
+} from '../../utils/sanitize.ts';
 import {
   attachLongPress,
   attachPullToRefresh,
@@ -341,7 +351,7 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
 
           return `
             <div
-              data-conversation-id="${conv.id}"
+              data-conversation-id="${escapeAttr(conv.id)}"
               class="conversation-item-card ${
                 conv.isPinned
                   ? 'bg-[#FFFDF7] border-2 border-brand-orange/70 shadow-sm'
@@ -351,13 +361,13 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
               <div class="flex items-center gap-3 flex-1 min-w-0">
                 <div class="relative flex-shrink-0">
                   <img
-                    src="${conv.otherUserAvatar}"
-                    alt="${conv.otherUserName}"
+                    src="${escapeAttr(sanitizeImageSrc(conv.otherUserAvatar, SAFE_FALLBACK_AVATAR_SVG))}"
+                    alt="${escapeAttr(conv.otherUserName)}"
                     class="w-12 h-12 rounded-2xl object-cover border-2 border-brand-peachBorder dark:border-warm-darkBorder group-hover:border-brand-orange transition"
                   />
                   <img
-                    src="${(isGroupConv && groupThumbs[0]) || conv.petPhoto}"
-                    alt="${conv.petName}"
+                    src="${escapeAttr(sanitizeImageSrc((isGroupConv && groupThumbs[0]) || conv.petPhoto, SAFE_FALLBACK_PET_SVG))}"
+                    alt="${escapeAttr(conv.petName)}"
                     class="w-5 h-5 rounded-full object-cover border-2 border-white dark:border-[#27201B] absolute -bottom-1 -right-1 shadow-sm"
                   />
                 </div>
@@ -370,13 +380,13 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                           ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange text-[10px] font-black shrink-0 font-baloo" title="محادثة مثبتة"><i class="fa-solid fa-thumbtack text-[9px]"></i> مثبتة</span>`
                           : ''
                       }
-                      <h4 class="text-sm font-black text-brand-dark dark:text-white group-hover:text-brand-orange transition truncate font-baloo m-0">${conv.otherUserName}</h4>
+                      <h4 class="text-sm font-black text-brand-dark dark:text-white group-hover:text-brand-orange transition truncate font-baloo m-0">${escapeHtml(conv.otherUserName)}</h4>
                     </div>
-                    <span class="text-[10px] text-brand-subtleGray dark:text-[#A89F91] font-bold whitespace-nowrap">${conv.lastMessageTime}</span>
+                    <span class="text-[10px] text-brand-subtleGray dark:text-[#A89F91] font-bold whitespace-nowrap">${escapeHtml(conv.lastMessageTime)}</span>
                   </div>
 
                   <div class="text-[11px] font-bold text-brand-orange mt-0.5 truncate font-baloo">
-                    بخصوص: ${conv.petName} (${conv.petType === 'mating' ? 'تزاوج' : isGroupConv ? `تبني جماعي • ${groupCount} حيوانات` : 'تبني'})
+                    بخصوص: ${escapeHtml(conv.petName)} (${conv.petType === 'mating' ? 'تزاوج' : isGroupConv ? `تبني جماعي • ${groupCount} حيوانات` : 'تبني'})
                   </div>
 
                   ${
@@ -385,7 +395,7 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                       <div class="mt-1 px-3 py-2 rounded-2xl bg-[#fff5ea]/90 border border-brand-orange/30 text-[10px] font-bold text-brand-dark space-y-1">
                         <div class="flex items-center justify-between gap-1.5">
                           <span class="truncate">
-                            🐾 ${memberNames.length > 0 ? memberNames.join('، ') : `${groupCount} حيوانات`}
+                            🐾 ${memberNames.length > 0 ? escapeHtml(memberNames.join('، ')) : `${groupCount} حيوانات`}
                           </span>
                           <span class="shrink-0 font-black ${mustAdoptTogether ? 'text-brand-orange' : 'text-emerald-700'}">
                             ${mustAdoptTogether ? 'معاً فقط' : 'معاً أو منفرد'}
@@ -402,7 +412,7 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                                         ${groupThumbs
                                           .map(
                                             (thumb) => `
-                                              <img src="${thumb}" alt="حيوان في المجموعة" class="w-4 h-4 rounded-md object-cover border border-brand-peachBorder" />
+                                              <img src="${escapeAttr(sanitizeImageSrc(thumb, SAFE_FALLBACK_PET_SVG))}" alt="حيوان في المجموعة" class="w-4 h-4 rounded-md object-cover border border-brand-peachBorder" />
                                             `
                                           )
                                           .join('')}
@@ -412,7 +422,7 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                                 }
                                 ${
                                   groupLocation
-                                    ? `<span class="text-[9px] font-bold text-brand-subtleGray truncate">${groupLocation}</span>`
+                                    ? `<span class="text-[9px] font-bold text-brand-subtleGray truncate">${escapeHtml(groupLocation)}</span>`
                                     : ''
                                 }
                               </div>
@@ -425,7 +435,7 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                   }
 
                   <p class="text-xs font-semibold text-brand-subtleGray dark:text-[#A89F91] truncate mt-0.5 mb-0">
-                    ${conv.lastMessage}
+                    ${escapeHtml(conv.lastMessage)}
                   </p>
                 </div>
               </div>
@@ -512,10 +522,10 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
             <div class="bg-white/95 border-2 border-brand-peachBorder rounded-[30px] p-4 shadow-sm space-y-2.5 text-right">
               <div class="flex items-center justify-between gap-2.5">
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <img src="${req.senderAvatar}" alt="${req.senderName}" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shadow-sm shrink-0" />
+                  <img src="${escapeAttr(sanitizeImageSrc(req.senderAvatar, SAFE_FALLBACK_AVATAR_SVG))}" alt="${escapeAttr(req.senderName)}" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shadow-sm shrink-0" />
                   <div class="min-w-0">
                     <div class="flex items-center gap-1.5 flex-wrap">
-                      <h4 class="text-sm sm:text-base font-black text-brand-dark truncate font-baloo m-0">${req.senderName}</h4>
+                      <h4 class="text-sm sm:text-base font-black text-brand-dark truncate font-baloo m-0">${escapeHtml(req.senderName)}</h4>
                       <span class="text-[10px] font-black px-2.5 py-0.5 rounded-full ${
                         req.type === 'mating'
                           ? 'bg-brand-orange/10 text-brand-orange border border-brand-peachBorder'
@@ -525,7 +535,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                       </span>
                     </div>
                     <div class="text-[11px] font-bold text-brand-subtleGray truncate mt-0.5">
-                      بخصوص: <strong class="text-brand-dark">${req.receiverPetName}</strong> • ${req.timestamp}
+                      بخصوص: <strong class="text-brand-dark">${escapeHtml(req.receiverPetName)}</strong> • ${escapeHtml(req.timestamp)}
                     </div>
                   </div>
                 </div>
@@ -560,18 +570,18 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                 previewPet
                   ? `
                     <div
-                      data-preview-request-id="${req.id}"
+                      data-preview-request-id="${escapeAttr(req.id)}"
                       class="preview-request-pet-card p-2.5 rounded-[22px] bg-[#FFF9E9]/90 border border-brand-peachBorder/80 flex items-center justify-between gap-2.5 hover:border-brand-orange/70 transition cursor-pointer"
                     >
                       <div class="flex items-center gap-2.5 min-w-0">
                         <img
-                          src="${reqThumb}"
-                          alt="${previewPet.name}"
+                          src="${escapeAttr(sanitizeImageSrc(reqThumb, SAFE_FALLBACK_PET_SVG))}"
+                          alt="${escapeAttr(previewPet.name)}"
                           class="w-10 h-10 rounded-full object-cover border border-brand-peachBorder shrink-0"
                         />
                         <div class="min-w-0">
                           <div class="flex items-center gap-1.5">
-                            <span class="text-xs font-black text-brand-dark font-baloo truncate">${previewPet.name}</span>
+                            <span class="text-xs font-black text-brand-dark font-baloo truncate">${escapeHtml(previewPet.name)}</span>
                             ${
                               isGroupPet
                                 ? `<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-brand-orange text-white shrink-0">جماعي (${reqGroupCount})</span>`
@@ -579,13 +589,13 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                             }
                           </div>
                           <p class="text-[11px] font-bold text-brand-subtleGray truncate m-0">
-                            ${isGroupPet ? (previewPet.mustAdoptTogether ? 'معاً فقط' : 'معاً أو منفرداً') : previewPet.breed}${reqLocation ? ` • ${reqLocation}` : ''}
+                            ${isGroupPet ? (previewPet.mustAdoptTogether ? 'معاً فقط' : 'معاً أو منفرداً') : escapeHtml(previewPet.breed)}${reqLocation ? ` • ${escapeHtml(reqLocation)}` : ''}
                           </p>
                         </div>
                       </div>
                       <button
                         type="button"
-                        data-preview-request-id="${req.id}"
+                        data-preview-request-id="${escapeAttr(req.id)}"
                         class="preview-request-pet-btn h-9 px-3.5 rounded-full bg-white border border-brand-peachBorder hover:border-brand-orange text-brand-orange text-xs font-black transition cursor-pointer shrink-0 font-baloo active:scale-95"
                       >
                         معاينة
@@ -596,7 +606,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
               }
 
               <p class="text-xs font-semibold text-brand-dark/90 bg-[#FFFDF8] border border-brand-peachBorder/50 rounded-2xl px-3.5 py-2.5 m-0 leading-relaxed line-clamp-2">
-                "${req.message}"
+                "${escapeHtml(req.message)}"
               </p>
 
               ${
@@ -604,14 +614,14 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                   ? `
                   <div class="flex items-center justify-end gap-2 pt-1">
                     <button
-                      data-reject-request-id="${req.id}"
+                      data-reject-request-id="${escapeAttr(req.id)}"
                       class="reject-request-btn h-10 px-5 rounded-full bg-white border-2 border-brand-peachBorder text-brand-dark text-xs font-bold hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer font-baloo"
                       type="button"
                     >
                       رفض
                     </button>
                     <button
-                      data-approve-request-id="${req.id}"
+                      data-approve-request-id="${escapeAttr(req.id)}"
                       class="approve-request-btn h-10 px-5 rounded-full bg-brand-orange text-white text-xs font-black shadow-soft hover:bg-brand-orangeHover transition active:scale-95 cursor-pointer font-baloo"
                       type="button"
                     >
@@ -623,8 +633,8 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                   ? `
                   <div class="flex justify-end pt-1">
                     <button
-                      data-request-id="${req.id}"
-                      data-other-user-id="${menuTargetUserId}"
+                      data-request-id="${escapeAttr(req.id)}"
+                      data-other-user-id="${escapeAttr(menuTargetUserId)}"
                       class="view-conversation-direct-btn h-10 px-4 rounded-full bg-white border-2 border-brand-orange text-brand-orange text-xs font-black hover:bg-brand-orange/10 transition active:scale-95 cursor-pointer font-baloo"
                       type="button"
                     >
@@ -698,8 +708,8 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           <!-- Avatar & Online status -->
           <div class="relative shrink-0">
             <img
-              src="${conv.otherUserAvatar}"
-              alt="${conv.otherUserName}"
+              src="${escapeAttr(sanitizeImageSrc(conv.otherUserAvatar, SAFE_FALLBACK_AVATAR_SVG))}"
+              alt="${escapeAttr(conv.otherUserName)}"
               class="w-12 h-12 rounded-full object-cover border-2 border-brand-orange shadow-sm"
             />
             <span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#27201B]"></span>
@@ -708,7 +718,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           <div class="min-w-0 text-right">
             <div class="flex items-center gap-1.5">
               <h3 class="text-base font-black text-brand-dark dark:text-white truncate font-baloo leading-tight m-0">
-                ${conv.otherUserName}
+                ${escapeHtml(conv.otherUserName)}
               </h3>
               ${
                 conv.isPinned
@@ -717,7 +727,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               }
             </div>
             <p class="text-xs font-bold text-brand-orange truncate m-0 font-baloo mt-0.5">
-              ${conv.petName} (${conv.petType === 'mating' ? 'تزاوج' : isGroupConv ? `تبني جماعي • ${groupCount} حيوانات` : 'تبني'}) • متصل الآن
+              ${escapeHtml(conv.petName)} (${conv.petType === 'mating' ? 'تزاوج' : isGroupConv ? `تبني جماعي • ${groupCount} حيوانات` : 'تبني'}) • متصل الآن
             </p>
           </div>
         </div>
@@ -727,7 +737,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             state.canRevealConversationPhone(conv) && conv.otherUserPhone
               ? `
               <a 
-                href="tel:${conv.otherUserPhone}" 
+                href="${escapeAttr(sanitizeTelUrl(conv.otherUserPhone))}" 
                 class="w-11 h-11 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition shadow-sm"
                 title="اتصال هاتفي"
                 aria-label="اتصال هاتفي"
@@ -770,7 +780,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                           .slice(0, 3)
                           .map(
                             (t) => `
-                              <img src="${t.photo}" alt="${t.name}" class="w-8 h-8 rounded-xl object-cover border-2 border-white shadow-sm" />
+                              <img src="${escapeAttr(sanitizeImageSrc(t.photo, SAFE_FALLBACK_PET_SVG))}" alt="${escapeAttr(t.name)}" class="w-8 h-8 rounded-xl object-cover border-2 border-white shadow-sm" />
                             `
                           )
                           .join('')}
@@ -784,7 +794,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                 }
                 <div class="min-w-0">
                   <p class="text-xs font-black text-brand-dark font-baloo truncate m-0">
-                    تبني جماعي (${groupCount} حيوانات)${sharedLocation ? ` • ${sharedLocation}` : ''}
+                    تبني جماعي (${groupCount} حيوانات)${sharedLocation ? ` • ${escapeHtml(sharedLocation)}` : ''}
                   </p>
                   <p class="text-[10px] font-bold ${mustAdoptTogether ? 'text-brand-orange' : 'text-emerald-700'} truncate m-0">
                     ${mustAdoptTogether ? 'يُشترط تبني المجموعة كاملة معاً' : 'يمكن تبنيها معاً أو بشكل منفصل'}
@@ -817,12 +827,12 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                 <div id="chat-group-details-panel" class="mt-2.5 pt-2.5 border-t border-brand-peachBorder/50 space-y-2.5 max-h-[42vh] overflow-y-auto pl-1">
                   <div class="p-2.5 rounded-xl bg-[#FFF9E9] border border-brand-peachBorder/60 text-[11px] font-bold text-[#5d4b3d] space-y-1">
                     <div class="flex items-center justify-between gap-2">
-                      <span>الموقع المشترك: <strong class="text-brand-dark">${sharedLocation || 'غير محدد'}</strong></span>
+                      <span>الموقع المشترك: <strong class="text-brand-dark">${escapeHtml(sharedLocation || 'غير محدد')}</strong></span>
                       <span class="font-black text-emerald-700">${mustAdoptTogether ? 'معاً فقط' : 'منفرداً متاح'}</span>
                     </div>
                     ${
                       adoptionReason
-                        ? `<p class="m-0 leading-relaxed">سبب العرض للتبني: ${adoptionReason}</p>`
+                        ? `<p class="m-0 leading-relaxed">سبب العرض للتبني: ${escapeHtml(adoptionReason)}</p>`
                         : ''
                     }
                   </div>
@@ -836,14 +846,14 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                           <div class="p-3 rounded-2xl bg-[#FFF9E9]/95 border border-brand-peachBorder/80 space-y-2">
                             <div class="flex items-start gap-2.5">
                               <img
-                                src="${mPhotos[0] || conv.petPhoto}"
-                                alt="${m.name}"
+                                src="${escapeAttr(sanitizeImageSrc(mPhotos[0] || conv.petPhoto, SAFE_FALLBACK_PET_SVG))}"
+                                alt="${escapeAttr(m.name)}"
                                 class="w-14 h-14 rounded-xl object-cover border-2 border-brand-orange shrink-0"
                               />
                               <div class="min-w-0 flex-1 space-y-0.5">
                                 <div class="flex items-center justify-between gap-2">
                                   <span class="text-xs sm:text-sm font-black text-brand-dark font-baloo truncate">
-                                    ${idx + 1}. ${m.name}
+                                    ${idx + 1}. ${escapeHtml(m.name)}
                                   </span>
                                   <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-white border border-brand-peachBorder ${
                                     m.gender === 'male' ? 'text-blue-600' : 'text-pink-600'
@@ -852,12 +862,12 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                                   </span>
                                 </div>
                                 <p class="text-[10px] font-bold text-[#786555] m-0">
-                                  ${formatPetSpeciesShort(m.species)} • ${m.breed}${
-                                    m.hybridBreed ? ` (${m.hybridBreed})` : ''
-                                  }${mAge ? ` • ${mAge}` : ''}${m.color ? ` • ${m.color}` : ''}
+                                  ${escapeHtml(formatPetSpeciesShort(m.species))} • ${escapeHtml(m.breed)}${
+                                    m.hybridBreed ? ` (${escapeHtml(m.hybridBreed)})` : ''
+                                  }${mAge ? ` • ${escapeHtml(mAge)}` : ''}${m.color ? ` • ${escapeHtml(m.color)}` : ''}
                                 </p>
                                 <p class="text-[10px] font-bold text-emerald-700 m-0">
-                                  ${formatVaccinationStatus(m.vaccinationStatus)}
+                                  ${escapeHtml(formatVaccinationStatus(m.vaccinationStatus))}
                                 </p>
                               </div>
                             </div>
@@ -867,7 +877,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                                   <div class="flex items-center gap-1 flex-wrap">
                                     ${mTraits
                                       .map(
-                                        (tr) => `<span class="px-2 py-0.5 rounded-full bg-white border border-brand-peachBorder/70 text-[10px] font-bold text-brand-dark">${tr}</span>`
+                                        (tr) => `<span class="px-2 py-0.5 rounded-full bg-white border border-brand-peachBorder/70 text-[10px] font-bold text-brand-dark">${escapeHtml(tr)}</span>`
                                       )
                                       .join('')}
                                   </div>
@@ -876,7 +886,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                             }
                             ${
                               m.healthNotes
-                                ? `<p class="text-[10px] font-semibold text-brand-dark/80 m-0">${m.healthNotes}</p>`
+                                ? `<p class="text-[10px] font-semibold text-brand-dark/80 m-0">${escapeHtml(m.healthNotes)}</p>`
                                 : ''
                             }
                             <div class="flex items-center justify-between gap-2 pt-1 border-t border-brand-peachBorder/40">
@@ -885,10 +895,10 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                               </span>
                               <button
                                 type="button"
-                                data-open-member-detail-id="${m.petId}"
+                                data-open-member-detail-id="${escapeAttr(m.petId)}"
                                 class="open-chat-member-detail-btn px-2.5 py-1 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white text-[10px] font-black transition cursor-pointer font-baloo"
                               >
-                                عرض ملف ${m.name} المستقل
+                                عرض ملف ${escapeHtml(m.name)} المستقل
                               </button>
                             </div>
                           </div>
@@ -945,15 +955,20 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               return `
                 <div class="flex justify-center my-2.5 select-none">
                   <span class="px-4 py-2 rounded-full bg-white/90 dark:bg-[#27201B]/90 border border-brand-peachBorder/70 dark:border-warm-darkBorder text-xs sm:text-[13px] font-bold text-brand-orange text-center max-w-[88%] shadow-sm leading-relaxed font-baloo">
-                    ${msg.text}
+                    ${escapeHtml(msg.text)}
                   </span>
                 </div>
               `;
             }
 
             const isUser = msg.isFromUser;
+            const safeImgUrl = msg.fileUrl ? sanitizeImageSrc(msg.fileUrl, SAFE_FALLBACK_PET_SVG) : '';
+            const safeDownloadUrl = msg.fileUrl ? sanitizeUrl(msg.fileUrl, '') : '';
+            const safeAudioUrl = msg.audioBlobUrl ? sanitizeAudioSrc(msg.audioBlobUrl) : '';
+            const safeStickerUrl = msg.stickerUrl ? sanitizeImageSrc(msg.stickerUrl, SAFE_FALLBACK_PET_SVG) : '';
+
             return `
-              <div class="flex flex-col ${isUser ? 'items-end' : 'items-start'} transition-all animate-fade-in group" data-msg-id="${msg.id}">
+              <div class="flex flex-col ${isUser ? 'items-end' : 'items-start'} transition-all animate-fade-in group" data-msg-id="${escapeAttr(msg.id)}">
                 
                 <!-- Bubble Container (Bubble Style) -->
                 <div class="relative max-w-[86%] sm:max-w-[80%] px-4 py-3 shadow-card text-right ${
@@ -967,7 +982,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                     msg.type === 'text' || !msg.type
                       ? `
                       <p class="text-[15px] sm:text-base font-bold leading-[1.65] m-0 break-words font-baloo select-text">
-                        ${msg.text || ''}
+                        ${escapeHtml(msg.text || '')}
                       </p>
                       `
                       : ''
@@ -979,13 +994,13 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                       ? `
                       <div class="rounded-2xl overflow-hidden mb-2 border border-brand-peachBorder/40">
                         <img 
-                          src="${msg.fileUrl}" 
+                          src="${escapeAttr(safeImgUrl)}" 
                           alt="صورة مرفقة" 
-                          data-chat-image-preview="${msg.fileUrl}"
+                          data-chat-image-preview="${escapeAttr(safeImgUrl)}"
                           class="chat-msg-image-preview w-full max-h-60 object-cover cursor-pointer hover:opacity-95 transition" 
                         />
                       </div>
-                      ${msg.text ? `<p class="text-sm font-bold mt-1.5 leading-relaxed">${msg.text}</p>` : ''}
+                      ${msg.text ? `<p class="text-sm font-bold mt-1.5 leading-relaxed">${escapeHtml(msg.text)}</p>` : ''}
                       `
                       : ''
                   }
@@ -999,13 +1014,13 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                           <i class="fa-solid fa-file-lines text-base"></i>
                         </div>
                         <div class="min-w-0 flex-1 text-right">
-                          <p class="text-xs font-black truncate m-0 font-baloo">${msg.fileName || 'ملف مرفق'}</p>
-                          <span class="text-[10px] text-brand-subtleGray font-bold">${msg.fileSize || 'ملف'}</span>
+                          <p class="text-xs font-black truncate m-0 font-baloo">${escapeHtml(msg.fileName || 'ملف مرفق')}</p>
+                          <span class="text-[10px] text-brand-subtleGray font-bold">${escapeHtml(msg.fileSize || 'ملف')}</span>
                         </div>
                         ${
-                          msg.fileUrl
+                          safeDownloadUrl
                             ? `
-                            <a href="${msg.fileUrl}" download="${msg.fileName || 'meow_file'}" class="w-9 h-9 rounded-full bg-brand-orange text-white flex items-center justify-center text-xs shrink-0 active:scale-90 transition" title="تحميل">
+                            <a href="${escapeAttr(safeDownloadUrl)}" download="${escapeAttr(msg.fileName || 'meow_file')}" rel="noopener noreferrer" class="w-9 h-9 rounded-full bg-brand-orange text-white flex items-center justify-center text-xs shrink-0 active:scale-90 transition" title="تحميل">
                               <i class="fa-solid fa-download"></i>
                             </a>
                             `
@@ -1020,12 +1035,12 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                   ${
                     msg.type === 'audio'
                       ? `
-                      <div class="flex items-center gap-3 py-1 min-w-[200px]" data-audio-msg="${msg.id}">
+                      <div class="flex items-center gap-3 py-1 min-w-[200px]" data-audio-msg="${escapeAttr(msg.id)}">
                         <button
                           type="button"
                           class="play-audio-msg-btn w-10 h-10 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0 shadow-soft active:scale-90 transition cursor-pointer"
-                          data-audio-url="${msg.audioBlobUrl || ''}"
-                          data-msg-id="${msg.id}"
+                          data-audio-url="${escapeAttr(safeAudioUrl)}"
+                          data-msg-id="${escapeAttr(msg.id)}"
                           aria-label="تشغيل الرسالة الصوتية"
                         >
                           <i class="fa-solid fa-play text-sm ml-0.5"></i>
@@ -1062,11 +1077,11 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                       <div class="flex flex-col items-center justify-center py-2 px-2 select-none group">
                         ${
                           msg.stickerUrl
-                            ? `<img src="${msg.stickerUrl}" alt="استيكر" class="max-w-[150px] max-h-[150px] object-contain drop-shadow-md rounded-2xl hover:scale-105 transition-transform" />`
-                            : `<span class="text-6xl sm:text-7xl filter drop-shadow-md transform hover:scale-110 active:scale-95 transition-transform duration-200 cursor-pointer animate-fade-in inline-block">${msg.stickerEmoji || '🐾'}</span>`
+                            ? `<img src="${escapeAttr(safeStickerUrl)}" alt="استيكر" class="max-w-[150px] max-h-[150px] object-contain drop-shadow-md rounded-2xl hover:scale-105 transition-transform" />`
+                            : `<span class="text-6xl sm:text-7xl filter drop-shadow-md transform hover:scale-110 active:scale-95 transition-transform duration-200 cursor-pointer animate-fade-in inline-block">${escapeHtml(msg.stickerEmoji || '🐾')}</span>`
                         }
                         <span class="mt-1.5 px-3 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange text-[10px] font-black font-baloo border border-brand-orange/20 shadow-sm">
-                          ${msg.stickerTitle || 'استيكر مخصص'}
+                          ${escapeHtml(msg.stickerTitle || 'استيكر مخصص')}
                         </span>
                       </div>
                       `
@@ -1075,7 +1090,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
 
                   <!-- Timestamp & Read Receipts (WhatsApp Style in bottom corner) -->
                   <div class="flex items-center justify-end gap-1.5 mt-1.5 -mb-0.5 text-[11px] text-brand-subtleGray dark:text-[#A89F91] font-bold select-none">
-                    <span>${msg.timestamp}</span>
+                    <span>${escapeHtml(msg.timestamp)}</span>
                     ${
                       isUser
                         ? `
@@ -1216,27 +1231,30 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               <!-- User's Saved Custom Stickers -->
               ${getCustomStickers()
                 .map(
-                  (stk) => `
+                  (stk) => {
+                    const safeStickerImg = sanitizeImageSrc(stk.imageUrl, SAFE_FALLBACK_PET_SVG);
+                    return `
                 <div class="relative group aspect-square rounded-2xl bg-white dark:bg-[#2F241C] border-2 border-brand-peachBorder dark:border-warm-darkBorder hover:border-brand-orange p-1.5 flex items-center justify-center transition-all shadow-sm hover:shadow-md">
                   <button
                     type="button"
                     class="custom-sticker-send-btn w-full h-full flex items-center justify-center cursor-pointer active:scale-90 transition-transform"
-                    data-sticker-url="${stk.imageUrl}"
-                    data-sticker-title="${stk.title}"
+                    data-sticker-url="${escapeAttr(safeStickerImg)}"
+                    data-sticker-title="${escapeAttr(stk.title)}"
                     title="إرسال هذا الاستيكر"
                   >
-                    <img src="${stk.imageUrl}" alt="${stk.title}" class="max-w-full max-h-full object-contain rounded-xl select-none" />
+                    <img src="${escapeAttr(safeStickerImg)}" alt="${escapeAttr(stk.title)}" class="max-w-full max-h-full object-contain rounded-xl select-none" />
                   </button>
                   <button
                     type="button"
                     class="delete-custom-sticker-btn absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center text-xs shadow-sm hover:scale-110 active:scale-90 transition cursor-pointer"
-                    data-sticker-id="${stk.id}"
+                    data-sticker-id="${escapeAttr(stk.id)}"
                     title="حذف الاستيكر"
                   >
                     <i class="fa-solid fa-xmark"></i>
                   </button>
                 </div>
-              `
+              `;
+                  }
                 )
                 .join('')}
 
@@ -1352,7 +1370,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             >
               <i class="fa-solid fa-xmark"></i>
             </button>
-            <img src="${previewChatImageUrl}" alt="معاينة الصورة" class="max-w-full max-h-[85dvh] rounded-2xl object-contain shadow-2xl" />
+            <img src="${escapeAttr(sanitizeImageSrc(previewChatImageUrl, SAFE_FALLBACK_PET_SVG))}" alt="معاينة الصورة" class="max-w-full max-h-[85dvh] rounded-2xl object-contain shadow-2xl" />
           </div>
           `
           : ''
@@ -1537,7 +1555,7 @@ export function attachChatEvents(): void {
   const msgImagePreviews = document.querySelectorAll<HTMLImageElement>('.chat-msg-image-preview');
   msgImagePreviews.forEach((img) => {
     img.addEventListener('click', () => {
-      const url = img.getAttribute('data-chat-image-preview');
+      const url = sanitizeImageSrc(img.getAttribute('data-chat-image-preview'), '');
       if (url) {
         previewChatImageUrl = url;
         const activeId = state.getActiveConversation()?.id || null;
@@ -1643,14 +1661,31 @@ export function attachChatEvents(): void {
       if (!file) return;
 
       const isImage = file.type.startsWith('image/');
+      const check = validateUploadedFile(file, isImage ? 'image' : 'document');
+      if (!check.valid) {
+        showMobileToast(check.errorMessage || 'الملف المحدد غير مدعوم أو يتجاوز الحد المسموح.', 'danger');
+        filePicker.value = '';
+        return;
+      }
+
       const reader = new FileReader();
 
       reader.onload = (e) => {
-        const result = e.target?.result as string;
+        const result = typeof e.target?.result === 'string' ? e.target.result : '';
+        if (!result) {
+          filePicker.value = '';
+          return;
+        }
         if (isImage) {
+          const safeUrl = sanitizeImageSrc(result, '');
+          if (!safeUrl) {
+            showMobileToast('تعذر قراءة الصورة المحددة.', 'danger');
+            filePicker.value = '';
+            return;
+          }
           state.sendMessage({
             type: 'image',
-            fileUrl: result,
+            fileUrl: safeUrl,
             fileName: file.name,
             fileSize: `${(file.size / 1024).toFixed(0)} KB`,
           });
@@ -1732,9 +1767,17 @@ export function attachChatEvents(): void {
       const file = stickerUploadInput.files?.[0];
       if (!file) return;
 
+      const check = validateUploadedFile(file, 'image');
+      if (!check.valid) {
+        showMobileToast(check.errorMessage || 'يرجى اختيار صورة صالحة للملصق.', 'danger');
+        stickerUploadInput.value = '';
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
+        const rawUrl = typeof e.target?.result === 'string' ? e.target.result : '';
+        const dataUrl = sanitizeImageSrc(rawUrl, '');
         if (dataUrl) {
           saveCustomSticker(dataUrl, file.name.replace(/\.[^/.]+$/, ''));
           // Keep sticker drawer open so user can immediately see and use their new sticker
@@ -1799,7 +1842,11 @@ export function attachChatEvents(): void {
   const startAudioRecording = async () => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        sendFallbackVoiceNote();
+        if (import.meta.env.DEV) {
+          sendFallbackVoiceNote();
+        } else {
+          showMobileToast('التسجيل الصوتي غير مدعوم على هذا الجهاز حاليًا.', 'danger');
+        }
         return;
       }
 
@@ -1832,8 +1879,11 @@ export function attachChatEvents(): void {
       }, 1000);
     } catch (err) {
       console.warn('Microphone permission denied or not available:', err);
-      // Fallback simulated voice note
-      sendFallbackVoiceNote();
+      if (import.meta.env.DEV) {
+        sendFallbackVoiceNote();
+      } else {
+        showMobileToast('تعذر الوصول للميكروفون. يرجى تفعيل صلاحية التسجيل الصوتي.', 'danger');
+      }
     }
   };
 
@@ -1847,6 +1897,7 @@ export function attachChatEvents(): void {
   };
 
   const sendFallbackVoiceNote = () => {
+    if (!import.meta.env.DEV) return;
     state.sendMessage({
       type: 'audio',
       audioDuration: 8,
@@ -1885,8 +1936,10 @@ export function attachChatEvents(): void {
           setTimeout(scrollToBottom, 100);
         };
         mediaRecorder.stop();
-      } else {
+      } else if (import.meta.env.DEV) {
         sendFallbackVoiceNote();
+      } else {
+        showMobileToast('لم يتم تسجيل مقطع صوتي صالح للإرسال.', 'danger');
       }
       stopRecordingUI();
     });
@@ -1897,7 +1950,7 @@ export function attachChatEvents(): void {
   playAudioBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const msgId = btn.getAttribute('data-msg-id');
-      const audioUrl = btn.getAttribute('data-audio-url');
+      const audioUrl = sanitizeAudioSrc(btn.getAttribute('data-audio-url'));
 
       if (currentlyPlayingAudio && currentPlayingMsgId === msgId) {
         // Pause current
@@ -1920,18 +1973,14 @@ export function attachChatEvents(): void {
         currentPlayingMsgId = msgId;
         btn.innerHTML = '<i class="fa-solid fa-pause text-sm"></i>';
 
-        audio.play();
+        void audio.play();
         audio.onended = () => {
           btn.innerHTML = '<i class="fa-solid fa-play text-sm ml-0.5"></i>';
           currentlyPlayingAudio = null;
           currentPlayingMsgId = null;
         };
       } else {
-        // Beep simulation tone
-        btn.innerHTML = '<i class="fa-solid fa-pause text-sm"></i>';
-        setTimeout(() => {
-          btn.innerHTML = '<i class="fa-solid fa-play text-sm ml-0.5"></i>';
-        }, 3000);
+        showMobileToast('المقطع الصوتي غير متاح للتشغيل حاليًا.', 'default');
       }
     });
   });
@@ -2052,13 +2101,13 @@ export function renderDeleteConversationConfirmModal(): string {
               تأكيد حذف المحادثة
             </h3>
             <p class="text-xs font-bold text-brand-subtleGray m-0 mt-0.5 truncate">
-              ${conv.otherUserName} • ${conv.petName}
+              ${escapeHtml(conv.otherUserName)} • ${escapeHtml(conv.petName)}
             </p>
           </div>
         </div>
 
         <p class="text-xs sm:text-sm font-semibold text-brand-dark/90 leading-relaxed">
-          هل أنت متأكد من رغبتك في حذف المحادثة مع <strong class="text-red-600">${conv.otherUserName}</strong>؟
+          هل أنت متأكد من رغبتك في حذف المحادثة مع <strong class="text-red-600">${escapeHtml(conv.otherUserName)}</strong>؟
           سيتم حذف جميع الرسائل داخل هذه المحادثة ولا يمكن التراجع عن ذلك.
         </p>
 

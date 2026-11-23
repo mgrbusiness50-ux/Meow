@@ -1,0 +1,11 @@
+{
+  "version": "1.2.0",
+  "buildNumber": 2,
+  "bundleUrl": "",
+  "checksum": "",
+  "minNativeVersion": "1.2.0",
+  "channel": "production",
+  "releaseNotes": "الإصدار التأسيسي المستقر لتطبيق Meow.",
+  "mandatory": false,
+  "publishedAt": "2026-01-01T00:00:00Z"
+}

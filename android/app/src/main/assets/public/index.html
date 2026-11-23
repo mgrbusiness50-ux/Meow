@@ -17,46 +17,48 @@
     <link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Bubblegum+Sans&family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              brand: {
-                cream: '#FFF9E9',
-                lightCream: '#FFFDF7',
-                orange: '#E67E22',
-                orangeHover: '#D35400',
-                accent: '#F38F42',
-                peachBorder: '#FFE2C5',
-                dark: '#2A2521',
-                subtleGray: '#8C827A',
-                // Dark mode complementary palette (matching reference screenshots)
-                darkBg: '#141210',
-                darkCard: '#1F1A16',
-                darkBorder: '#3A3027'
-              }
-            },
-            fontFamily: {
-              baloo: ['"Baloo Bhaijaan 2"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-              bubble: ['"Bubblegum Sans"', 'cursive', 'sans-serif'],
-              sans: ['"Baloo Bhaijaan 2"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif']
-            },
-            boxShadow: {
-              'soft': '0 8px 24px -4px rgba(230, 126, 34, 0.15)',
-              'card': '0 6px 18px -2px rgba(139, 90, 43, 0.08)',
-              'nav': '0 12px 36px 0 rgba(42, 37, 33, 0.16)'
-            }
-          }
-        }
-      }
-    </script>
-    <script type="module" crossorigin src="/assets/index-DwEsuLCz.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BO4h9pvs.css">
+    <link rel="preload" as="image" href="/assets/meow-logo.png" />
+    <script type="module" crossorigin src="/assets/index-CFvftSpZ.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-DK3Fl9T5.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-capacitor-C_u4F3sx.js">
+    <link rel="modulepreload" crossorigin href="/assets/data-locations-BoFVS0Tf.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-supabase-Dg3zCikB.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-updater-D0hgEYKr.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-DliE8HI5.css">
   </head>
   <body class="bg-[#FFF9E9] text-[#2A2521] font-baloo min-h-[100dvh] antialiased selection:bg-[#E67E22] selection:text-white transition-colors duration-200">
-    <div id="root"></div>
+    <div id="root">
+      <div
+        id="splash-screen-container"
+        class="relative h-[100dvh] w-full flex flex-col items-center justify-center px-6 sm:px-8 text-[#3E2723] overflow-hidden select-none"
+        style="height: 100dvh; min-height: 100dvh; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 1.5rem; background: radial-gradient(circle at center, #FFFBEB 0%, #FFF8E7 100%); color: #3E2723; overflow: hidden; box-sizing: border-box;"
+        dir="rtl"
+      >
+        <div
+          class="relative flex-grow flex flex-col items-center justify-center"
+          style="position: relative; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;"
+        >
+          <div
+            class="absolute w-52 h-52 sm:w-72 sm:h-72 rounded-full bg-[#F7E1C3] blur-[40px] opacity-40 -z-10"
+            style="position: absolute; width: 13rem; height: 13rem; border-radius: 9999px; background-color: #F7E1C3; opacity: 0.4; filter: blur(40px); z-index: 0; pointer-events: none;"
+          ></div>
+          <img
+            id="splash-logo-img"
+            alt="Meow Logo"
+            class="relative z-10 w-48 sm:w-64 h-auto object-contain max-w-[68vw] sm:max-w-[80vw]"
+            style="position: relative; z-index: 1; width: 12rem; max-width: 68vw; height: auto; object-fit: contain; display: block;"
+            src="/assets/meow-logo.png"
+          />
+          <div id="splash-loading-slot" class="mt-6 min-h-[34px] flex items-center justify-center" style="margin-top: 1.5rem; min-height: 34px;"></div>
+        </div>
+        <div
+          class="pb-8 sm:pb-12 text-center"
+          style="padding-bottom: 2rem; text-align: center; font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive;"
+        >
+          <p class="text-[10px] uppercase tracking-[0.3em] opacity-40 mb-1 sm:mb-1.5 font-medium" style="margin: 0 0 0.25rem; font-size: 10px; letter-spacing: 0.3em; opacity: 0.4; text-transform: uppercase;">By</p>
+          <p class="text-xs sm:text-sm font-semibold tracking-[0.05em] text-[#3E2723]/80" style="margin: 0; font-size: 0.8rem; font-weight: 600; color: rgba(62, 39, 35, 0.8);">Mohamed Gamil</p>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

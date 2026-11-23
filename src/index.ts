@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { MeowApp } from './ui/App.ts';
 import { state } from './state.ts';
+import { initUpdateService } from './services/updateService.ts';
 
 function setupAndroidBackHandler(): void {
   try {
@@ -59,6 +60,9 @@ function maybeInitDevXrOverlay(): void {
 }
 
 function bootMeowApp(): void {
+  // 0. Mark bundled version ready immediately for OTA rollback protection
+  void initUpdateService();
+
   // 1. Mount Meow Responsive 2D Application into #root
   const rootElement = document.getElementById('root');
   if (rootElement) {
@@ -70,7 +74,14 @@ function bootMeowApp(): void {
   setupAndroidBackHandler();
   setupAndroidDeepLinkHandler();
 
-  // 3. Optional Dev-Only XR Simulator (?xr) — excluded from production & Android APK builds
+  // 3. Background check for OTA / APK updates without blocking startup
+  if (typeof window !== 'undefined') {
+    setTimeout(() => {
+      void state.checkForAppUpdates(false);
+    }, 1800);
+  }
+
+  // 4. Optional Dev-Only XR Simulator (?xr) — excluded from production & Android APK builds
   maybeInitDevXrOverlay();
 }
 

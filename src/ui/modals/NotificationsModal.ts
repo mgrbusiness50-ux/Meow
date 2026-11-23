@@ -4,6 +4,7 @@ import {
   requestBrowserNotificationPermission,
 } from '../../services/notificationService.ts';
 import { AppNotification } from '../../types.ts';
+import { escapeAttr, escapeHtml } from '../../utils/sanitize.ts';
 import {
   attachSheetDragToDismiss,
   attachSwipeToDismissList,
@@ -155,7 +156,7 @@ export function renderNotificationsModal(): string {
                     return `
                       <div
                         class="notif-swipe-item relative overflow-hidden rounded-[28px]"
-                        data-notification-id="${notif.id}"
+                        data-notification-id="${escapeAttr(notif.id)}"
                       >
                         <div
                           class="absolute inset-0 bg-gradient-to-l from-red-500 to-rose-600 text-white px-5 flex items-center justify-between pointer-events-none select-none"
@@ -172,7 +173,7 @@ export function renderNotificationsModal(): string {
                         </div>
 
                         <div
-                          data-notification-id="${notif.id}"
+                          data-notification-id="${escapeAttr(notif.id)}"
                           class="notif-swipe-card no-active-scale relative w-full text-right p-3.5 rounded-[28px] border-2 flex items-start gap-2.5 touch-pan-y select-none ${
                             notif.read
                               ? 'bg-white border-brand-peachBorder/85 hover:border-brand-orange/50'
@@ -182,7 +183,7 @@ export function renderNotificationsModal(): string {
                           <div
                             role="button"
                             tabindex="0"
-                            data-open-notification-id="${notif.id}"
+                            data-open-notification-id="${escapeAttr(notif.id)}"
                             class="notification-open-area flex-1 min-w-0 flex items-start gap-3 cursor-pointer"
                           >
                             <span class="w-11 h-11 rounded-full border flex items-center justify-center text-base shrink-0 ${style.badgeClass}">
@@ -192,10 +193,10 @@ export function renderNotificationsModal(): string {
                             <div class="flex-1 min-w-0">
                               <div class="flex items-center justify-between gap-2">
                                 <h4 class="text-xs sm:text-sm font-black font-baloo text-brand-dark truncate m-0">
-                                  ${notif.title}
+                                  ${escapeHtml(notif.title)}
                                 </h4>
                                 <div class="flex items-center gap-1.5 shrink-0">
-                                  <span class="text-[10px] font-bold text-brand-subtleGray">${notif.timestampLabel}</span>
+                                  <span class="text-[10px] font-bold text-brand-subtleGray">${escapeHtml(notif.timestampLabel)}</span>
                                   ${
                                     !notif.read
                                       ? `<span class="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" title="غير مقروء"></span>`
@@ -204,14 +205,14 @@ export function renderNotificationsModal(): string {
                                 </div>
                               </div>
                               <p class="text-xs font-semibold text-brand-dark/85 mt-1 mb-0 leading-relaxed line-clamp-2">
-                                ${notif.body}
+                                ${escapeHtml(notif.body)}
                               </p>
                             </div>
                           </div>
 
                           <button
                             type="button"
-                            data-delete-notification-id="${notif.id}"
+                            data-delete-notification-id="${escapeAttr(notif.id)}"
                             aria-label="حذف الإشعار"
                             title="حذف الإشعار"
                             class="delete-notification-btn w-10 h-10 -my-1 -ml-1 rounded-full bg-brand-cream/90 hover:bg-red-50 border border-brand-peachBorder text-brand-subtleGray hover:text-red-600 flex items-center justify-center shrink-0 transition active:scale-90 cursor-pointer"

@@ -1,0 +1,268 @@
+name: Build & Publish Meow Signed Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'App release channel'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - testing
+      mandatory:
+        description: 'Require users to update to this APK'
+        required: false
+        default: false
+        type: boolean
+      release_notes:
+        description: 'Arabic release notes shown inside update prompt (defaults to version.json)'
+        required: false
+        default: ''
+        type: string
+      publish_github_release:
+        description: 'Publish GitHub Release and update apk-release.json on gh-pages'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-apk:
+    name: Build Signed Release APK & AAB
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Supabase and Release Signing Secrets
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for var_name in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!var_name:-}" ]; then
+              echo "::error::Missing required GitHub Secret: ${var_name}. Configure it in Repository Settings -> Secrets and variables -> Actions."
+              exit 1
+            fi
+          done
+
+          case "${VITE_SUPABASE_URL}" in
+            https://*) ;;
+            *)
+              echo "::error::VITE_SUPABASE_URL must use https:// for production release builds."
+              exit 1
+              ;;
+          esac
+
+          case "${VITE_SUPABASE_URL}" in
+            *your-project-id*)
+              echo "::error::VITE_SUPABASE_URL appears to be a placeholder value."
+              exit 1
+              ;;
+          esac
+
+          echo "All Supabase and Android release signing secrets validated."
+
+      - name: Read version metadata from version.json
+        id: meta
+        run: |
+          node -e '
+            const fs = require("fs");
+            const v = JSON.parse(fs.readFileSync("version.json", "utf8"));
+            const channel = "${{ inputs.channel }}" || v.channel || "production";
+            const out = process.env.GITHUB_OUTPUT;
+            fs.appendFileSync(out, `app_version=${v.appVersion}\n`);
+            fs.appendFileSync(out, `build_number=${v.buildNumber}\n`);
+            fs.appendFileSync(out, `min_native_version=${v.minNativeVersion || v.appVersion}\n`);
+            fs.appendFileSync(out, `channel=${channel}\n`);
+          '
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          accept-android-sdk-licenses: true
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Run quality gates
+        run: |
+          npm run typecheck
+          npm run lint:eslint
+          npm test
+
+      - name: Build production web bundle
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_APP_CHANNEL: ${{ steps.meta.outputs.channel }}
+          VITE_UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL || '' }}
+        run: |
+          npm run build
+          if grep -rnE "xrblocks|@dimforge/rapier|CatScene|SERVICE_ROLE_KEY|BEGIN PRIVATE KEY" dist; then
+            echo "::error::Forbidden dev/XR module or secret pattern detected in release dist/"
+            exit 1
+          fi
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Decode release keystore to temporary directory
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r ' | base64 --decode > "${{ runner.temp }}/meow-release.jks"
+          if [ ! -s "${{ runner.temp }}/meow-release.jks" ]; then
+            echo "::error::Decoded keystore file is empty. Check ANDROID_KEYSTORE_BASE64."
+            exit 1
+          fi
+
+      - name: Build signed Release APK and AAB
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/meow-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          MEOW_VERSION_CODE: ${{ steps.meta.outputs.build_number }}
+          MEOW_VERSION_NAME: ${{ steps.meta.outputs.app_version }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Clean up temporary release keystore
+        if: always()
+        run: |
+          rm -f "${{ runner.temp }}/meow-release.jks"
+
+      - name: Prepare release artifacts and checksums
+        id: pkg
+        run: |
+          mkdir -p release-out
+          APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+          AAB_SRC="android/app/build/outputs/bundle/release/app-release.aab"
+          APK_NAME="meow-v${{ steps.meta.outputs.app_version }}-b${{ steps.meta.outputs.build_number }}-release.apk"
+          AAB_NAME="meow-v${{ steps.meta.outputs.app_version }}-b${{ steps.meta.outputs.build_number }}-release.aab"
+
+          if [ ! -f "$APK_SRC" ]; then
+            echo "::error::Expected signed APK not found at $APK_SRC"
+            exit 1
+          fi
+          cp "$APK_SRC" "release-out/${APK_NAME}"
+          if [ -f "$AAB_SRC" ]; then
+            cp "$AAB_SRC" "release-out/${AAB_NAME}"
+          fi
+
+          (cd release-out && sha256sum * > SHA256SUMS.txt)
+          APK_SHA256=$(sha256sum "release-out/${APK_NAME}" | awk '{print $1}')
+
+          RELEASE_TAG="${{ github.ref_type == 'tag' && github.ref_name || format('v{0}-b{1}', steps.meta.outputs.app_version, steps.meta.outputs.build_number) }}"
+          {
+            echo "apk_name=${APK_NAME}"
+            echo "aab_name=${AAB_NAME}"
+            echo "apk_sha256=${APK_SHA256}"
+            echo "release_tag=${RELEASE_TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed APK and AAB workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meow-android-release-v${{ steps.meta.outputs.app_version }}-b${{ steps.meta.outputs.build_number }}
+          path: release-out/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_github_release == true)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pkg.outputs.release_tag }}
+          name: "Meow v${{ steps.meta.outputs.app_version }} (Build ${{ steps.meta.outputs.build_number }})"
+          draft: false
+          prerelease: ${{ steps.meta.outputs.channel == 'testing' }}
+          files: release-out/*
+
+      - name: Prepare apk-release.json metadata artifact
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_github_release == true)
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.app_version }}
+          BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
+          MIN_NATIVE_VERSION: ${{ steps.meta.outputs.min_native_version }}
+          APK_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.pkg.outputs.release_tag }}/${{ steps.pkg.outputs.apk_name }}
+          APK_SHA256: ${{ steps.pkg.outputs.apk_sha256 }}
+          CUSTOM_NOTES: ${{ inputs.release_notes }}
+          MANDATORY: ${{ inputs.mandatory == true && 'true' || 'false' }}
+        run: |
+          mkdir -p gh-pages-apk/updates
+          export PUBLISHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          node -e '
+            const fs = require("fs");
+            const v = JSON.parse(fs.readFileSync("version.json", "utf8"));
+            const manifest = {
+              latestVersion: process.env.APP_VERSION,
+              latestBuildNumber: Number(process.env.BUILD_NUMBER),
+              minSupportedVersion: process.env.MIN_NATIVE_VERSION,
+              apkUrl: process.env.APK_URL,
+              sha256: process.env.APK_SHA256,
+              releaseNotes: (process.env.CUSTOM_NOTES || "").trim() || v.releaseNotes || "",
+              mandatory: process.env.MANDATORY === "true",
+              publishedAt: process.env.PUBLISHED_AT
+            };
+            fs.writeFileSync("gh-pages-apk/updates/apk-release.json", JSON.stringify(manifest, null, 2) + "\n");
+          '
+
+      - name: Upload apk-release.json metadata artifact
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_github_release == true)
+        uses: actions/upload-artifact@v4
+        with:
+          name: meow-apk-release-manifest-v${{ steps.meta.outputs.app_version }}-b${{ steps.meta.outputs.build_number }}
+          path: gh-pages-apk/updates/apk-release.json
+          retention-days: 90
+
+      - name: Publish apk-release.json to external public GitHub Pages repo
+        if: (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_github_release == true)) && vars.OTA_PUBLISH_TARGET == 'external_github_pages' && vars.OTA_UPDATES_REPO != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.OTA_UPDATES_DEPLOY_TOKEN }}
+          external_repository: ${{ vars.OTA_UPDATES_REPO }}
+          publish_branch: gh-pages
+          publish_dir: ./gh-pages-apk
+          keep_files: true
+          commit_message: "chore(release): update apk-release.json for v${{ steps.meta.outputs.app_version }} (build ${{ steps.meta.outputs.build_number }})"
+
+      - name: Publish apk-release.json to same-repo gh-pages (only when explicitly enabled)
+        if: (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_github_release == true)) && vars.OTA_PUBLISH_TARGET == 'gh_pages'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages-apk
+          publish_branch: gh-pages
+          keep_files: true
+          commit_message: "chore(release): update apk-release.json for v${{ steps.meta.outputs.app_version }} (build ${{ steps.meta.outputs.build_number }})"

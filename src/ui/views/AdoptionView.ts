@@ -2,6 +2,7 @@ import { state } from '../../state.ts';
 import { getViewMode } from '../components/Header.ts';
 import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
 import { attachPullToRefresh, showMobileToast } from '../../utils/touchGestures.ts';
+import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
 
 export function renderAdoptionView(): string {
   const filters = state.getAdoptionFilters();
@@ -101,7 +102,7 @@ export function renderAdoptionView(): string {
           <input
             type="text"
             id="adoption-search-input"
-            value="${filters.breed || ''}"
+            value="${escapeAttr(filters.breed || '')}"
             placeholder="ابحث بالسلالة أو المدينة أو المحافظة..."
             class="w-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-2xl py-2 px-3 pr-8 text-xs sm:text-sm font-bold text-brand-dark dark:text-white placeholder-brand-subtleGray focus:outline-none focus:border-brand-orange shadow-sm font-baloo"
           />
@@ -129,7 +130,7 @@ export function renderAdoptionView(): string {
           ? `
             <div id="adoption-loading-indicator" class="bg-[#fff5ea] border border-[#e67e22]/40 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-xs font-black text-[#786555] font-baloo shadow-sm animate-fade-in">
               <span class="w-4 h-4 rounded-full border-2 border-[#e67e22] border-t-transparent animate-spin shrink-0"></span>
-              <span>${loadingState.label || 'جاري تحميل حالات التبني...'}</span>
+              <span>${escapeHtml(loadingState.label || 'جاري تحميل حالات التبني...')}</span>
             </div>
           `
           : ''
@@ -157,15 +158,17 @@ export function renderAdoptionView(): string {
                 const isSaved = state.isPetSaved(pet.id);
                 const groupMembers = isGroup && pet.groupMembers ? pet.groupMembers : [];
                 const groupCount = pet.groupCount || groupMembers.length || 2;
-                const primaryPhoto =
+                const primaryPhoto = sanitizeImageSrc(
                   isGroup && groupMembers[0]?.individualPhotos?.[0]
                     ? groupMembers[0].individualPhotos[0]
-                    : pet.photos[0];
+                    : pet.photos[0]
+                );
+                const safePetPhoto = sanitizeImageSrc(pet.photos[0]);
                 const memberThumbs = isGroup
                   ? groupMembers
                       .map((m) => ({
                         name: m.name,
-                        photo: m.individualPhotos?.[0] || '',
+                        photo: sanitizeImageSrc(m.individualPhotos?.[0] || ''),
                       }))
                       .filter((t) => Boolean(t.photo))
                       .slice(0, 4)
@@ -198,15 +201,15 @@ export function renderAdoptionView(): string {
                     return `
                       <article
                         class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
-                        data-pet-detail-id="${pet.id}"
-                        data-pet-type="${pet.species || 'cat'}"
+                        data-pet-detail-id="${escapeAttr(pet.id)}"
+                        data-pet-type="${escapeAttr(pet.species || 'cat')}"
                       >
                         <!-- Group Adoption Primary Image & Thumbnails Strip -->
                         <div class="relative w-full h-44 rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
                           <div class="absolute inset-0 overflow-hidden rounded-t-3xl">
                             <img
-                              src="${primaryPhoto}"
-                              alt="تبني جماعي: ${pet.name}"
+                              src="${escapeAttr(primaryPhoto)}"
+                              alt="${escapeAttr(`تبني جماعي: ${pet.name}`)}"
                               class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 pet-card-img"
                               loading="lazy"
                             />
@@ -219,7 +222,7 @@ export function renderAdoptionView(): string {
                               type="button"
                               aria-label="حفظ الأليف"
                               class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
-                              data-pet-save-id="${pet.id}"
+                              data-pet-save-id="${escapeAttr(pet.id)}"
                               title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                             >
                               <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
@@ -257,8 +260,8 @@ export function renderAdoptionView(): string {
                                       .map(
                                         (t) => `
                                           <img
-                                            src="${t.photo}"
-                                            alt="${t.name}"
+                                            src="${escapeAttr(t.photo)}"
+                                            alt="${escapeAttr(t.name)}"
                                             class="w-7 h-7 rounded-lg object-cover border border-white/90 shadow-sm shrink-0"
                                           />
                                         `
@@ -282,17 +285,17 @@ export function renderAdoptionView(): string {
                         <!-- Group Card Info Summary (Distinct Members + Single Shared Location) -->
                         <div class="p-3 text-center flex flex-col justify-center items-center gap-0.5">
                           <h2 class="text-base sm:text-lg font-black text-brand-dark dark:text-white tracking-tight leading-tight font-baloo max-w-full truncate">
-                            ${pet.name}
+                            ${escapeHtml(pet.name)}
                           </h2>
                           <p class="text-[11px] font-extrabold text-brand-subtleGray dark:text-[#D1C7BD] mt-0.5 line-clamp-2 leading-snug">
-                            ${memberSummaryText}
+                            ${escapeHtml(memberSummaryText)}
                           </p>
                           ${
                             locationLabel
                               ? `
                                 <p class="text-[10px] font-bold text-brand-orange flex items-center justify-center gap-1 max-w-full truncate m-0">
                                   <i class="fa-solid fa-location-dot text-[9px] shrink-0"></i>
-                                  <span class="truncate">${locationLabel}</span>
+                                  <span class="truncate">${escapeHtml(locationLabel)}</span>
                                 </p>
                               `
                               : ''
@@ -305,15 +308,15 @@ export function renderAdoptionView(): string {
                   return `
                     <article
                       class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
-                      data-pet-detail-id="${pet.id}"
-                      data-pet-type="${pet.species || 'cat'}"
+                      data-pet-detail-id="${escapeAttr(pet.id)}"
+                      data-pet-type="${escapeAttr(pet.species || 'cat')}"
                     >
                       <!-- Pet Image Container with Heart Save Button + 3-Dots Menu & Status Badge -->
                       <div class="relative w-full h-44 rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
                         <div class="absolute inset-0 overflow-hidden rounded-t-3xl">
                           <img
-                            src="${pet.photos[0]}"
-                            alt="صورة ${pet.name}"
+                            src="${escapeAttr(safePetPhoto)}"
+                            alt="${escapeAttr(`صورة ${pet.name}`)}"
                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 pet-card-img"
                             loading="lazy"
                           />
@@ -325,7 +328,7 @@ export function renderAdoptionView(): string {
                             type="button"
                             aria-label="حفظ الأليف"
                             class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
-                            data-pet-save-id="${pet.id}"
+                            data-pet-save-id="${escapeAttr(pet.id)}"
                             title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                           >
                             <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
@@ -356,10 +359,10 @@ export function renderAdoptionView(): string {
                       <!-- Pet Info Content matching original Stitch design -->
                       <div class="p-3 text-center flex flex-col justify-center items-center">
                         <h2 class="text-lg font-black text-brand-dark dark:text-white tracking-tight leading-tight font-baloo max-w-full truncate">
-                          ${pet.name}, ${ageDisplay}
+                          ${escapeHtml(pet.name)}, ${escapeHtml(String(ageDisplay))}
                         </h2>
                         <p class="text-xs uppercase font-extrabold text-brand-subtleGray dark:text-[#A89F91] tracking-wider mt-0.5 max-w-full truncate">
-                          ${pet.breed}
+                          ${escapeHtml(pet.breed)}
                         </p>
                       </div>
                     </article>
@@ -371,14 +374,14 @@ export function renderAdoptionView(): string {
                   return `
                     <article
                       class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
-                      data-pet-detail-id="${pet.id}"
-                      data-pet-type="${pet.species || 'cat'}"
+                      data-pet-detail-id="${escapeAttr(pet.id)}"
+                      data-pet-type="${escapeAttr(pet.species || 'cat')}"
                     >
                       <div class="relative w-full aspect-[4/4.3] sm:aspect-[4/4] rounded-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
                         <div class="absolute inset-0 overflow-hidden rounded-3xl">
                           <img
-                            src="${primaryPhoto}"
-                            alt="تبني جماعي: ${pet.name}"
+                            src="${escapeAttr(primaryPhoto)}"
+                            alt="${escapeAttr(`تبني جماعي: ${pet.name}`)}"
                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                             loading="lazy"
                           />
@@ -391,7 +394,7 @@ export function renderAdoptionView(): string {
                             type="button"
                             aria-label="حفظ الأليف"
                             class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
-                            data-pet-save-id="${pet.id}"
+                            data-pet-save-id="${escapeAttr(pet.id)}"
                             title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                           >
                             <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
@@ -434,7 +437,7 @@ export function renderAdoptionView(): string {
                                 ? `
                                   <span class="text-xs font-bold text-white/95 flex items-center gap-1">
                                     <i class="fa-solid fa-location-dot text-brand-orange text-[11px]"></i>
-                                    <span>${locationLabel}</span>
+                                    <span>${escapeHtml(locationLabel)}</span>
                                   </span>
                                 `
                                 : ''
@@ -442,7 +445,7 @@ export function renderAdoptionView(): string {
                           </div>
 
                           <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight font-baloo drop-shadow-md m-0">
-                            ${pet.name}
+                            ${escapeHtml(pet.name)}
                           </h2>
 
                           <!-- Individual Animals Mini Cards (Fixed single-row horizontal layout matching تيمور وبندق) -->
@@ -458,19 +461,20 @@ export function renderAdoptionView(): string {
                                           : m.ageMonths > 0
                                           ? `${m.ageMonths} شهر`
                                           : '';
+                                      const memberPhoto = sanitizeImageSrc(m.individualPhotos?.[0] || '') || primaryPhoto;
                                       return `
                                         <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-2xl bg-black/55 backdrop-blur-md border border-white/25 shrink-0 max-w-[190px]">
                                           <img
-                                            src="${m.individualPhotos?.[0] || primaryPhoto}"
-                                            alt="${m.name}"
+                                            src="${escapeAttr(memberPhoto)}"
+                                            alt="${escapeAttr(m.name)}"
                                             class="w-7 h-7 rounded-xl object-cover border border-white/80 shrink-0"
                                           />
                                           <div class="min-w-0 text-right">
                                             <div class="text-xs font-black text-white font-baloo leading-tight truncate">
-                                              ${m.name} (${m.gender === 'male' ? 'ذكر' : 'أنثى'})
+                                              ${escapeHtml(m.name)} (${m.gender === 'male' ? 'ذكر' : 'أنثى'})
                                             </div>
                                             <div class="text-[10px] font-bold text-white/85 truncate">
-                                              ${m.breed}${mAge ? ` • ${mAge}` : ''}
+                                              ${escapeHtml(m.breed)}${mAge ? ` • ${escapeHtml(mAge)}` : ''}
                                             </div>
                                           </div>
                                         </div>
@@ -491,15 +495,15 @@ export function renderAdoptionView(): string {
                 return `
                   <article
                     class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
-                    data-pet-detail-id="${pet.id}"
-                    data-pet-type="${pet.species || 'cat'}"
+                    data-pet-detail-id="${escapeAttr(pet.id)}"
+                    data-pet-type="${escapeAttr(pet.species || 'cat')}"
                   >
                     <!-- Photo filling card with Gradient & Superimposed Info -->
                     <div class="relative w-full aspect-[4/4.3] sm:aspect-[4/4] rounded-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
                       <div class="absolute inset-0 overflow-hidden rounded-3xl">
                         <img
-                          src="${pet.photos[0]}"
-                          alt="صورة ${pet.name}"
+                          src="${escapeAttr(safePetPhoto)}"
+                          alt="${escapeAttr(`صورة ${pet.name}`)}"
                           class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           loading="lazy"
                         />
@@ -514,7 +518,7 @@ export function renderAdoptionView(): string {
                           type="button"
                           aria-label="حفظ الأليف"
                           class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
-                          data-pet-save-id="${pet.id}"
+                          data-pet-save-id="${escapeAttr(pet.id)}"
                           title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                         >
                           <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
@@ -544,12 +548,12 @@ export function renderAdoptionView(): string {
                       <!-- Basic Info Overlaid on Image with Gradient: Name, Age, Location, Breed & Traits -->
                       <div class="absolute bottom-0 inset-x-0 p-4 sm:p-5 text-right flex flex-col gap-1.5 z-20 text-white">
                         <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight font-baloo drop-shadow-md m-0">
-                          ${pet.name}, ${ageDisplay}
+                          ${escapeHtml(pet.name)}, ${escapeHtml(String(ageDisplay))}
                         </h2>
                         <p class="text-xs sm:text-sm font-bold text-white/95 drop-shadow-sm m-0 font-baloo flex items-center gap-1.5">
-                          <span>${pet.area && pet.area !== pet.city ? `${pet.area}، ${pet.city}` : pet.city || pet.governorate}</span>
+                          <span>${pet.area && pet.area !== pet.city ? `${escapeHtml(pet.area)}، ${escapeHtml(pet.city)}` : escapeHtml(pet.city || pet.governorate)}</span>
                           <span class="opacity-70">•</span>
-                          <span>${pet.breed}</span>
+                          <span>${escapeHtml(pet.breed)}</span>
                         </p>
 
                         <!-- Traits Chips on Photo -->
@@ -559,7 +563,7 @@ export function renderAdoptionView(): string {
                             .map(
                               (trait) => `
                               <span class="px-3 py-1 rounded-xl bg-white/25 backdrop-blur-md border border-white/30 text-white text-xs font-bold shadow-sm font-baloo">
-                                ${trait}
+                                ${escapeHtml(trait)}
                               </span>
                             `
                             )

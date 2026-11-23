@@ -1,6 +1,7 @@
 import { state } from '../../state.ts';
 import { Pet } from '../../types.ts';
 import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
+import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
 
 export function renderSavedPetsView(): string {
   const isVisible = state.isSavedPetsVisible();
@@ -176,20 +177,21 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
           const members = isGroup ? pet.groupMembers || [] : [];
           const groupCount = pet.groupCount || members.length || 2;
           const memberThumbs = members
-            .map((m) => m.individualPhotos?.[0] || '')
+            .map((m) => sanitizeImageSrc(m.individualPhotos?.[0] || ''))
             .filter(Boolean);
+          const safePetPhoto = sanitizeImageSrc(pet.photos[0]);
 
           if (isGroup) {
             return `
               <div
                 class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card min-w-0"
-                data-pet-detail-id="${pet.id}"
+                data-pet-detail-id="${escapeAttr(pet.id)}"
               >
                 <div class="relative w-full aspect-[4/4.2] rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#241E1A]">
                   <div class="absolute inset-0 overflow-hidden rounded-t-3xl">
                     <img
-                      src="${memberThumbs[0] || pet.photos[0]}"
-                      alt="${pet.name}"
+                      src="${escapeAttr(memberThumbs[0] || safePetPhoto)}"
+                      alt="${escapeAttr(pet.name)}"
                       class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
                     />
@@ -201,7 +203,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                       type="button"
                       aria-label="إزالة من المحفوظات"
                       class="remove-saved-pet-btn w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
-                      data-pet-save-id="${pet.id}"
+                      data-pet-save-id="${escapeAttr(pet.id)}"
                       title="إزالة من المحفوظات"
                     >
                       <i class="fa-solid fa-heart text-sm"></i>
@@ -233,7 +235,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                         .slice(0, 4)
                         .map(
                           (src) =>
-                            `<img src="${src}" alt="${pet.name}" class="w-6 h-6 rounded-full object-cover border border-white shadow-sm" />`
+                            `<img src="${escapeAttr(src)}" alt="${escapeAttr(pet.name)}" class="w-6 h-6 rounded-full object-cover border border-white shadow-sm" />`
                         )
                         .join('')}
                     </div>
@@ -248,13 +250,13 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                 <div class="p-3 text-right flex flex-col justify-between flex-1 min-w-0">
                   <div>
                     <h4 class="text-sm sm:text-base font-black text-brand-dark dark:text-white truncate font-baloo leading-tight">
-                      ${pet.name}
+                      ${escapeHtml(pet.name)}
                     </h4>
                     <p class="text-[11px] font-bold text-brand-orange truncate mt-0.5">
-                      ${members.length > 0 ? members.map((m) => m.name).join(' • ') : pet.breed}
+                      ${escapeHtml(members.length > 0 ? members.map((m) => m.name).join(' • ') : pet.breed)}
                     </p>
                     <p class="text-[10px] font-semibold text-brand-subtleGray truncate mt-0.5">
-                      📍 ${pet.area}، ${pet.city}
+                      📍 ${escapeHtml(pet.area)}، ${escapeHtml(pet.city)}
                     </p>
                   </div>
                 </div>
@@ -265,14 +267,14 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
           return `
             <div
               class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card min-w-0"
-              data-pet-detail-id="${pet.id}"
+              data-pet-detail-id="${escapeAttr(pet.id)}"
             >
               <!-- Pet Photo & Save Heart Button -->
               <div class="relative w-full aspect-[4/4.2] rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#241E1A]">
                 <div class="absolute inset-0 overflow-hidden rounded-t-3xl">
                   <img
-                    src="${pet.photos[0]}"
-                    alt="${pet.name}"
+                    src="${escapeAttr(safePetPhoto)}"
+                    alt="${escapeAttr(pet.name)}"
                     class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
@@ -284,7 +286,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                     type="button"
                     aria-label="إزالة من المحفوظات"
                     class="remove-saved-pet-btn w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
-                    data-pet-save-id="${pet.id}"
+                    data-pet-save-id="${escapeAttr(pet.id)}"
                     title="إزالة من المحفوظات"
                   >
                     <i class="fa-solid fa-heart text-sm"></i>
@@ -316,13 +318,13 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
               <div class="p-3 text-right flex flex-col justify-between flex-1 min-w-0">
                 <div>
                   <h4 class="text-base sm:text-lg font-black text-brand-dark dark:text-white truncate font-baloo leading-tight">
-                    ${pet.name}, ${pet.ageYears}
+                    ${escapeHtml(pet.name)}, ${pet.ageYears}
                   </h4>
                   <p class="text-xs font-bold text-brand-subtleGray dark:text-[#A89F91] truncate mt-0.5">
-                    ${pet.breed}
+                    ${escapeHtml(pet.breed)}
                   </p>
                   <p class="text-[11px] font-semibold text-brand-orange truncate mt-0.5">
-                    ${pet.area}، ${pet.city}
+                    ${escapeHtml(pet.area)}، ${escapeHtml(pet.city)}
                   </p>
                 </div>
               </div>

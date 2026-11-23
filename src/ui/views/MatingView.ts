@@ -2,6 +2,7 @@ import { state } from '../../state.ts';
 import { getViewMode } from '../components/Header.ts';
 import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
 import { attachPullToRefresh, showMobileToast } from '../../utils/touchGestures.ts';
+import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
 
 export function renderMatingView(): string {
   const filters = state.getMatingFilters();
@@ -55,7 +56,7 @@ export function renderMatingView(): string {
                 class="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#fff5ea] border border-[#e67e22] text-[#e67e22] text-xs font-black font-baloo cursor-pointer hover:bg-[#e67e22] hover:text-white transition"
               >
                 <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
-                <span>ترشيح ${refPet.name}</span>
+                <span>ترشيح ${escapeHtml(refPet.name)}</span>
                 <i class="fa-solid fa-xmark text-[11px] mr-0.5"></i>
               </button>
             `
@@ -69,7 +70,7 @@ export function renderMatingView(): string {
             <div class="bg-[#fff5ea] border border-[#e67e22]/50 rounded-2xl px-4 py-2.5 text-right flex items-center justify-between gap-2 font-baloo">
               <div class="min-w-0">
                 <p class="text-xs sm:text-sm font-black text-[#1a1612] m-0">
-                  الترشيح المناسب لـ «${refPet.name}» (${refPet.gender === 'male' ? 'إناث متوافقة' : 'ذكور متوافقة'})
+                  الترشيح المناسب لـ «${escapeHtml(refPet.name)}» (${refPet.gender === 'male' ? 'إناث متوافقة' : 'ذكور متوافقة'})
                 </p>
                 <p class="text-[11px] font-bold text-[#786555] m-0">
                   مرتبة من الأكثر توافقاً حسب الموقع، السلالة، اللون، العمر والحالة الصحية
@@ -96,7 +97,7 @@ export function renderMatingView(): string {
           ? `
             <div id="mating-loading-indicator" class="bg-[#fff5ea] border border-[#e67e22]/40 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-xs font-black text-[#786555] font-baloo shadow-sm animate-fade-in">
               <span class="w-4 h-4 rounded-full border-2 border-[#e67e22] border-t-transparent animate-spin shrink-0"></span>
-              <span>${loadingState.label || 'جاري تحميل النتائج...'}</span>
+              <span>${escapeHtml(loadingState.label || 'جاري تحميل النتائج...')}</span>
             </div>
           `
           : ''
@@ -120,21 +121,22 @@ export function renderMatingView(): string {
               .map((pet) => {
                 const isSaved = state.isPetSaved(pet.id);
                 const ageDisplay = pet.ageYears > 0 ? pet.ageYears : `${pet.ageMonths}ش`;
+                const safePhoto = sanitizeImageSrc(pet.photos[0]);
 
                 if (viewMode === 'grid') {
                   return `
                     <article
                       class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
-                      data-pet-detail-id="${pet.id}"
-                      data-pet-type="${pet.species}"
+                      data-pet-detail-id="${escapeAttr(pet.id)}"
+                      data-pet-type="${escapeAttr(pet.species)}"
                     >
                       <!-- Photo with 'للزواج' Badge & Heart Save Button + 3-Dots Menu -->
                       <div class="relative w-full h-44 rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
                         <div class="relative w-full h-full overflow-hidden rounded-t-3xl">
                           <img
-                            alt="${pet.name}"
+                            alt="${escapeAttr(pet.name)}"
                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                            src="${pet.photos[0]}"
+                            src="${escapeAttr(safePhoto)}"
                             loading="lazy"
                           />
                         </div>
@@ -145,7 +147,7 @@ export function renderMatingView(): string {
                             type="button"
                             aria-label="حفظ الأليف"
                             class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
-                            data-pet-save-id="${pet.id}"
+                            data-pet-save-id="${escapeAttr(pet.id)}"
                             title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                           >
                             <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
@@ -185,10 +187,10 @@ export function renderMatingView(): string {
                       <!-- Basic Info: Centered Name, Age & Breed matching original Stitch design -->
                       <div class="p-3 text-center flex flex-col justify-center items-center">
                         <h2 class="text-lg font-black text-brand-dark dark:text-white tracking-tight leading-tight font-baloo max-w-full truncate">
-                          ${pet.name}, ${ageDisplay}
+                          ${escapeHtml(pet.name)}, ${escapeHtml(String(ageDisplay))}
                         </h2>
                         <p class="text-xs uppercase font-extrabold text-brand-subtleGray dark:text-[#A89F91] tracking-wider mt-0.5 max-w-full truncate">
-                          ${pet.breed}
+                          ${escapeHtml(pet.breed)}
                         </p>
                       </div>
                     </article>
@@ -199,16 +201,16 @@ export function renderMatingView(): string {
                 return `
                   <article
                     class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
-                    data-pet-detail-id="${pet.id}"
-                    data-pet-type="${pet.species}"
+                    data-pet-detail-id="${escapeAttr(pet.id)}"
+                    data-pet-type="${escapeAttr(pet.species)}"
                   >
                     <!-- Photo filling card with Gradient & Superimposed Info -->
                     <div class="relative w-full aspect-[4/4.3] sm:aspect-[4/4] rounded-3xl bg-brand-peachBorder/30 dark:bg-[#342A24]">
                       <div class="relative w-full h-full overflow-hidden rounded-3xl">
                         <img
-                          alt="${pet.name}"
+                          alt="${escapeAttr(pet.name)}"
                           class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          src="${pet.photos[0]}"
+                          src="${escapeAttr(safePhoto)}"
                           loading="lazy"
                         />
 
@@ -222,7 +224,7 @@ export function renderMatingView(): string {
                           type="button"
                           aria-label="حفظ الأليف"
                           class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
-                          data-pet-save-id="${pet.id}"
+                          data-pet-save-id="${escapeAttr(pet.id)}"
                           title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                         >
                           <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
@@ -259,12 +261,12 @@ export function renderMatingView(): string {
                       <!-- Basic Info Overlaid on Image with Gradient: Name, Age, Location, Breed & Traits -->
                       <div class="absolute bottom-0 inset-x-0 p-4 sm:p-5 text-right flex flex-col gap-1.5 z-20 text-white">
                         <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight font-baloo drop-shadow-md m-0">
-                          ${pet.name}, ${ageDisplay}
+                          ${escapeHtml(pet.name)}, ${escapeHtml(String(ageDisplay))}
                         </h2>
                         <p class="text-xs sm:text-sm font-bold text-white/95 drop-shadow-sm m-0 font-baloo flex items-center gap-1.5">
-                          <span>${pet.area && pet.area !== pet.city ? `${pet.area}، ${pet.city}` : pet.city || pet.governorate}</span>
+                          <span>${pet.area && pet.area !== pet.city ? `${escapeHtml(pet.area)}، ${escapeHtml(pet.city)}` : escapeHtml(pet.city || pet.governorate)}</span>
                           <span class="opacity-70">•</span>
-                          <span>${pet.breed}</span>
+                          <span>${escapeHtml(pet.breed)}</span>
                         </p>
 
                         <!-- Traits Chips on Photo -->
@@ -274,7 +276,7 @@ export function renderMatingView(): string {
                             .map(
                               (trait) => `
                               <span class="px-3 py-1 rounded-xl bg-white/25 backdrop-blur-md border border-white/30 text-white text-xs font-bold shadow-sm font-baloo">
-                                ${trait}
+                                ${escapeHtml(trait)}
                               </span>
                             `
                             )

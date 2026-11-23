@@ -7,6 +7,7 @@ import {
   formatPetLocation,
   formatVaccinationStatus as formatVaccination,
 } from '../../utils/petFormatters.ts';
+import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
 import { attachHorizontalCarouselSwipe } from '../../utils/touchGestures.ts';
 
 let activePhotoIndex = 0;
@@ -144,14 +145,14 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
         <${params.isGroupMemberCard ? 'h3' : 'h1'} class="${
           params.isGroupMemberCard ? 'text-2xl sm:text-3xl' : 'text-3xl sm:text-4xl'
         } font-black font-baloo text-brand-dark leading-tight m-0">
-          ${params.name}${titleSuffix}
+          ${escapeHtml(params.name)}${escapeHtml(titleSuffix)}
         </${params.isGroupMemberCard ? 'h3' : 'h1'}>
         ${
           params.locationText
             ? `
               <p class="text-xs sm:text-sm font-bold text-brand-subtleGray flex items-center gap-1.5 mt-1.5 m-0">
                 <i class="fa-solid fa-location-dot text-brand-orange text-sm"></i>
-                <span>${params.locationText}</span>
+                <span>${escapeHtml(params.locationText)}</span>
               </p>
             `
             : ''
@@ -170,11 +171,11 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
     <div class="bg-white/90 border border-brand-peachBorder/90 rounded-[34px] p-5 sm:p-6 shadow-sm space-y-3.5 text-right">
       <div class="flex items-center justify-between gap-2">
         <h3 class="text-base sm:text-lg font-black font-baloo text-brand-dark flex items-center gap-2 m-0">
-          <span>${params.aboutHeading}</span>
+          <span>${escapeHtml(params.aboutHeading)}</span>
           <span class="text-brand-orange text-lg">🐾</span>
         </h3>
         <span class="px-4 py-1.5 rounded-full text-xs sm:text-sm font-black shadow-sm font-baloo shrink-0 ${params.statusBadgeClass}">
-          ${params.statusBadgeLabel}
+          ${escapeHtml(params.statusBadgeLabel)}
         </span>
       </div>
 
@@ -182,7 +183,7 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
         hasHealthNotes
           ? `
             <p class="text-sm sm:text-base font-semibold text-brand-dark/90 leading-relaxed m-0">
-              ${params.healthNotes!.trim()}
+              ${escapeHtml(params.healthNotes!.trim())}
             </p>
           `
           : ''
@@ -196,7 +197,7 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
                 .map(
                   (trait) => `
                     <span class="px-4 py-2 rounded-full bg-brand-cream/85 border border-brand-peachBorder/75 text-xs sm:text-sm font-bold text-brand-dark shadow-sm">
-                      ${trait}
+                      ${escapeHtml(trait)}
                     </span>
                   `
                 )
@@ -236,7 +237,7 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
                 <span class="text-xs sm:text-sm font-bold text-brand-subtleGray">العمر</span>
               </div>
               <span class="text-base sm:text-lg font-black font-baloo text-brand-dark mt-0.5 leading-snug">
-                ${fullAgeText}
+                ${escapeHtml(fullAgeText)}
               </span>
             </div>
           `
@@ -268,7 +269,7 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
                 <span class="text-xs sm:text-sm font-bold text-brand-subtleGray">السلالة</span>
               </div>
               <span class="text-base sm:text-lg font-black font-baloo text-brand-dark mt-0.5 leading-snug">
-                ${params.breed.trim()}
+                ${escapeHtml(params.breed.trim())}
               </span>
             </div>
           `
@@ -287,7 +288,7 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
                 <span class="text-xs sm:text-sm font-bold text-brand-subtleGray">سلالة هجينة</span>
               </div>
               <span class="text-base sm:text-lg font-black font-baloo text-brand-dark mt-0.5 leading-snug">
-                ${hybridBreed}
+                ${escapeHtml(hybridBreed)}
               </span>
             </div>
           `
@@ -306,7 +307,7 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
                 <span class="text-xs sm:text-sm font-bold text-brand-subtleGray">اللون</span>
               </div>
               <span class="text-base sm:text-lg font-black font-baloo text-brand-dark mt-0.5 leading-snug">
-                ${colorText}
+                ${escapeHtml(colorText)}
               </span>
             </div>
           `
@@ -332,25 +333,25 @@ function renderGroupMemberIndividualCard(
   const extraHtml = pet.adoptionReason && pet.adoptionReason.trim()
     ? `
       <div class="pt-2.5 border-t border-brand-peachBorder/50 space-y-1 text-xs sm:text-sm font-bold text-[#5d4b3d]">
-        <div>ضمن مجموعة: ${pet.name} • ${pet.mustAdoptTogether ? 'يُشترط التبني معاً' : 'متاح منفرداً أو معاً'}</div>
-        <div>سبب العرض للتبني: ${pet.adoptionReason.trim()}</div>
+        <div>ضمن مجموعة: ${escapeHtml(pet.name)} • ${pet.mustAdoptTogether ? 'يُشترط التبني معاً' : 'متاح منفرداً أو معاً'}</div>
+        <div>سبب العرض للتبني: ${escapeHtml(pet.adoptionReason.trim())}</div>
       </div>
     `
     : `
       <div class="pt-2.5 border-t border-brand-peachBorder/50 text-xs sm:text-sm font-bold text-[#5d4b3d]">
-        ضمن مجموعة: ${pet.name} • ${pet.mustAdoptTogether ? 'يُشترط التبني معاً' : 'متاح منفرداً أو معاً'}
+        ضمن مجموعة: ${escapeHtml(pet.name)} • ${pet.mustAdoptTogether ? 'يُشترط التبني معاً' : 'متاح منفرداً أو معاً'}
       </div>
     `;
 
   return `
     <article
-      data-member-section-id="${member.petId}"
+      data-member-section-id="${escapeAttr(member.petId)}"
       class="bg-white/60 border-2 border-brand-peachBorder/90 rounded-[36px] overflow-hidden shadow-card flex flex-col"
     >
       <!-- Member's Own Dedicated Photo Carousel (Locked 4/4.3 aspect ratio + light bottom black gradient) -->
       <div
         class="relative w-full aspect-[4/4.3] bg-[#f3ebdd] overflow-hidden select-none touch-pan-y"
-        data-member-gallery="${member.petId}"
+        data-member-gallery="${escapeAttr(member.petId)}"
       >
         ${
           photos.length > 0
@@ -358,7 +359,7 @@ function renderGroupMemberIndividualCard(
               <div
                 class="member-gallery-track absolute inset-0 flex transition-transform duration-300 ease-out will-change-transform"
                 dir="ltr"
-                data-member-track="${member.petId}"
+                data-member-track="${escapeAttr(member.petId)}"
                 style="transform: translate3d(-${currentIdx * 100}%, 0, 0);"
               >
                 ${photos
@@ -366,8 +367,8 @@ function renderGroupMemberIndividualCard(
                     (url, pIdx) => `
                       <div class="w-full h-full shrink-0 bg-[#f3ebdd]">
                         <img
-                          src="${url}"
-                          alt="${member.name} - صورة ${pIdx + 1}"
+                          src="${escapeAttr(sanitizeImageSrc(url))}"
+                          alt="${escapeAttr(`${member.name} - صورة ${pIdx + 1}`)}"
                           class="w-full h-full object-cover pointer-events-none select-none"
                           draggable="false"
                         />
@@ -389,7 +390,7 @@ function renderGroupMemberIndividualCard(
 
         <!-- Top-Right Order & Status Badge -->
         <div class="absolute top-3 right-3 bg-brand-orange/95 backdrop-blur-sm text-white px-3.5 py-1.5 rounded-full text-xs font-black font-baloo shadow-sm z-10 pointer-events-none">
-          ${member.name} • ${index + 1} من ${total}
+          ${escapeHtml(member.name)} • ${index + 1} من ${total}
         </div>
 
         <!-- Top-Left Independent Save Heart + 3-Dots Menu -->
@@ -397,7 +398,7 @@ function renderGroupMemberIndividualCard(
           <button
             type="button"
             class="member-card-save-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
-            data-pet-save-id="${pet.id}"
+            data-pet-save-id="${escapeAttr(pet.id)}"
             aria-label="حفظ الأليف"
             title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
           >
@@ -425,7 +426,7 @@ function renderGroupMemberIndividualCard(
             ? `
               <div
                 class="member-gallery-counter absolute bottom-4 left-4 px-3 py-1 rounded-full bg-black/45 backdrop-blur-sm text-white text-xs font-bold z-10 pointer-events-none"
-                data-member-counter="${member.petId}"
+                data-member-counter="${escapeAttr(member.petId)}"
                 dir="ltr"
               >
                 ${currentIdx + 1} / ${photos.length}
@@ -437,9 +438,9 @@ function renderGroupMemberIndividualCard(
                     (_, pIdx) => `
                       <button
                         type="button"
-                        data-member-dot="${member.petId}"
+                        data-member-dot="${escapeAttr(member.petId)}"
                         data-member-dot-index="${pIdx}"
-                        aria-label="عرض صورة ${pIdx + 1} لـ ${member.name}"
+                        aria-label="${escapeAttr(`عرض صورة ${pIdx + 1} لـ ${member.name}`)}"
                         class="member-gallery-dot h-2 rounded-full transition-all duration-300 cursor-pointer pointer-events-auto ${
                           currentIdx === pIdx ? 'w-5 bg-brand-orange shadow-sm' : 'w-2 bg-white/80 hover:bg-white'
                         }"
@@ -451,7 +452,7 @@ function renderGroupMemberIndividualCard(
 
               <button
                 type="button"
-                data-member-prev="${member.petId}"
+                data-member-prev="${escapeAttr(member.petId)}"
                 aria-label="الصورة السابقة"
                 class="member-gallery-prev absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/45 backdrop-blur-md text-white flex items-center justify-center hover:bg-brand-orange transition-all cursor-pointer shadow-md active:scale-90 z-10"
               >
@@ -459,7 +460,7 @@ function renderGroupMemberIndividualCard(
               </button>
               <button
                 type="button"
-                data-member-next="${member.petId}"
+                data-member-next="${escapeAttr(member.petId)}"
                 aria-label="الصورة التالية"
                 class="member-gallery-next absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/45 backdrop-blur-md text-white flex items-center justify-center hover:bg-brand-orange transition-all cursor-pointer shadow-md active:scale-90 z-10"
               >
@@ -496,22 +497,22 @@ function renderGroupMemberIndividualCard(
         <div class="flex items-center gap-2.5 pt-1">
           <button
             type="button"
-            data-group-member-nav="${member.petId}"
+            data-group-member-nav="${escapeAttr(member.petId)}"
             class="group-member-nav-btn flex-1 h-12 px-4 rounded-full bg-white border-2 border-brand-peachBorder text-brand-dark hover:border-brand-orange hover:text-brand-orange font-black text-xs sm:text-sm transition-all cursor-pointer active:scale-95 font-baloo flex items-center justify-center gap-2 shadow-sm"
           >
             <i class="fa-solid fa-id-card text-xs text-brand-orange"></i>
-            <span>عرض ملف ${member.name}</span>
+            <span>عرض ملف ${escapeHtml(member.name)}</span>
           </button>
           ${
             !isUserPet && !pet.mustAdoptTogether
               ? `
                 <button
                   type="button"
-                  data-member-request-id="${member.petId}"
+                  data-member-request-id="${escapeAttr(member.petId)}"
                   class="member-request-adopt-btn flex-1 h-12 px-4 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white font-black text-xs sm:text-sm transition-all cursor-pointer active:scale-95 font-baloo flex items-center justify-center gap-2 shadow-soft"
                 >
                   <i class="fa-solid fa-house-heart text-xs"></i>
-                  <span>طلب تبني ${member.name}</span>
+                  <span>طلب تبني ${escapeHtml(member.name)}</span>
                 </button>
               `
               : ''
@@ -620,7 +621,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
         <div class="flex items-center gap-2 pointer-events-auto">
           <button
             id="detail-save-pet-btn"
-            data-pet-save-id="${pet.id}"
+            data-pet-save-id="${escapeAttr(pet.id)}"
             class="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-95 cursor-pointer shadow-md"
             aria-label="حفظ الأليف"
             type="button"
@@ -667,8 +668,8 @@ export function renderPetDetailModal(pet: Pet | null): string {
                       (item, idx) => `
                         <div class="w-full h-full shrink-0 bg-[#f3ebdd]">
                           <img
-                            src="${item.url}"
-                            alt="${item.label || `${pet.name} - صورة ${idx + 1}`}"
+                            src="${escapeAttr(sanitizeImageSrc(item.url))}"
+                            alt="${escapeAttr(item.label || `${pet.name} - صورة ${idx + 1}`)}"
                             class="w-full h-full object-cover pointer-events-none select-none"
                             draggable="false"
                           />
@@ -698,7 +699,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                   }"
                   style="${activeCaption ? '' : 'display: none;'}"
                 >
-                  ${activeCaption}
+                  ${escapeHtml(activeCaption)}
                 </div>
               `
               : ''
@@ -790,7 +791,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                       return `
                         <button
                           type="button"
-                          data-group-member-nav="${member.petId}"
+                          data-group-member-nav="${escapeAttr(member.petId)}"
                           class="group-member-nav-btn h-11 pl-4 pr-1.5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer shrink-0 font-baloo flex items-center gap-2 ${
                             isSelected
                               ? 'bg-brand-orange text-white shadow-soft'
@@ -798,11 +799,11 @@ export function renderPetDetailModal(pet: Pet | null): string {
                           }"
                         >
                           <img
-                            src="${member.individualPhotos?.[0] || pet.photos[0] || ''}"
-                            alt="${member.name}"
+                            src="${escapeAttr(sanitizeImageSrc(member.individualPhotos?.[0] || pet.photos[0] || ''))}"
+                            alt="${escapeAttr(member.name)}"
                             class="w-8 h-8 rounded-full object-cover border border-white/90 shrink-0"
                           />
-                          <span>${member.name}</span>
+                          <span>${escapeHtml(member.name)}</span>
                         </button>
                       `;
                     })
@@ -815,7 +816,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                       <!-- SELECTED SINGLE ANIMAL: Renders 100% Exact Individual Adoption Profile -->
                       <div class="flex items-center justify-between gap-2 px-4 py-2.5 rounded-full bg-white/90 border border-brand-peachBorder/80 text-xs font-black font-baloo">
                         <span class="text-brand-subtleGray truncate">
-                          ضمن إعلان: <strong class="text-brand-dark">${pet.name}</strong>
+                          ضمن إعلان: <strong class="text-brand-dark">${escapeHtml(pet.name)}</strong>
                         </span>
                         <span class="px-3 py-1 rounded-full shrink-0 ${
                           pet.mustAdoptTogether
@@ -847,7 +848,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                             <div>نوع التبني: تبني جماعي (${pet.mustAdoptTogether ? 'يُشترط تبني المجموعة كاملة معاً' : 'يمكن التبني منفرداً أو معاً'})</div>
                             ${
                               pet.adoptionReason && pet.adoptionReason.trim()
-                                ? `<div>سبب العرض للتبني: ${pet.adoptionReason.trim()}</div>`
+                                ? `<div>سبب العرض للتبني: ${escapeHtml(pet.adoptionReason.trim())}</div>`
                                 : ''
                             }
                           </div>
@@ -864,14 +865,14 @@ export function renderPetDetailModal(pet: Pet | null): string {
                               <span>تبني جماعي • ${groupCount} حيوانات</span>
                             </div>
                             <h1 class="text-2xl sm:text-3xl font-black font-baloo text-brand-dark leading-tight m-0">
-                              ${pet.name}
+                              ${escapeHtml(pet.name)}
                             </h1>
                             ${
                               locationText
                                 ? `
                                   <p class="text-xs sm:text-sm font-bold text-brand-subtleGray flex items-center gap-1.5 mt-1 m-0">
                                     <i class="fa-solid fa-location-dot text-brand-orange text-sm"></i>
-                                    <span>${locationText}</span>
+                                    <span>${escapeHtml(locationText)}</span>
                                   </p>
                                 `
                                 : ''
@@ -891,7 +892,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                           pet.adoptionReason && pet.adoptionReason.trim()
                             ? `
                               <p class="text-xs sm:text-sm font-semibold text-[#5d4b3d] leading-relaxed pt-2 border-t border-brand-peachBorder/50 m-0">
-                                ${pet.adoptionReason.trim()}
+                                ${escapeHtml(pet.adoptionReason.trim())}
                               </p>
                             `
                             : ''
@@ -948,7 +949,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                         }
                         ${
                           pet.adoptionReason && pet.adoptionReason.trim()
-                            ? `<div>سبب العرض للتبني: ${pet.adoptionReason.trim()}</div>`
+                            ? `<div>سبب العرض للتبني: ${escapeHtml(pet.adoptionReason.trim())}</div>`
                             : ''
                         }
                       </div>
@@ -961,16 +962,16 @@ export function renderPetDetailModal(pet: Pet | null): string {
           <div class="bg-white/90 border border-brand-peachBorder/90 rounded-[32px] p-5 shadow-sm flex items-center justify-between gap-3 text-right">
             <div class="min-w-0 flex-1">
               <h4 class="text-lg sm:text-xl font-black font-baloo text-brand-dark truncate m-0">
-                ${pet.ownerName}
+                ${escapeHtml(pet.ownerName)}
               </h4>
               ${
                 locationText
-                  ? `<p class="text-xs sm:text-sm font-bold text-brand-subtleGray mt-1 m-0">${locationText}</p>`
+                  ? `<p class="text-xs sm:text-sm font-bold text-brand-subtleGray mt-1 m-0">${escapeHtml(locationText)}</p>`
                   : ''
               }
               ${
                 showPhone && pet.ownerPhone
-                  ? `<p class="text-xs sm:text-sm font-bold text-emerald-600 mt-1 font-mono" dir="ltr">${pet.ownerPhone}</p>`
+                  ? `<p class="text-xs sm:text-sm font-bold text-emerald-600 mt-1 font-mono" dir="ltr">${escapeHtml(pet.ownerPhone)}</p>`
                   : `<p class="text-[11px] font-bold text-brand-subtleGray mt-1 flex items-center gap-1 m-0"><i class="fa-solid fa-shield-halved text-brand-orange text-[10px]"></i><span>رقم الهاتف مخفي وفق إعدادات الخصوصية</span></p>`
               }
             </div>
@@ -1025,7 +1026,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                     : selectedMember && !pet.mustAdoptTogether
                     ? `
                       <i class="fa-solid fa-house-heart text-xl shrink-0"></i>
-                      <span>طلب تبني ${selectedMember.name}</span>
+                      <span>طلب تبني ${escapeHtml(selectedMember.name)}</span>
                     `
                     : `
                       <i class="fa-solid fa-house-heart text-xl shrink-0"></i>
@@ -1060,7 +1061,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                       isMating
                         ? 'إرسال طلب تزاوج'
                         : pendingMemberTarget
-                        ? `إرسال طلب تبني (${pendingMemberTarget.name})`
+                        ? `إرسال طلب تبني (${escapeHtml(pendingMemberTarget.name)})`
                         : isGroupAdoption
                         ? 'إرسال طلب تبني جماعي'
                         : 'إرسال طلب تبني'
@@ -1071,11 +1072,11 @@ export function renderPetDetailModal(pet: Pet | null): string {
               </div>
 
               <p class="text-xs sm:text-sm font-semibold text-brand-dark/90 leading-relaxed">
-                سيتم إرسال إشعار وفتح محادثة مباشرة مع <strong class="text-brand-orange">${pet.ownerName}</strong> بخصوص <strong class="text-brand-orange">${
-                  pendingMemberTarget ? `${pendingMemberTarget.name} (ضمن ${pet.name})` : pet.name
+                سيتم إرسال إشعار وفتح محادثة مباشرة مع <strong class="text-brand-orange">${escapeHtml(pet.ownerName)}</strong> بخصوص <strong class="text-brand-orange">${
+                  pendingMemberTarget ? `${escapeHtml(pendingMemberTarget.name)} (ضمن ${escapeHtml(pet.name)})` : escapeHtml(pet.name)
                 }</strong>${
                   !pendingMemberTarget && isGroupAdoption && groupMembers.length > 0
-                    ? ` (${groupMembers.map((m) => m.name).join('، ')} — ${
+                    ? ` (${groupMembers.map((m) => escapeHtml(m.name)).join('، ')} — ${
                         pet.mustAdoptTogether ? 'تبني المجموعة كاملة معاً' : 'إمكانية التبني معاً أو منفرداً'
                       })`
                     : ''

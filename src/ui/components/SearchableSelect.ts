@@ -1,4 +1,5 @@
 import { normalizeArabic } from '../../data/egyptLocations.ts';
+import { escapeAttr, escapeHtml } from '../../utils/sanitize.ts';
 
 export interface SearchableOption {
   value: string;
@@ -15,14 +16,6 @@ export interface SearchableSelectConfig {
   emptyText?: string;
   disabled?: boolean;
   onChange?: (value: string, label: string) => void;
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 export function renderSearchableSelect(config: {
@@ -53,11 +46,11 @@ export function renderSearchableSelect(config: {
   const isPlaceholder = !selectedOption || selectedOption.value === '';
 
   return `
-    <div class="relative w-full min-w-0 searchable-select-root" data-ss-id="${id}">
-      <input type="hidden" id="${id}" value="${escapeHtml(value)}" />
+    <div class="relative w-full min-w-0 searchable-select-root" data-ss-id="${escapeAttr(id)}">
+      <input type="hidden" id="${escapeAttr(id)}" value="${escapeAttr(value)}" />
       <button
         type="button"
-        id="${id}-trigger"
+        id="${escapeAttr(id)}-trigger"
         ${disabled ? 'disabled' : ''}
         aria-haspopup="listbox"
         aria-expanded="false"
@@ -77,21 +70,21 @@ export function renderSearchableSelect(config: {
 
       <!-- Anchored Searchable Popover -->
       <div
-        id="${id}-panel"
-        class="ss-panel hidden absolute top-full mt-2 right-0 min-w-[min(220px,calc(100vw-2.25rem))] w-full max-w-[calc(100vw-2rem)] z-50 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] shadow-xl p-2.5 text-right"
+        id="${escapeAttr(id)}-panel"
+        class="ss-panel hidden absolute top-full mt-2 right-0 min-w-[min(220px,calc(100vw-24px))] w-full max-w-[calc(100vw-24px)] z-50 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] shadow-xl p-2.5 text-right"
       >
         <div class="relative mb-2">
           <input
             type="text"
-            id="${id}-search"
-            placeholder="${escapeHtml(searchPlaceholder)}"
+            id="${escapeAttr(id)}-search"
+            placeholder="${escapeAttr(searchPlaceholder)}"
             autocomplete="off"
             class="ss-search w-full h-11 pr-9 pl-3 bg-[#FFF9E9]/80 border border-[#d6c7b2] rounded-2xl text-sm font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:border-[#e67e22]"
           />
           <i class="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#786555]"></i>
         </div>
         <div
-          id="${id}-list"
+          id="${escapeAttr(id)}-list"
           role="listbox"
           class="ss-list max-h-52 overflow-y-auto overscroll-contain space-y-1 pl-0.5"
         >
@@ -118,9 +111,9 @@ function renderOptionsListHtml(
           type="button"
           role="option"
           aria-selected="${isSelected ? 'true' : 'false'}"
-          data-ss-value="${escapeHtml(opt.value)}"
-          data-ss-label="${escapeHtml(opt.label)}"
-          class="ss-option w-full text-right px-3.5 py-2.5 rounded-2xl text-sm font-bold transition-all cursor-pointer flex items-center justify-between gap-2 ${
+          data-ss-value="${escapeAttr(opt.value)}"
+          data-ss-label="${escapeAttr(opt.label)}"
+          class="ss-option w-full min-h-[44px] text-right px-3.5 py-2.5 rounded-2xl text-sm font-bold transition-all cursor-pointer flex items-center justify-between gap-2 ${
             isSelected
               ? 'bg-[#fff5ea] text-[#e67e22] border border-[#e67e22]/40 font-black'
               : 'text-[#2d221b] hover:bg-[#FFF9E9]'
@@ -134,6 +127,29 @@ function renderOptionsListHtml(
     .join('');
 }
 
+function resetPanelPositionStyles(panel: HTMLElement): void {
+  panel.style.left = '';
+  panel.style.right = '';
+  panel.style.transform = '';
+}
+
+function clampPanelWithinViewport(panel: HTMLElement): void {
+  if (typeof window === 'undefined') return;
+  resetPanelPositionStyles(panel);
+  const margin = 12;
+  const vw = window.innerWidth || document.documentElement.clientWidth || 360;
+  const rect = panel.getBoundingClientRect();
+  let dx = 0;
+  if (rect.left < margin) {
+    dx = margin - rect.left;
+  } else if (rect.right > vw - margin) {
+    dx = vw - margin - rect.right;
+  }
+  if (dx !== 0) {
+    panel.style.transform = `translateX(${Math.round(dx)}px)`;
+  }
+}
+
 export function closeAllSearchableSelects(exceptId?: string): void {
   const panels = document.querySelectorAll<HTMLElement>('.ss-panel');
   panels.forEach((panel) => {
@@ -141,6 +157,7 @@ export function closeAllSearchableSelects(exceptId?: string): void {
     const id = root?.getAttribute('data-ss-id');
     if (exceptId && id === exceptId) return;
     panel.classList.add('hidden');
+    resetPanelPositionStyles(panel);
     const trigger = root?.querySelector<HTMLButtonElement>('.ss-trigger');
     if (trigger) trigger.setAttribute('aria-expanded', 'false');
   });
@@ -228,7 +245,10 @@ export function attachSearchableSelect(
         const lbl = btn.getAttribute('data-ss-label') ?? '';
         currentValue = val;
         updateTriggerDisplay();
-        if (panel) panel.classList.add('hidden');
+        if (panel) {
+          panel.classList.add('hidden');
+          resetPanelPositionStyles(panel);
+        }
         if (trigger) trigger.setAttribute('aria-expanded', 'false');
         config.onChange?.(val, lbl);
       });
@@ -243,11 +263,13 @@ export function attachSearchableSelect(
       closeAllSearchableSelects(config.id);
       if (isOpen) {
         panel.classList.add('hidden');
+        resetPanelPositionStyles(panel);
         trigger.setAttribute('aria-expanded', 'false');
       } else {
         if (searchInput) searchInput.value = '';
         renderFilteredList('');
         panel.classList.remove('hidden');
+        clampPanelWithinViewport(panel);
         trigger.setAttribute('aria-expanded', 'true');
         panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         if (searchInput) {

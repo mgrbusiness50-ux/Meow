@@ -1,5 +1,6 @@
 import { state } from '../../state.ts';
 import { Pet } from '../../types.ts';
+import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
 import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
 
 export function renderContactRequestModal(targetPet: Pet | null): string {
@@ -7,6 +8,7 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
 
   const userPets = state.getUserPets();
   const isMating = targetPet.status === 'mating';
+  const safePetPhoto = sanitizeImageSrc(targetPet.photos?.[0]);
 
   return `
     <div id="contact-request-modal-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in" dir="rtl">
@@ -21,7 +23,7 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-xl shrink-0">${isMating ? '❤️' : '🏠'}</span>
             <h3 class="text-base font-black text-brand-dark truncate">
-              ${isMating ? 'إرسال طلب تزاوج' : 'إرسال طلب تبني'} إلى ${targetPet.ownerName}
+              ${isMating ? 'إرسال طلب تزاوج' : 'إرسال طلب تبني'} إلى ${escapeHtml(targetPet.ownerName)}
             </h3>
           </div>
           <button id="close-contact-request-btn" type="button" aria-label="إغلاق" class="w-10 h-10 rounded-full bg-brand-peachBorder/40 hover:bg-brand-peachBorder text-brand-dark flex items-center justify-center cursor-pointer transition text-sm active:scale-90 shrink-0">
@@ -31,20 +33,20 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
 
         <!-- Target Cat Summary Pill -->
         <div class="p-3 rounded-2xl bg-white border border-brand-peachBorder flex items-center gap-3 shadow-sm">
-          <img src="${targetPet.photos[0]}" alt="${targetPet.name}" class="w-12 h-12 rounded-xl object-cover border border-brand-peachBorder shrink-0" />
+          <img src="${escapeAttr(safePetPhoto)}" alt="${escapeAttr(targetPet.name)}" class="w-12 h-12 rounded-xl object-cover border border-brand-peachBorder shrink-0" />
           <div class="flex-1 min-w-0">
-            <h4 class="text-sm font-black text-brand-dark truncate">${targetPet.name}</h4>
+            <h4 class="text-sm font-black text-brand-dark truncate">${escapeHtml(targetPet.name)}</h4>
             ${
               targetPet.status === 'adoption' && targetPet.adoptionType === 'group'
                 ? `
                   <span class="text-[11px] font-bold text-emerald-700 block truncate">
-                    تبني جماعي (${targetPet.groupCount || targetPet.groupMembers?.length || 2} حيوانات): ${(targetPet.groupMembers || []).map((m) => m.name).join('، ')}
+                    تبني جماعي (${targetPet.groupCount || targetPet.groupMembers?.length || 2} حيوانات): ${(targetPet.groupMembers || []).map((m) => escapeHtml(m.name)).join('، ')}
                   </span>
                   <span class="text-[10px] font-bold text-brand-subtleGray block truncate">
-                    ${targetPet.mustAdoptTogether ? '⚠️ يُشترط تبنيهم معاً' : '✅ متاح منفرداً أو معاً'} • 📍 ${targetPet.area}، ${targetPet.city}
+                    ${targetPet.mustAdoptTogether ? '⚠️ يُشترط تبنيهم معاً' : '✅ متاح منفرداً أو معاً'} • 📍 ${escapeHtml(targetPet.area)}، ${escapeHtml(targetPet.city)}
                   </span>
                 `
-                : `<span class="text-xs font-semibold text-brand-subtleGray block">${targetPet.breed} • ${targetPet.area}</span>`
+                : `<span class="text-xs font-semibold text-brand-subtleGray block">${escapeHtml(targetPet.breed)} • ${escapeHtml(targetPet.area)}</span>`
             }
           </div>
           <span class="text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${isMating ? 'bg-brand-orange/15 text-brand-orange' : 'bg-emerald-50 text-emerald-800'}">
@@ -62,12 +64,12 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
               </label>
               <select
                 id="select-user-mating-pet"
-                class="w-full bg-white border border-brand-peachBorder rounded-2xl px-3 py-2 text-xs font-bold text-brand-dark focus:outline-none focus:border-brand-orange shadow-sm cursor-pointer"
+                class="w-full min-h-[44px] bg-white border border-brand-peachBorder rounded-2xl px-3 py-2 text-xs font-bold text-brand-dark focus:outline-none focus:border-brand-orange shadow-sm cursor-pointer"
               >
                 ${userPets
                   .map(
                     (p) => `
-                  <option value="${p.id}">${p.name} (${p.breed} - ${p.gender === 'male' ? 'ذكر' : 'أنثى'} - ${p.ageYears} سنة)</option>
+                  <option value="${escapeAttr(p.id)}">${escapeHtml(p.name)} (${escapeHtml(p.breed)} - ${p.gender === 'male' ? 'ذكر' : 'أنثى'} - ${p.ageYears} سنة)</option>
                 `
                   )
                   .join('')}
@@ -149,9 +151,11 @@ export function attachContactRequestModalEvents(targetPet: Pet | null): void {
     });
   }
 
-  const submitBtn = document.getElementById('submit-contact-request-btn');
+  const submitBtn = document.getElementById('submit-contact-request-btn') as HTMLButtonElement | null;
   if (submitBtn) {
     submitBtn.addEventListener('click', () => {
+      if (submitBtn.disabled) return;
+      submitBtn.disabled = true;
       const messageTextarea = document.getElementById('contact-request-message') as HTMLTextAreaElement;
       const petSelect = document.getElementById('select-user-mating-pet') as HTMLSelectElement;
 

@@ -9,5 +9,17 @@
 	"android": {
 		"allowMixedContent": false,
 		"backgroundColor": "#FFF9E9"
+	},
+	"plugins": {
+		"CapacitorUpdater": {
+			"autoUpdate": false,
+			"resetWhenUpdate": true,
+			"autoDeleteFailed": true,
+			"autoDeletePrevious": true,
+			"appReadyTimeout": 10000,
+			"httpsOnly": true,
+			"statsUrl": "",
+			"defaultChannel": "production"
+		}
 	}
 }

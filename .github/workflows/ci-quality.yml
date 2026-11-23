@@ -1,0 +1,68 @@
+name: Meow CI Quality & Security Checks
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  quality-gates:
+    name: Typecheck, Lint, Tests & Production Bundle Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: ESLint check
+        run: npm run lint:eslint
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build production web bundle (verification)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://ci-placeholder.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}
+          VITE_APP_CHANNEL: production
+          VITE_UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || '' }}
+        run: npm run build
+
+      - name: Verify production bundle excludes dev/XR simulator and secrets
+        run: |
+          if [ -d dist/assets/aistudio ]; then
+            echo "::error::AI Studio assets must not exist in production dist/"
+            exit 1
+          fi
+          if grep -rnE "xrblocks|@dimforge/rapier|CatScene|SERVICE_ROLE_KEY|BEGIN PRIVATE KEY" dist; then
+            echo "::error::Forbidden dev/XR module or secret pattern detected in dist/"
+            exit 1
+          fi
+          echo "Production dist/ verified clean."
+
+      - name: Classify change scope (OTA vs Native APK)
+        if: github.event_name == 'push'
+        run: |
+          if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+            node scripts/classify-release-change.mjs --base HEAD~1 --head HEAD
+          else
+            echo "No HEAD~1 baseline commit found; skipping diff classification."
+          fi

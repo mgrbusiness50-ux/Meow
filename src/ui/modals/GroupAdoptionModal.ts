@@ -1,5 +1,11 @@
 import { state } from '../../state.ts';
 import { AdoptionPublishMode, Pet } from '../../types.ts';
+import {
+  escapeAttr,
+  escapeHtml,
+  sanitizeImageSrc,
+  validateUploadedFile,
+} from '../../utils/sanitize.ts';
 import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
 
 interface GroupDraft {
@@ -177,7 +183,7 @@ export function renderGroupAdoptionModal(): string {
                     (p) => `
                   <li class="flex items-center gap-2 text-xs font-bold text-[#2d221b] bg-[#faf6ed] px-3 py-1.5 rounded-xl border border-[#d6c7b2]/60">
                     <i class="fa-solid fa-paw text-[#e67e22] text-[11px]"></i>
-                    <span>إعلان مستقل لـ «${p.name}» (${p.breed})</span>
+                    <span>إعلان مستقل لـ «${escapeHtml(p.name)}» (${escapeHtml(p.breed)})</span>
                   </li>
                 `
                   )
@@ -221,7 +227,7 @@ export function renderGroupAdoptionModal(): string {
               </div>
               <div>
                 <h3 class="text-lg font-black text-[#1a1612] m-0">اختيار طريقة العرض للتبني</h3>
-                <p class="text-xs font-bold text-[#786555] m-0">إضافة: ${pendingChoicePet.name}</p>
+                <p class="text-xs font-bold text-[#786555] m-0">إضافة: ${escapeHtml(pendingChoicePet.name)}</p>
               </div>
             </div>
             <button
@@ -235,8 +241,8 @@ export function renderGroupAdoptionModal(): string {
           </div>
 
           <p class="text-xs sm:text-sm font-bold text-[#2d221b] leading-relaxed m-0">
-            لديك حيوان معروض للتبني بالفعل (${existingNames || 'مسجل للتبني'}). اختر طريقة نشر
-            <span class="text-[#e67e22] font-black">«${pendingChoicePet.name}»</span>:
+            لديك حيوان معروض للتبني بالفعل (${escapeHtml(existingNames || 'مسجل للتبني')}). اختر طريقة نشر
+            <span class="text-[#e67e22] font-black">«${escapeHtml(pendingChoicePet.name)}»</span>:
           </p>
 
           <div class="space-y-2.5 pt-1">
@@ -354,7 +360,7 @@ export function renderGroupAdoptionModal(): string {
               <div class="p-3.5 rounded-[24px] bg-[#fff5ea] border border-brand-orange/35 space-y-1">
                 <div class="flex items-center gap-2 text-xs sm:text-sm font-black text-brand-dark">
                   <i class="fa-solid fa-people-roof text-brand-orange"></i>
-                  <span>إعلان تبنٍ جماعي: ${groupTitle}</span>
+                  <span>إعلان تبنٍ جماعي: ${escapeHtml(groupTitle)}</span>
                 </div>
                 <p class="text-[11px] font-bold text-[#786555] m-0">
                   يضم ${selectedPets.length} حيوانات • ${totalPhotos} صور • ${
@@ -375,7 +381,7 @@ export function renderGroupAdoptionModal(): string {
                             <div class="p-2.5 rounded-2xl bg-[#fff5ea]/80 border border-[#e67e22]/30 flex items-center justify-between gap-2 text-xs font-black">
                               <div class="flex items-center gap-2 min-w-0">
                                 <i class="fa-solid fa-paw text-[#e67e22]"></i>
-                                <span class="truncate text-[#1a1612]">إعلان فردي لـ «${pet.name}» (${pet.breed})</span>
+                                <span class="truncate text-[#1a1612]">إعلان فردي لـ «${escapeHtml(pet.name)}» (${escapeHtml(pet.breed)})</span>
                               </div>
                               <span class="text-[10px] px-2 py-0.5 rounded-full bg-white border border-[#d6c7b2] text-[#786555] shrink-0">مستقل</span>
                             </div>
@@ -499,7 +505,7 @@ export function renderGroupAdoptionModal(): string {
                   return `
                     <button
                       type="button"
-                      data-toggle-group-pet="${pet.id}"
+                      data-toggle-group-pet="${escapeAttr(pet.id)}"
                       class="group-pet-select-btn flex items-center justify-between p-3.5 rounded-[24px] border-2 transition cursor-pointer ${
                         isChecked
                           ? 'border-[#e67e22] bg-[#fff5ea]'
@@ -507,10 +513,10 @@ export function renderGroupAdoptionModal(): string {
                       }"
                     >
                       <div class="flex items-center gap-3 min-w-0">
-                        <img src="${pet.photos[0]}" alt="${pet.name}" class="w-12 h-12 rounded-2xl object-cover border border-[#d6c7b2] shrink-0" />
+                        <img src="${escapeAttr(sanitizeImageSrc(pet.photos[0]))}" alt="${escapeAttr(pet.name)}" class="w-12 h-12 rounded-2xl object-cover border border-[#d6c7b2] shrink-0" />
                         <div class="text-right min-w-0">
-                          <div class="text-sm font-black text-[#1a1612] truncate">${pet.name}</div>
-                          <div class="text-xs font-bold text-[#786555] truncate">${pet.breed} • ${pet.gender === 'male' ? 'ذكر' : 'أنثى'}${ageText ? ` • ${ageText}` : ''}</div>
+                          <div class="text-sm font-black text-[#1a1612] truncate">${escapeHtml(pet.name)}</div>
+                          <div class="text-xs font-bold text-[#786555] truncate">${escapeHtml(pet.breed)} • ${pet.gender === 'male' ? 'ذكر' : 'أنثى'}${ageText ? ` • ${escapeHtml(ageText)}` : ''}</div>
                         </div>
                       </div>
                       <span class="w-6 h-6 rounded-full flex items-center justify-center border-2 ${
@@ -552,7 +558,7 @@ export function renderGroupAdoptionModal(): string {
                     <div class="flex items-center justify-between gap-2">
                       <div class="flex items-center gap-2">
                         <span class="text-base">${pet.species === 'dog' ? '🐶' : '🐱'}</span>
-                        <span class="text-sm font-black text-[#1a1612]">صور ${pet.name} المنفصلة</span>
+                        <span class="text-sm font-black text-[#1a1612]">صور ${escapeHtml(pet.name)} المنفصلة</span>
                       </div>
                       <span class="text-[11px] font-black px-2 py-0.5 rounded-full ${
                         petPhotos.length >= 1
@@ -568,13 +574,13 @@ export function renderGroupAdoptionModal(): string {
                         .map(
                           (src, idx) => `
                             <div class="relative aspect-square rounded-2xl overflow-hidden border-2 border-[#e67e22] bg-[#faf6ed]">
-                              <img src="${src}" alt="${pet.name} ${idx + 1}" class="w-full h-full object-cover" />
+                              <img src="${escapeAttr(sanitizeImageSrc(src))}" alt="${escapeAttr(`${pet.name} ${idx + 1}`)}" class="w-full h-full object-cover" />
                               ${
                                 petPhotos.length > 1
                                   ? `
                                     <button
                                       type="button"
-                                      data-remove-member-photo="${pet.id}"
+                                      data-remove-member-photo="${escapeAttr(pet.id)}"
                                       data-photo-index="${idx}"
                                       class="remove-member-photo-btn absolute top-1 left-1 w-7 h-7 rounded-full bg-black/70 text-white text-sm flex items-center justify-center cursor-pointer active:scale-90"
                                       aria-label="حذف الصورة"
@@ -597,7 +603,7 @@ export function renderGroupAdoptionModal(): string {
                                 type="file"
                                 accept="image/*"
                                 class="hidden add-member-photo-input"
-                                data-member-pet-id="${pet.id}"
+                                data-member-pet-id="${escapeAttr(pet.id)}"
                               />
                               <span class="text-xl font-black">+</span>
                               <span class="text-[10px] font-bold">إضافة</span>
@@ -629,7 +635,7 @@ export function renderGroupAdoptionModal(): string {
                 .map(
                   (src, idx) => `
                     <div class="relative aspect-square rounded-2xl overflow-hidden border-2 border-brand-orange/80 bg-[#faf6ed]">
-                      <img src="${src}" alt="صورة جماعية ${idx + 1}" class="w-full h-full object-cover" />
+                      <img src="${escapeAttr(sanitizeImageSrc(src))}" alt="صورة جماعية ${idx + 1}" class="w-full h-full object-cover" />
                       <button
                         type="button"
                         data-remove-shared-photo="${idx}"
@@ -692,13 +698,13 @@ export function renderGroupAdoptionModal(): string {
                 rows="2"
                 placeholder="مثال: مترابطون جداً ويفضل بقاؤهم معاً..."
                 class="w-full p-3.5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] text-xs sm:text-sm font-bold text-[#1a1612] focus:outline-none focus:border-[#e67e22]"
-              >${draft.adoptionReason}</textarea>
+              >${escapeHtml(draft.adoptionReason)}</textarea>
             </div>
           </div>
 
           ${
             draft.validationMessage
-              ? `<div class="p-3 rounded-2xl bg-[#fff5ea] border border-[#e67e22] text-[#9a3412] text-xs font-black text-center">${draft.validationMessage}</div>`
+              ? `<div class="p-3 rounded-2xl bg-[#fff5ea] border border-[#e67e22] text-[#9a3412] text-xs font-black text-center">${escapeHtml(draft.validationMessage)}</div>`
               : ''
           }
         </div>
@@ -923,7 +929,15 @@ export function attachGroupAdoptionModalEvents(): void {
       const petId = input.getAttribute('data-member-pet-id');
       const file = input.files?.[0];
       if (!petId || !file) return;
+      const check = validateUploadedFile(file, 'image');
+      if (!check.valid) {
+        input.value = '';
+        draft.validationMessage = check.errorMessage || 'صيغة أو حجم الصورة غير مدعوم.';
+        rerenderEditorOnly();
+        return;
+      }
       if (getTotalDraftPhotoCount() >= 10) {
+        input.value = '';
         draft.validationMessage = 'الحد الأقصى للصور في المجموعة هو 10 صور.';
         rerenderEditorOnly();
         return;
@@ -931,9 +945,11 @@ export function attachGroupAdoptionModalEvents(): void {
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
+          const safeUrl = sanitizeImageSrc(reader.result, '');
+          if (!safeUrl) return;
           draft.memberPhotosByPetId[petId] = [
             ...(draft.memberPhotosByPetId[petId] || []),
-            reader.result,
+            safeUrl,
           ];
           draft.validationMessage = '';
           rerenderEditorOnly();
@@ -964,7 +980,15 @@ export function attachGroupAdoptionModalEvents(): void {
     sharedInput.addEventListener('change', () => {
       const file = sharedInput.files?.[0];
       if (!file) return;
+      const check = validateUploadedFile(file, 'image');
+      if (!check.valid) {
+        sharedInput.value = '';
+        draft.validationMessage = check.errorMessage || 'صيغة أو حجم الصورة غير مدعوم.';
+        rerenderEditorOnly();
+        return;
+      }
       if (getTotalDraftPhotoCount() >= 10) {
+        sharedInput.value = '';
         draft.validationMessage = 'الحد الأقصى للصور في المجموعة هو 10 صور.';
         rerenderEditorOnly();
         return;
@@ -972,7 +996,9 @@ export function attachGroupAdoptionModalEvents(): void {
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
-          draft.sharedGroupPhotos = [...draft.sharedGroupPhotos, reader.result];
+          const safeUrl = sanitizeImageSrc(reader.result, '');
+          if (!safeUrl) return;
+          draft.sharedGroupPhotos = [...draft.sharedGroupPhotos, safeUrl];
           draft.validationMessage = '';
           rerenderEditorOnly();
         }

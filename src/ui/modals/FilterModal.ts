@@ -17,6 +17,7 @@ import {
   SearchableSelectController,
 } from '../components/SearchableSelect.ts';
 import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
+import { escapeAttr, escapeHtml } from '../../utils/sanitize.ts';
 
 function nodesToOptions(nodes: GeoNode[], allLabel: string): SearchableOption[] {
   return [
@@ -191,7 +192,7 @@ export function renderFilterModal(): string {
                       <span id="recommended-pet-subtitle" class="text-[11px] font-bold text-[#786555] block truncate">
                         ${
                           activeRefPet
-                            ? `تحليل: ${activeRefPet.name} (${activeRefPet.gender === 'male' ? 'ذكر' : 'أنثى'} • ${activeRefPet.breed})`
+                            ? `تحليل: ${escapeHtml(activeRefPet.name)} (${activeRefPet.gender === 'male' ? 'ذكر' : 'أنثى'} • ${escapeHtml(activeRefPet.breed)})`
                             : 'أضف بيانات أليفك أولاً لتشغيل الترشيح'
                         }
                       </span>
@@ -214,14 +215,14 @@ export function renderFilterModal(): string {
                               (up) => `
                                 <button
                                   type="button"
-                                  data-rec-pet-id="${up.id}"
+                                  data-rec-pet-id="${escapeAttr(up.id)}"
                                   class="rec-pet-choice-btn px-3 py-1 rounded-full text-xs font-black border cursor-pointer transition ${
                                     activeRefPet?.id === up.id
                                       ? 'bg-[#e67e22] text-white border-[#e67e22]'
                                       : 'bg-white text-[#786555] border-[#d6c7b2]'
                                   }"
                                 >
-                                  ${up.name}
+                                  ${escapeHtml(up.name)}
                                 </button>
                               `
                             )
@@ -319,7 +320,7 @@ export function renderFilterModal(): string {
               <input
                 id="filter-color-input"
                 type="text"
-                value="${filters.color || ''}"
+                value="${escapeAttr(filters.color || '')}"
                 placeholder="مثال: أبيض، رمادي، مشمشي..."
                 autocomplete="off"
                 class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
