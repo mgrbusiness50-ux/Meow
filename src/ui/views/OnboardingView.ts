@@ -18,6 +18,7 @@ import {
   SearchableSelectController,
 } from '../components/SearchableSelect.ts';
 import {
+  RECOVERY_OTP_COOLDOWN_SECONDS,
   resendSignUpConfirmationEmail,
   sendPasswordRecoveryOtp,
   signInWithEmailPassword,
@@ -85,6 +86,7 @@ let pendingConfirmationEmail = '';
 let isTermsAccepted = false;
 let isAuthSubmitting = false;
 let isGoogleSubmitting = false;
+let isContinuingAuth = false;
 let isResendingConfirmation = false;
 let isSendingRecovery = false;
 let isVerifyingOtp = false;
@@ -105,7 +107,7 @@ function stopRecoveryCooldownTimer(): void {
   recoveryResendSeconds = 0;
 }
 
-function startRecoveryCooldown(seconds = 45): void {
+function startRecoveryCooldown(seconds = RECOVERY_OTP_COOLDOWN_SECONDS): void {
   stopRecoveryCooldownTimer();
   recoveryResendSeconds = seconds;
   recoveryCooldownTimer = setInterval(() => {
@@ -190,6 +192,7 @@ function resetTransientAuthState(opts?: { preserveMessages?: boolean }): void {
   isTermsAccepted = false;
   isAuthSubmitting = false;
   isGoogleSubmitting = false;
+  isContinuingAuth = false;
   isResendingConfirmation = false;
   isSendingRecovery = false;
   isVerifyingOtp = false;
@@ -479,25 +482,41 @@ function renderSplashScreen(): string {
     <div
       id="splash-screen-container"
       class="relative h-[100dvh] w-full flex flex-col items-center justify-center px-6 sm:px-8 text-[#3E2723] overflow-hidden select-none"
-      style="background: radial-gradient(circle at center, #FFFBEB 0%, #FFF8E7 100%);"
+      style="height: 100dvh; min-height: 100dvh; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 1.5rem; background: radial-gradient(circle at center, #FFFBEB 0%, #FFF8E7 100%); color: #3E2723; overflow: hidden; box-sizing: border-box; opacity: 1;"
       dir="rtl"
     >
       <!-- Center Logo Section with Soft Aura -->
-      <div class="relative flex-grow flex flex-col items-center justify-center">
-        <div class="absolute w-52 h-52 sm:w-72 sm:h-72 rounded-full bg-[#F7E1C3] blur-[40px] opacity-40 -z-10"></div>
+      <div
+        class="relative flex-grow flex flex-col items-center justify-center"
+        style="position: relative; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;"
+      >
+        <div
+          class="absolute w-52 h-52 sm:w-72 sm:h-72 rounded-full bg-[#F7E1C3] blur-[40px] opacity-40 -z-10"
+          style="position: absolute; width: 13rem; height: 13rem; border-radius: 9999px; background-color: #F7E1C3; opacity: 0.4; filter: blur(40px); z-index: 0; pointer-events: none;"
+        ></div>
         <img
           id="splash-logo-img"
           alt="Meow Logo"
+          width="240"
+          height="218"
+          loading="eager"
+          decoding="sync"
+          fetchpriority="high"
           class="relative z-10 w-48 sm:w-64 h-auto object-contain max-w-[68vw] sm:max-w-[80vw]"
+          style="position: relative; z-index: 1; width: 12rem; max-width: 68vw; height: auto; object-fit: contain; display: block; opacity: 1;"
           src="${SPLASH_LOGO_URL}"
         />
-        <div id="splash-loading-slot" class="mt-6 min-h-[34px] flex items-center justify-center">${renderSplashLoadingIndicatorHtml(isDelayed)}</div>
+        <div id="splash-loading-slot" class="mt-6 min-h-[34px] flex items-center justify-center" style="margin-top: 1.5rem; min-height: 34px;">${renderSplashLoadingIndicatorHtml(isDelayed)}</div>
       </div>
 
       <!-- Footer Text: By Mohamed Gamil -->
-      <div class="pb-8 sm:pb-12 text-center" style="font-family: 'Bubblegum Sans', 'Baloo Bhaijaan 2', cursive;">
-        <p class="text-[10px] uppercase tracking-[0.3em] opacity-40 mb-1 sm:mb-1.5 font-medium">By</p>
-        <p class="text-xs sm:text-sm font-semibold tracking-[0.05em] text-[#3E2723]/80">Mohamed Gamil</p>
+      <div
+        id="splash-brand-credit"
+        class="pb-8 sm:pb-12 text-center"
+        style="padding-bottom: max(2rem, env(safe-area-inset-bottom)); text-align: center; font-family: 'Bubblegum Sans', 'Fredoka', 'Baloo Bhaijaan 2', ui-rounded, 'Segoe UI', system-ui, sans-serif; opacity: 1;"
+      >
+        <p class="text-[10px] uppercase tracking-[0.3em] opacity-40 mb-1 sm:mb-1.5 font-medium" style="margin: 0 0 0.25rem; font-size: 10px; letter-spacing: 0.3em; opacity: 0.45; text-transform: uppercase;">By</p>
+        <p class="text-xs sm:text-sm font-semibold tracking-[0.05em] text-[#3E2723]/80" style="margin: 0; font-size: 0.85rem; font-weight: 600; color: rgba(62, 39, 35, 0.82);">Mohamed Gamil</p>
       </div>
     </div>
   `;
@@ -561,7 +580,12 @@ function renderAuthMethodStep(): string {
   const isForgotOtp = !isRecoveryActive && authSubView === 'forgot_otp';
   const stateAuthError = !authErrorMessage && !authSuccessMessage ? state.getSupabaseAuthError() || '' : '';
   const visibleError = authErrorMessage || stateAuthError;
-  const isAuthenticated = state.isSupabaseAuthenticated() && !isRecoveryActive;
+  const isAuthBusy =
+    isAuthSubmitting ||
+    isGoogleSubmitting ||
+    isContinuingAuth ||
+    state.getIsSupabaseProfileLoading();
+  const isAuthenticated = state.isSupabaseAuthenticated() && !isRecoveryActive && !isAuthBusy;
   const currentSessionEmail = state.getUser().email || authEmail;
 
   if (isRecoveryActive) {
@@ -856,9 +880,12 @@ function renderAuthMethodStep(): string {
                 <button
                   id="btn-auth-continue"
                   type="button"
-                  class="w-full h-11 sm:h-12 rounded-2xl bg-[#e67e22] hover:bg-[#ea580c] text-white font-extrabold text-sm sm:text-base shadow-sm cursor-pointer transition active:scale-[0.98]"
+                  ${isContinuingAuth ? 'disabled' : ''}
+                  class="w-full h-11 sm:h-12 rounded-2xl bg-[#e67e22] hover:bg-[#ea580c] text-white font-extrabold text-sm sm:text-base shadow-sm transition active:scale-[0.98] ${
+                    isContinuingAuth ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+                  }"
                 >
-                  متابعة
+                  ${isContinuingAuth ? 'جاري المتابعة...' : 'متابعة'}
                 </button>
               </div>
             `
@@ -1976,36 +2003,33 @@ export function attachOnboardingEvents(): void {
 
   if (authContinueBtn) {
     authContinueBtn.addEventListener('click', async () => {
+      if (isContinuingAuth || isAuthSubmitting || isGoogleSubmitting) return;
       if (!state.isSupabaseAuthenticated() || state.isSupabasePasswordRecovery()) {
         authErrorMessage = 'يرجى تسجيل الدخول بحساب مؤكد أولاً للمتابعة.';
         refreshAuthStep();
         return;
       }
-      let bundle = state.getSupabaseAccountBundle();
-      if (!bundle || state.getSupabaseAuthError()) {
-        authContinueBtn.disabled = true;
-        authContinueBtn.classList.add('opacity-70', 'cursor-wait');
-        authContinueBtn.textContent = 'جاري التحقق من الحساب...';
-        await state.retrySupabaseAccountLoad();
-        if (state.getSupabaseAuthError()) {
+
+      isContinuingAuth = true;
+      authErrorMessage = '';
+      authSuccessMessage = '';
+      authContinueBtn.disabled = true;
+      authContinueBtn.classList.add('opacity-70', 'cursor-wait');
+      authContinueBtn.textContent = 'جاري المتابعة...';
+
+      try {
+        const res = await state.continueAuthenticatedFromAuthMethod();
+        isContinuingAuth = false;
+        if (!res.success) {
           authErrorMessage =
-            state.getSupabaseAuthError() ||
+            res.errorMessage ||
             'تعذر تحميل بيانات الحساب من قاعدة البيانات. يرجى المحاولة مرة أخرى.';
           refreshAuthStep();
-          return;
         }
-        bundle = state.getSupabaseAccountBundle();
-        if (state.getOnboardingStep() !== 'auth_method') {
-          return;
-        }
-      }
-      if (bundle?.onboardingDone) {
-        state.setOnboardingStep('completed');
-      } else if (state.isOwnerDetailsCompleted()) {
-        state.setOnboardingStep('has_pet');
-      } else {
-        state.setTermsAccepted(true, true);
-        state.setOnboardingStep('owner_details');
+      } catch {
+        isContinuingAuth = false;
+        authErrorMessage = 'تعذر متابعة التسجيل حاليًا. يرجى المحاولة مرة أخرى.';
+        refreshAuthStep();
       }
     });
   }
@@ -2070,7 +2094,9 @@ export function attachOnboardingEvents(): void {
           }
 
           pendingConfirmationEmail = '';
-          const syncRes = await state.handleDirectSupabaseAuthSuccess(res.session);
+          const syncRes = await state.handleDirectSupabaseAuthSuccess(res.session, {
+            isPasswordRecovery: false,
+          });
           isAuthSubmitting = false;
           if (!syncRes.success) {
             authErrorMessage =
@@ -2098,7 +2124,9 @@ export function attachOnboardingEvents(): void {
         }
 
         pendingConfirmationEmail = '';
-        const syncRes = await state.handleDirectSupabaseAuthSuccess(res.session);
+        const syncRes = await state.handleDirectSupabaseAuthSuccess(res.session, {
+          isPasswordRecovery: false,
+        });
         isAuthSubmitting = false;
         if (!syncRes.success) {
           authErrorMessage =
@@ -2136,7 +2164,7 @@ export function attachOnboardingEvents(): void {
       if (res.success) {
         authSubView = 'forgot_otp';
         recoveryOtpCode = '';
-        startRecoveryCooldown(45);
+        startRecoveryCooldown(RECOVERY_OTP_COOLDOWN_SECONDS);
         authSuccessMessage =
           res.message ||
           'إذا كان البريد الإلكتروني مسجلًا لدينا، فقد تم إرسال رمز تحقق مكون من 6 أرقام إليه.';
@@ -2213,10 +2241,16 @@ export function attachOnboardingEvents(): void {
       const res = await sendPasswordRecoveryOtp(authEmail);
       isResendingRecoveryOtp = false;
       if (res.success) {
-        startRecoveryCooldown(45);
+        startRecoveryCooldown(RECOVERY_OTP_COOLDOWN_SECONDS);
         authSuccessMessage =
           res.message || 'تم إرسال رمز تحقق جديد مكون من 6 أرقام إلى بريدك الإلكتروني.';
       } else {
+        if (
+          res.errorCode === 'over_email_send_rate_limit' ||
+          res.errorCode === 'over_request_rate_limit'
+        ) {
+          startRecoveryCooldown(RECOVERY_OTP_COOLDOWN_SECONDS);
+        }
         authErrorMessage = res.errorMessage || 'تعذر إعادة إرسال رمز التحقق حاليًا.';
       }
       refreshAuthStep();
@@ -2374,6 +2408,21 @@ export function attachOnboardingEvents(): void {
           authErrorMessage =
             res.errorMessage || 'تعذر إتمام تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.';
           refreshAuthStep();
+          return;
+        }
+
+        if (!res.launchedExternalBrowser && res.session) {
+          const syncRes = await state.handleDirectSupabaseAuthSuccess(res.session, {
+            isPasswordRecovery: false,
+          });
+          isGoogleSubmitting = false;
+          if (!syncRes.success) {
+            authErrorMessage =
+              syncRes.errorMessage ||
+              'تم تسجيل الدخول عبر Google لكن تعذر تحميل بيانات الحساب. يرجى المحاولة مجددًا.';
+            refreshAuthStep();
+          }
+          return;
         }
       } catch {
         isGoogleSubmitting = false;

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockResetPasswordForEmail = vi.fn();
 const mockVerifyOtp = vi.fn();
@@ -20,6 +20,7 @@ vi.mock('../src/services/supabaseClient.ts', () => ({
 }));
 
 import {
+  RECOVERY_OTP_COOLDOWN_SECONDS,
   clearSupabasePasswordRecoveryState,
   isSupabasePasswordRecoveryActive,
   sendPasswordRecoveryOtp,
@@ -30,12 +31,17 @@ import {
 
 describe('Supabase 6-digit OTP password recovery service', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     mockResetPasswordForEmail.mockReset();
     mockVerifyOtp.mockReset();
     mockUpdateUser.mockReset();
     mockGetSession.mockReset();
     mockSignInWithPassword.mockReset();
     clearSupabasePasswordRecoveryState();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('rejects invalid email before calling Supabase', async () => {
@@ -45,7 +51,8 @@ describe('Supabase 6-digit OTP password recovery service', () => {
     expect(mockResetPasswordForEmail).not.toHaveBeenCalled();
   });
 
-  it('sends OTP request and enforces 45s resend cooldown per email', async () => {
+  it('sends OTP request, enforces 90s resend cooldown per email, and maps SMTP errors clearly', async () => {
+    expect(RECOVERY_OTP_COOLDOWN_SECONDS).toBe(90);
     mockResetPasswordForEmail.mockResolvedValueOnce({ error: null });
 
     const first = await sendPasswordRecoveryOtp('User.One@Example.com');
@@ -56,6 +63,24 @@ describe('Supabase 6-digit OTP password recovery service', () => {
     expect(second.success).toBe(false);
     expect(second.errorCode).toBe('client_cooldown');
     expect(mockResetPasswordForEmail).toHaveBeenCalledTimes(1);
+
+    // Still locked at 89 seconds
+    await vi.advanceTimersByTimeAsync(89_000);
+    const stillLocked = await sendPasswordRecoveryOtp('user.one@example.com');
+    expect(stillLocked.success).toBe(false);
+    expect(stillLocked.errorCode).toBe('client_cooldown');
+    expect(mockResetPasswordForEmail).toHaveBeenCalledTimes(1);
+
+    // Unlocked right at 90 seconds; test SMTP delivery error mapping
+    await vi.advanceTimersByTimeAsync(1_000);
+    mockResetPasswordForEmail.mockResolvedValueOnce({
+      error: { message: 'Error sending recovery email via SMTP' },
+    });
+    const smtpFail = await sendPasswordRecoveryOtp('user.one@example.com');
+    expect(smtpFail.success).toBe(false);
+    expect(smtpFail.errorCode).toBe('email_delivery_failed');
+    expect(smtpFail.errorMessage).toContain('SMTP');
+    expect(mockResetPasswordForEmail).toHaveBeenCalledTimes(2);
   });
 
   it('validates 6-digit numeric OTP format before calling verifyOtp', async () => {

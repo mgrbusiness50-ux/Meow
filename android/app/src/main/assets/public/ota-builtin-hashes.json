@@ -4,13 +4,13 @@
       "sha256": "46e8c0d278678ea75358bc9e1199ea5aede85e2f90360b39fc9a49d9ab4b1baf",
       "size": 51382
     },
-    "assets/index-CFvftSpZ.js": {
-      "sha256": "73851d82e21220e207bb7ac8c6e3dddb11c1a906b1be467b2d84c9bbcc635839",
-      "size": 1304756
+    "assets/index-CSvbvgpE.css": {
+      "sha256": "7e24798089ce50fa12e82d51fead16fd233ac285bdf5e2e14c46980ea041e800",
+      "size": 129077
     },
-    "assets/index-DliE8HI5.css": {
-      "sha256": "0d4220adcf030767ca0d1309b4e9057221c79978b1a8dca0c99f5d89dc77186f",
-      "size": 129233
+    "assets/index-DBI9pXuH.js": {
+      "sha256": "e029508aeccc468e53699d59346d83ef025344881f7bba4cebbe2576b9035eb7",
+      "size": 1311470
     },
     "assets/meow-logo.png": {
       "sha256": "87f60500a325f1490eff13b33b3492d39ee059454c5c5743d67999576ce30461",
@@ -20,17 +20,17 @@
       "sha256": "a526d1bb3288ef04d001028843220a24b0867a4edf8c685b69506d6525af36ff",
       "size": 158
     },
-    "assets/vendor-capacitor-C_u4F3sx.js": {
-      "sha256": "e25addb8a06981abd2a763d03028cd3fd86a01c09f30e16439c8c80eb92bb778",
-      "size": 10735
+    "assets/vendor-capacitor-DgQkvH3s.js": {
+      "sha256": "8e36632eba2f384d735cfcf350c8b295bb3f86f33e45acb99dc70c042627f312",
+      "size": 10995
     },
     "assets/vendor-supabase-Dg3zCikB.js": {
       "sha256": "b1a7bc97bcb0c209ac90545d108a1851259a30b10e9e376b5c2c5fd2eb4a2a06",
       "size": 217556
     },
-    "assets/vendor-updater-D0hgEYKr.js": {
-      "sha256": "ed264feb5142a8d0d6d54b26a47a9c8307f231754c08ecdb888b4febe66172a6",
-      "size": 9012
+    "assets/vendor-updater-quL8yv58.js": {
+      "sha256": "8e5b28f856c32fd60dd0f09cb68762249257d89197a05d91bdd7b79bb154cf46",
+      "size": 9017
     },
     "cordova.js": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -41,8 +41,8 @@
       "size": 0
     },
     "index.html": {
-      "sha256": "66027e929446994ed898f9091dcc9e3806b59946310d0ac64226bb033f909d70",
-      "size": 5086
+      "sha256": "a201edc63342b1fba58645294938a12ad79511b6bfec18cd9f93971d8c485d1e",
+      "size": 6691
     },
     "sw.js": {
       "sha256": "7618cd68a13691fe295222834b5f54d35f89d447b8fcbc627df42047e33b295e",

@@ -1,5 +1,6 @@
 import type { AuthChangeEvent, AuthError, EmailOtpType, Session, User } from '@supabase/supabase-js';
-import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
+import * as CapacitorCore from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient.ts';
 import {
@@ -11,11 +12,76 @@ import {
 } from './supabaseMappers.ts';
 import type { UserProfile } from '../types.ts';
 
+const { Capacitor } = CapacitorCore;
+
 export const ANDROID_AUTH_CALLBACK_URL = 'com.meow.app://auth-callback';
+export const RECOVERY_OTP_COOLDOWN_SECONDS = 90;
+export const RECOVERY_OTP_COOLDOWN_MS = RECOVERY_OTP_COOLDOWN_SECONDS * 1000;
+
+interface MeowGoogleAuthNativeResult {
+  idToken: string;
+  id?: string;
+  displayName?: string;
+  givenName?: string;
+  familyName?: string;
+  profilePictureUri?: string;
+}
+
+interface MeowGoogleAuthPlugin {
+  signIn(options: { serverClientId: string; nonce?: string }): Promise<MeowGoogleAuthNativeResult>;
+}
+
+let cachedNativeGoogleAuthPlugin: MeowGoogleAuthPlugin | null = null;
+
+function getNativeGoogleAuthPlugin(): MeowGoogleAuthPlugin | null {
+  if (cachedNativeGoogleAuthPlugin) return cachedNativeGoogleAuthPlugin;
+  const registerPluginFn = (
+    CapacitorCore as unknown as {
+      registerPlugin?: <T>(name: string) => T;
+    }
+  ).registerPlugin;
+  if (typeof registerPluginFn !== 'function') {
+    return null;
+  }
+  cachedNativeGoogleAuthPlugin = registerPluginFn<MeowGoogleAuthPlugin>('MeowGoogleAuth');
+  return cachedNativeGoogleAuthPlugin;
+}
+
+function getGoogleWebClientId(): string {
+  const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : undefined;
+  const raw = env?.VITE_GOOGLE_WEB_CLIENT_ID;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+async function generateGoogleNoncePair(): Promise<{ rawNonce?: string; hashedNonce?: string }> {
+  try {
+    const cryptoObj = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+    if (!cryptoObj?.getRandomValues) {
+      return {};
+    }
+    const bytes = new Uint8Array(24);
+    cryptoObj.getRandomValues(bytes);
+    const rawNonce = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    if (!cryptoObj.subtle?.digest) {
+      return { rawNonce };
+    }
+    const encoded = new TextEncoder().encode(rawNonce);
+    const digest = await cryptoObj.subtle.digest('SHA-256', encoded);
+    const hashedNonce = Array.from(new Uint8Array(digest), (b) =>
+      b.toString(16).padStart(2, '0')
+    ).join('');
+    return { rawNonce, hashedNonce };
+  } catch {
+    return {};
+  }
+}
 
 export interface SupabaseOAuthLaunchResult {
   success: boolean;
   launchedExternalBrowser?: boolean;
+  session?: Session | null;
+  user?: User | null;
+  method?: 'native_google_id_token' | 'oauth_browser';
   errorMessage?: string;
   errorCode?: string;
 }
@@ -350,6 +416,30 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
   }
 
   if (
+    rawMessage.includes('unacceptable audience') ||
+    (rawMessage.includes('id_token') && rawMessage.includes('audience'))
+  ) {
+    return {
+      code: 'google_client_id_mismatch',
+      message:
+        'معرّف عميل Google (Web Client ID) غير مضاف أو غير مطابق لإعدادات مزود Google في Supabase.',
+    };
+  }
+
+  if (
+    rawMessage.includes('error sending recovery email') ||
+    rawMessage.includes('error sending confirmation email') ||
+    rawMessage.includes('smtp') ||
+    rawMessage.includes('535')
+  ) {
+    return {
+      code: code || 'email_delivery_failed',
+      message:
+        'تعذر إرسال رسالة البريد من خادم البريد (SMTP) في Supabase. تأكد من إعدادات Custom SMTP في لوحة Supabase.',
+    };
+  }
+
+  if (
     rawMessage.includes('failed to fetch') ||
     rawMessage.includes('network') ||
     rawMessage.includes('fetch') ||
@@ -459,8 +549,12 @@ export async function closeExternalAuthBrowserIfOpen(): Promise<void> {
 }
 
 /**
- * 0. Sign in / sign up with Google using Supabase OAuth (PKCE).
- * - On Native Android (Capacitor): opens Google/Supabase consent in Chrome Custom Tabs and returns to com.meow.app://auth-callback.
+ * 0. Sign in / sign up with Google using Supabase Auth.
+ * - On Native Android (Capacitor) with VITE_GOOGLE_WEB_CLIENT_ID configured:
+ *   uses Android's official Google Sign-In Credential Manager account picker
+ *   and exchanges the Google ID token directly with supabase.auth.signInWithIdToken().
+ * - Otherwise / fallback on Native Android: launches Chrome Custom Tabs PKCE OAuth
+ *   (without fullscreen distortion) returning to com.meow.app://auth-callback.
  * - On Web: initiates standard OAuth redirect back to origin + pathname.
  */
 export async function signInWithGoogleSupabaseOAuth(opts?: {
@@ -479,6 +573,96 @@ export async function signInWithGoogleSupabaseOAuth(opts?: {
     passwordRecoveryActive = false;
 
     if (isNativeAndroidRuntime()) {
+      const googleWebClientId = getGoogleWebClientId();
+      const nativeGoogleAuth = googleWebClientId ? getNativeGoogleAuthPlugin() : null;
+      const isNativePluginAvailable =
+        typeof (Capacitor as { isPluginAvailable?: (name: string) => boolean }).isPluginAvailable ===
+        'function'
+          ? Capacitor.isPluginAvailable('MeowGoogleAuth')
+          : Boolean(nativeGoogleAuth);
+
+      if (googleWebClientId && nativeGoogleAuth && isNativePluginAvailable) {
+        try {
+          const { rawNonce, hashedNonce } = await generateGoogleNoncePair();
+          const nativeCredential = await nativeGoogleAuth.signIn({
+            serverClientId: googleWebClientId,
+            ...(hashedNonce ? { nonce: hashedNonce } : {}),
+          });
+
+          const idToken = (nativeCredential?.idToken || '').trim();
+          if (!idToken) {
+            return {
+              success: false,
+              errorCode: 'invalid_google_credential',
+              errorMessage: 'لم يتم استلام رمز مصادقة صالح من Google. يرجى المحاولة مرة أخرى.',
+            };
+          }
+
+          const { data, error } = await client.auth.signInWithIdToken({
+            provider: 'google',
+            token: idToken,
+            ...(rawNonce ? { nonce: rawNonce } : {}),
+          });
+
+          if (error || !data?.session) {
+            const mapped = mapSupabaseAuthErrorToArabic(
+              error || new Error('google_id_token_exchange_failed'),
+              'تعذر إتمام تسجيل الدخول عبر Google في Supabase. يرجى التحقق من إعدادات Google Provider.'
+            );
+            return {
+              success: false,
+              errorMessage: mapped.message,
+              errorCode: mapped.code,
+            };
+          }
+
+          passwordRecoveryActive = false;
+          return {
+            success: true,
+            launchedExternalBrowser: false,
+            method: 'native_google_id_token',
+            session: data.session,
+            user: data.user ?? data.session.user ?? null,
+          };
+        } catch (nativeErr) {
+          const nativeCode = getAuthErrorCode(nativeErr).toLowerCase();
+          const nativeMsg = (
+            nativeErr instanceof Error ? nativeErr.message : String(nativeErr || '')
+          ).toLowerCase();
+
+          if (
+            nativeCode === 'user_cancelled' ||
+            nativeCode === 'canceled' ||
+            nativeMsg.includes('cancel')
+          ) {
+            return {
+              success: false,
+              errorCode: 'oauth_cancelled',
+              errorMessage: 'تم إلغاء تسجيل الدخول عبر Google قبل إتمامه. يمكنك المحاولة مرة أخرى.',
+            };
+          }
+
+          const shouldFallbackToOAuthBrowser =
+            nativeCode === 'credential_manager_unsupported' ||
+            nativeCode === 'no_credentials' ||
+            nativeCode === 'google_auth_init_failed' ||
+            nativeCode === 'unimplemented' ||
+            nativeMsg.includes('not implemented');
+
+          if (!shouldFallbackToOAuthBrowser) {
+            const mapped = mapSupabaseAuthErrorToArabic(
+              nativeErr,
+              'تعذر إتمام تسجيل الدخول عبر حساب Google. تأكد من تفعيل خدمات Google Play وحاول مرة أخرى.'
+            );
+            return {
+              success: false,
+              errorMessage: mapped.message,
+              errorCode: mapped.code,
+            };
+          }
+        }
+      }
+
       const { data, error } = await client.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -519,7 +703,7 @@ export async function signInWithGoogleSupabaseOAuth(opts?: {
       try {
         await Browser.open({
           url: data.url,
-          presentationStyle: 'fullscreen',
+          toolbarColor: '#FFF9E9',
         });
       } catch (openErr) {
         if (activeBrowserFinishedHandle) {
@@ -532,6 +716,7 @@ export async function signInWithGoogleSupabaseOAuth(opts?: {
       return {
         success: true,
         launchedExternalBrowser: true,
+        method: 'oauth_browser',
       };
     }
 
@@ -561,6 +746,7 @@ export async function signInWithGoogleSupabaseOAuth(opts?: {
     return {
       success: true,
       launchedExternalBrowser: false,
+      method: 'oauth_browser',
     };
   } catch (err) {
     const mapped = mapSupabaseAuthErrorToArabic(
@@ -649,6 +835,7 @@ export async function signUpWithEmailPassword(params: {
   }
 
   inFlightSignUpKey = requestKey;
+  passwordRecoveryActive = false;
   try {
     const redirectTo = params.emailRedirectTo || getDefaultRedirectUrl();
     const { data, error } = await client.auth.signUp({
@@ -696,6 +883,9 @@ export async function signUpWithEmailPassword(params: {
 
     markAuthRequestAttempt(requestKey);
     const session = data.session ?? null;
+    if (session) {
+      passwordRecoveryActive = false;
+    }
     const user = data.user ?? session?.user ?? null;
     const needsEmailConfirmation = Boolean(user && !session);
 
@@ -909,7 +1099,7 @@ export async function sendPasswordRecoveryEmail(
   }
 
   const requestKey = `recovery:${email}`;
-  const remainingSec = isWithinAuthCooldown(requestKey, 45_000);
+  const remainingSec = isWithinAuthCooldown(requestKey, RECOVERY_OTP_COOLDOWN_MS);
   if (remainingSec > 0) {
     return {
       success: false,

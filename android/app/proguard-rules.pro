@@ -21,9 +21,11 @@
 -keep class ee.forgr.capacitor_updater.** { *; }
 -keepclassmembers class ee.forgr.capacitor_updater.** { *; }
 
-# AndroidX SplashScreen & Custom Tabs Browser
+# AndroidX SplashScreen, Custom Tabs Browser & Credential Manager Google Auth
 -keep class androidx.core.splashscreen.** { *; }
 -keep class androidx.browser.** { *; }
+-keep class androidx.credentials.** { *; }
+-keep class com.google.android.libraries.identity.googleid.** { *; }
 
 # Keep MainActivity & app classes
 -keep class com.meow.app.** { *; }

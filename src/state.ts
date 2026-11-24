@@ -1460,11 +1460,19 @@ class AppStateManager {
     }
 
     const userId = session.user.id;
-    const recovery = Boolean(opts?.isPasswordRecovery || isSupabasePasswordRecoveryActive());
+    const recovery =
+      opts?.isPasswordRecovery !== undefined
+        ? Boolean(opts.isPasswordRecovery)
+        : isSupabasePasswordRecoveryActive();
+    if (!recovery) {
+      clearSupabasePasswordRecoveryState();
+    }
+
     this.supabaseSession = session;
     this.supabaseAuthUserId = userId;
     this.isSupabasePasswordRecoveryState = recovery;
     this.isSupabaseAuthReady = true;
+    this.supabaseAuthError = null;
     this.termsAcceptedInOnboarding = true;
 
     if (
@@ -1486,10 +1494,105 @@ class AppStateManager {
       };
     }
 
-    return this.loadSupabaseAccountForUser(userId, {
+    const res = await this.loadSupabaseAccountForUser(userId, {
       session,
       isPasswordRecovery: recovery,
     });
+    if (
+      res.success &&
+      res.bundle &&
+      !recovery &&
+      !this.isOnboardingPreviewSession &&
+      this.onboardingStep === 'auth_method'
+    ) {
+      const targetStep: OnboardingStep = res.bundle.onboardingDone
+        ? 'completed'
+        : this.ownerDetailsCompleted
+        ? 'has_pet'
+        : 'owner_details';
+      this.clearSplashTimers();
+      this.splashTransitionLocked = true;
+      this.splashLoadingDelayed = false;
+      this.pendingSplashAdvance = false;
+      this.onboardingStep = targetStep;
+      if (targetStep === 'completed' && typeof localStorage !== 'undefined') {
+        localStorage.setItem('meow_onboarding_done', 'true');
+      }
+      this.notify();
+    }
+    return res;
+  }
+
+  public async continueAuthenticatedFromAuthMethod(): Promise<{
+    success: boolean;
+    errorMessage?: string;
+  }> {
+    if (this.isSupabasePasswordRecoveryState || isSupabasePasswordRecoveryActive()) {
+      return {
+        success: false,
+        errorMessage: 'يرجى استكمال تعيين كلمة المرور الجديدة أولًا للمتابعة.',
+      };
+    }
+
+    let session = this.supabaseSession;
+    let userId = this.supabaseAuthUserId;
+    if (!session || !userId) {
+      const sessionRes = await getCurrentSupabaseSession();
+      if (!sessionRes.session || !sessionRes.user?.id) {
+        return {
+          success: false,
+          errorMessage:
+            sessionRes.errorMessage || 'يرجى تسجيل الدخول بحساب مؤكد أولًا للمتابعة.',
+        };
+      }
+      session = sessionRes.session;
+      userId = sessionRes.user.id;
+      this.supabaseSession = session;
+      this.supabaseAuthUserId = userId;
+    }
+
+    this.termsAcceptedInOnboarding = true;
+    this.supabaseAuthError = null;
+
+    if (!this.supabaseAccountBundle || this.loadedSupabaseUserId !== userId) {
+      const loadRes = await this.loadSupabaseAccountForUser(userId, {
+        session,
+        isPasswordRecovery: false,
+        forceReload: true,
+      });
+      if (!loadRes.success || !loadRes.bundle) {
+        return {
+          success: false,
+          errorMessage:
+            loadRes.errorMessage ||
+            this.supabaseAuthError ||
+            'تعذر تحميل بيانات الحساب من قاعدة البيانات. يرجى المحاولة مرة أخرى.',
+        };
+      }
+    }
+
+    const targetStep: OnboardingStep = this.supabaseAccountBundle?.onboardingDone
+      ? 'completed'
+      : this.ownerDetailsCompleted
+      ? 'has_pet'
+      : 'owner_details';
+
+    if (!this.isOnboardingPreviewSession) {
+      this.clearSplashTimers();
+      this.splashTransitionLocked = true;
+      this.splashLoadingDelayed = false;
+      this.pendingSplashAdvance = false;
+    }
+    this.onboardingStep = targetStep;
+    if (
+      targetStep === 'completed' &&
+      !this.isOnboardingPreviewSession &&
+      typeof localStorage !== 'undefined'
+    ) {
+      localStorage.setItem('meow_onboarding_done', 'true');
+    }
+    this.notify();
+    return { success: true };
   }
 
   public isProcessingAuthDeepLink(): boolean {

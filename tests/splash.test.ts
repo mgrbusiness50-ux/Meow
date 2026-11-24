@@ -310,5 +310,39 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     await flushMicrotasks();
     expect(state.getOnboardingStep()).toBe('welcome');
   });
+
+  it('renders logo and developer credit simultaneously in both index.html and OnboardingView without render-blocking remote stylesheets', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf8');
+    const indexCss = fs.readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf8');
+
+    // Verify no blocking remote @import inside src/index.css and non-blocking remote stylesheets in index.html
+    expect(indexCss).not.toContain('@import url(');
+    expect(indexHtml).toContain('id="splash-logo-img"');
+    expect(indexHtml).toContain('id="splash-brand-credit"');
+    expect(indexHtml).toContain('Mohamed Gamil');
+    expect(indexHtml).toContain('media="print"');
+
+    vi.doMock('../src/services/supabaseClient.ts', () => ({
+      isSupabaseConfigured: () => false,
+    }));
+    const [{ state }, { renderOnboardingView }] = await Promise.all([
+      import('../src/state.ts'),
+      import('../src/ui/views/OnboardingView.ts'),
+    ]);
+    state.resetSplashState();
+    const html = renderOnboardingView();
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+
+    const logoEl = wrapper.querySelector('#splash-logo-img') as HTMLImageElement | null;
+    const creditEl = wrapper.querySelector('#splash-brand-credit') as HTMLElement | null;
+    expect(logoEl).not.toBeNull();
+    expect(creditEl).not.toBeNull();
+    expect(logoEl?.getAttribute('src')).toBe('/assets/meow-logo.png');
+    expect(creditEl?.textContent).toContain('By');
+    expect(creditEl?.textContent).toContain('Mohamed Gamil');
+  });
 });
 
