@@ -12,6 +12,12 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     plugins: [tailwindcss()],
+    server: {
+      host: '0.0.0.0',
+      port: 3000,
+      allowedHosts: true,
+      hmr: false,
+    },
     define: isProdBuild
       ? {
           'import.meta.env.DEV': 'false',
