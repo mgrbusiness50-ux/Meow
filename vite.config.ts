@@ -1,17 +1,31 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const emptyStubPath = path.resolve(__dirname, 'src/utils/emptyModuleStub.ts');
+
+function excludeAiStudioAssetsPlugin(): Plugin {
+  return {
+    name: 'exclude-aistudio-assets',
+    apply: 'build',
+    closeBundle() {
+      const distAiStudioDir = path.resolve(__dirname, 'dist/assets/aistudio');
+      if (fs.existsSync(distAiStudioDir)) {
+        fs.rmSync(distAiStudioDir, { recursive: true, force: true });
+      }
+    },
+  };
+}
 
 export default defineConfig(({ command, mode }) => {
   const isBuild = command === 'build';
   const isProdBuild = isBuild && mode !== 'development';
 
   return {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss(), excludeAiStudioAssetsPlugin()],
     server: {
       host: '0.0.0.0',
       port: 3000,

@@ -13,3 +13,4 @@ key.properties
 android/app/*.jks
 android/app/*.keystore
 android/key.properties
+public/assets/aistudio/
