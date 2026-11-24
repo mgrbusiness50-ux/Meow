@@ -39,17 +39,34 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Classify release change scope & check OTA readiness
+      - name: Resolve OTA hosting URL & classify release change scope
         id: classify
         env:
-          UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL || '' }}
+          CONFIGURED_UPDATES_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL || '' }}
+          PUBLISH_TARGET: ${{ vars.OTA_PUBLISH_TARGET || 'gh_pages' }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          if [ -z "${UPDATES_BASE_URL}" ]; then
-            echo "classification=ota_skipped_unconfigured" >> "$GITHUB_OUTPUT"
+          if [ "${PUBLISH_TARGET}" = "disabled" ] || [ "${PUBLISH_TARGET}" = "none" ]; then
+            echo "classification=ota_disabled" >> "$GITHUB_OUTPUT"
             echo "should_deploy_ota=false" >> "$GITHUB_OUTPUT"
-            echo "reason=VITE_UPDATES_BASE_URL is not configured yet. Configure a public HTTPS host variable/secret before publishing OTA." >> "$GITHUB_OUTPUT"
+            echo "reason=OTA_PUBLISH_TARGET is set to ${PUBLISH_TARGET}." >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          RESOLVED_URL="${CONFIGURED_UPDATES_URL%/}"
+          if [ -z "${RESOLVED_URL}" ]; then
+            if [ "${PUBLISH_TARGET}" = "external_github_pages" ]; then
+              echo "classification=ota_skipped_unconfigured" >> "$GITHUB_OUTPUT"
+              echo "should_deploy_ota=false" >> "$GITHUB_OUTPUT"
+              echo "reason=VITE_UPDATES_BASE_URL is required when OTA_PUBLISH_TARGET is external_github_pages." >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            OWNER_LOWER=$(echo "${REPO_OWNER}" | tr '[:upper:]' '[:lower:]')
+            RESOLVED_URL="https://${OWNER_LOWER}.github.io/${REPO_NAME}/updates"
+            echo "Resolved default same-repo GitHub Pages updates URL: ${RESOLVED_URL}"
+          fi
+          echo "updates_base_url=${RESOLVED_URL}" >> "$GITHUB_OUTPUT"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_deploy }}" = "true" ]; then
             echo "classification=ota_eligible" >> "$GITHUB_OUTPUT"
@@ -58,9 +75,9 @@ jobs:
           elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
             node scripts/classify-release-change.mjs --base HEAD~1 --head HEAD
           else
-            echo "classification=no_baseline_commit" >> "$GITHUB_OUTPUT"
-            echo "should_deploy_ota=false" >> "$GITHUB_OUTPUT"
-            echo "reason=Initial commit without HEAD~1 baseline; skipping automatic OTA deploy." >> "$GITHUB_OUTPUT"
+            echo "classification=ota_eligible" >> "$GITHUB_OUTPUT"
+            echo "should_deploy_ota=true" >> "$GITHUB_OUTPUT"
+            echo "reason=Initial commit without HEAD~1 baseline; publishing baseline OTA bundle." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Summarize skipped OTA deploy
@@ -72,7 +89,7 @@ jobs:
         id: meta
         if: steps.classify.outputs.should_deploy_ota == 'true'
         env:
-          UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL || '' }}
+          UPDATES_BASE_URL: ${{ steps.classify.outputs.updates_base_url }}
           EVENT_NAME: ${{ github.event_name }}
           INPUT_CHANNEL: ${{ inputs.channel }}
         run: |
@@ -138,7 +155,7 @@ jobs:
           '
 
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ steps.meta.outputs.version_bumped }}" != "true" ]; then
-            echo "::notice::version.json appVersion (${{ steps.meta.outputs.app_version }}) was not incremented compared to HEAD~1. Skipping automatic OTA deploy until version.json is bumped."
+            echo "::notice::version.json appVersion (${{ steps.meta.outputs.app_version }}) was not incremented compared to HEAD~1. Skipping automatic OTA deploy until version.json is bumped (or trigger workflow_dispatch with force_deploy=true)."
             echo "allow_publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -207,8 +224,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_WEB_CLIENT_ID: ${{ vars.VITE_GOOGLE_WEB_CLIENT_ID || secrets.VITE_GOOGLE_WEB_CLIENT_ID || '' }}
           VITE_APP_CHANNEL: ${{ steps.meta.outputs.channel }}
-          VITE_UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL }}
+          VITE_UPDATES_BASE_URL: ${{ steps.classify.outputs.updates_base_url }}
         run: |
           npm run build
           if grep -rnE "xrblocks|@dimforge/rapier|CatScene|SERVICE_ROLE_KEY|BEGIN PRIVATE KEY" dist; then
@@ -220,7 +238,7 @@ jobs:
         if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
         id: package
         env:
-          UPDATES_BASE_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL }}
+          UPDATES_BASE_URL: ${{ steps.classify.outputs.updates_base_url }}
           APP_VERSION: ${{ steps.meta.outputs.app_version }}
           BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
           MIN_NATIVE_VERSION: ${{ steps.meta.outputs.min_native_version }}
@@ -228,15 +246,21 @@ jobs:
           CHANNEL: ${{ steps.meta.outputs.channel }}
           MANDATORY: ${{ inputs.mandatory == true && 'true' || 'false' }}
         run: |
-          mkdir -p ota-stage/updates/bundles
-          BUNDLE_DIR="updates/bundles/${APP_VERSION}-b${BUILD_NUMBER}-${CHANNEL}"
-          mkdir -p "ota-stage/${BUNDLE_DIR}"
-          (cd dist && zip -r -q "../ota-stage/${BUNDLE_DIR}/bundle.zip" .)
-          CHECKSUM=$(sha256sum "ota-stage/${BUNDLE_DIR}/bundle.zip" | awk '{print $1}')
+          BUNDLE_SUBPATH="bundles/${APP_VERSION}-b${BUILD_NUMBER}-${CHANNEL}"
+          STAGE_UPDATES_DIR="ota-stage/updates"
+          mkdir -p "${STAGE_UPDATES_DIR}/${BUNDLE_SUBPATH}"
+          touch ota-stage/.nojekyll
+          (cd dist && zip -r -q "../${STAGE_UPDATES_DIR}/${BUNDLE_SUBPATH}/bundle.zip" .)
+          CHECKSUM=$(sha256sum "${STAGE_UPDATES_DIR}/${BUNDLE_SUBPATH}/bundle.zip" | awk '{print $1}')
           PUBLISHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          export BASE_CLEAN="${UPDATES_BASE_URL%/}"
+          BASE_CLEAN="${UPDATES_BASE_URL%/}"
+          # Avoid double /updates/ when UPDATES_BASE_URL already ends with /updates
+          case "${BASE_CLEAN}" in
+            */updates) BUNDLE_URL="${BASE_CLEAN}/${BUNDLE_SUBPATH}/bundle.zip" ;;
+            *) BUNDLE_URL="${BASE_CLEAN}/updates/${BUNDLE_SUBPATH}/bundle.zip" ;;
+          esac
           export MANIFEST_NAME=$([ "$CHANNEL" = "testing" ] && echo "ota-manifest-testing.json" || echo "ota-manifest.json")
-          export BUNDLE_DIR
+          export BUNDLE_URL
           export CHECKSUM
           export PUBLISHED_AT
 
@@ -246,7 +270,7 @@ jobs:
             const manifest = {
               version: process.env.APP_VERSION,
               buildNumber: Number(process.env.BUILD_NUMBER),
-              bundleUrl: `${process.env.BASE_CLEAN}/${process.env.BUNDLE_DIR}/bundle.zip`,
+              bundleUrl: process.env.BUNDLE_URL,
               checksum: process.env.CHECKSUM,
               minNativeVersion: process.env.MIN_NATIVE_VERSION,
               ...(process.env.MAX_NATIVE_VERSION ? { maxNativeVersion: process.env.MAX_NATIVE_VERSION } : {}),
@@ -277,8 +301,8 @@ jobs:
           keep_files: true
           commit_message: "chore(ota): publish ${{ steps.meta.outputs.channel }} v${{ steps.meta.outputs.app_version }} (build ${{ steps.meta.outputs.build_number }})"
 
-      - name: Publish OTA bundle to same-repo gh-pages (only when explicitly enabled)
-        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true' && vars.OTA_PUBLISH_TARGET == 'gh_pages'
+      - name: Publish OTA bundle to same-repo gh-pages branch
+        if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true' && vars.OTA_PUBLISH_TARGET != 'external_github_pages' && vars.OTA_PUBLISH_TARGET != 'disabled' && vars.OTA_PUBLISH_TARGET != 'none'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

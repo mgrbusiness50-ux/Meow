@@ -39,15 +39,33 @@ SET search_path = public
 AS $$
 DECLARE
   jwt_role text := COALESCE(current_setting('request.jwt.claim.role', true), '');
+  is_privileged boolean := (
+    jwt_role = 'service_role'
+    OR current_user IN ('postgres', 'supabase_admin', 'service_role')
+    OR pg_trigger_depth() > 1
+  );
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NOT is_privileged THEN
+      NEW.role := COALESCE(NULLIF(TRIM(NEW.role), ''), 'user');
+      IF NEW.role <> 'user' THEN
+        RAISE EXCEPTION 'Insufficient privileges to set profile role';
+      END IF;
+      IF NEW.deleted_at IS NOT NULL THEN
+        RAISE EXCEPTION 'Insufficient privileges to set profile archive state';
+      END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+
   IF (NEW.role IS DISTINCT FROM OLD.role) THEN
-    IF jwt_role <> 'service_role' AND current_user NOT IN ('postgres', 'supabase_admin') THEN
+    IF NOT is_privileged THEN
       RAISE EXCEPTION 'Insufficient privileges to modify profile role';
     END IF;
   END IF;
 
   IF (NEW.deleted_at IS DISTINCT FROM OLD.deleted_at) THEN
-    IF jwt_role <> 'service_role' AND current_user NOT IN ('postgres', 'supabase_admin') THEN
+    IF NOT is_privileged THEN
       RAISE EXCEPTION 'Insufficient privileges to modify profile archive state';
     END IF;
   END IF;
@@ -73,7 +91,8 @@ BEGIN
   display_name := COALESCE(
     NULLIF(TRIM(NEW.raw_user_meta_data ->> 'full_name'), ''),
     NULLIF(TRIM(NEW.raw_user_meta_data ->> 'name'), ''),
-    SPLIT_PART(COALESCE(NEW.email, 'مستخدم Meow'), '@', 1)
+    NULLIF(TRIM(SPLIT_PART(COALESCE(NEW.email, ''), '@', 1)), ''),
+    'مستخدم Meow'
   );
   avatar := COALESCE(
     NULLIF(TRIM(NEW.raw_user_meta_data ->> 'avatar_url'), ''),
@@ -95,8 +114,7 @@ BEGIN
   INSERT INTO public.user_private_details (user_id, email, phone)
   VALUES (NEW.id, COALESCE(NEW.email, ''), '')
   ON CONFLICT (user_id) DO UPDATE
-    SET email = EXCLUDED.email
-    WHERE public.user_private_details.email = '';
+    SET email = COALESCE(NULLIF(EXCLUDED.email, ''), public.user_private_details.email);
 
   RETURN NEW;
 END;
@@ -939,7 +957,7 @@ CREATE TRIGGER trg_profiles_privacy_sync
 
 DROP TRIGGER IF EXISTS trg_profiles_protect_role ON public.profiles;
 CREATE TRIGGER trg_profiles_protect_role
-  BEFORE UPDATE ON public.profiles
+  BEFORE INSERT OR UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.protect_profile_role();
 
 -- pets & group adoption integrity
@@ -1035,7 +1053,8 @@ SELECT
   COALESCE(
     NULLIF(TRIM(u.raw_user_meta_data ->> 'full_name'), ''),
     NULLIF(TRIM(u.raw_user_meta_data ->> 'name'), ''),
-    SPLIT_PART(COALESCE(u.email, 'مستخدم Meow'), '@', 1)
+    NULLIF(TRIM(SPLIT_PART(COALESCE(u.email, ''), '@', 1)), ''),
+    'مستخدم Meow'
   ),
   COALESCE(
     NULLIF(TRIM(u.raw_user_meta_data ->> 'avatar_url'), ''),
@@ -1051,4 +1070,5 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.user_private_details (user_id, email, phone)
 SELECT u.id, COALESCE(u.email, ''), ''
 FROM auth.users u
-ON CONFLICT (user_id) DO NOTHING;
+ON CONFLICT (user_id) DO UPDATE
+  SET email = COALESCE(NULLIF(EXCLUDED.email, ''), public.user_private_details.email);

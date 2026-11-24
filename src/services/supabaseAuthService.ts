@@ -440,6 +440,42 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
   }
 
   if (
+    code === 'bad_oauth_state' ||
+    code === 'flow_state_not_found' ||
+    rawMessage.includes('bad_oauth_state') ||
+    rawMessage.includes('oauth state') ||
+    rawMessage.includes('flow state not found')
+  ) {
+    return {
+      code: code || 'bad_oauth_state',
+      message: 'انتهت جلسة المصادقة مع Google أو تعذر التحقق من حالتها. يرجى الضغط على تسجيل الدخول عبر Google مرة أخرى.',
+    };
+  }
+
+  if (
+    code === 'pkce_code_verifier_not_found' ||
+    rawMessage.includes('code verifier') ||
+    rawMessage.includes('both auth code and code verifier') ||
+    rawMessage.includes('invalid flow id')
+  ) {
+    return {
+      code: 'pkce_code_verifier_not_found',
+      message: 'تعذر إكمال التحقق الأمني (PKCE) بعد العودة من المتصفح. يرجى إعادة المحاولة من داخل التطبيق.',
+    };
+  }
+
+  if (
+    rawMessage.includes('database error saving new user') ||
+    rawMessage.includes('unable to exchange external code') ||
+    code === 'unexpected_failure'
+  ) {
+    return {
+      code: code || 'oauth_server_error',
+      message: 'تعذر إكمال حفظ حساب Google في قاعدة بيانات Supabase. يرجى المحاولة مرة أخرى.',
+    };
+  }
+
+  if (
     rawMessage.includes('failed to fetch') ||
     rawMessage.includes('network') ||
     rawMessage.includes('fetch') ||
@@ -458,7 +494,21 @@ function mapSupabaseAuthErrorToArabic(error: unknown, fallbackMessage: string): 
   };
 }
 
+function getDatabaseErrorCode(error: unknown): string {
+  if (typeof error === 'object' && error !== null) {
+    const errObj = error as { code?: unknown; status?: unknown };
+    if (typeof errObj.code === 'string' && errObj.code.trim()) {
+      return errObj.code.trim();
+    }
+    if (typeof errObj.status === 'number') {
+      return String(errObj.status);
+    }
+  }
+  return '';
+}
+
 function mapDatabaseErrorToArabic(error: unknown, fallbackMessage: string): string {
+  const code = getDatabaseErrorCode(error).toLowerCase();
   const rawMessage = (
     error instanceof Error
       ? error.message
@@ -467,7 +517,13 @@ function mapDatabaseErrorToArabic(error: unknown, fallbackMessage: string): stri
       : String(error || '')
   ).toLowerCase();
 
+  if (code || rawMessage) {
+    console.warn('[Meow Supabase DB error]', { code, message: rawMessage });
+  }
+
   if (
+    code === '42501' ||
+    code === '403' ||
     rawMessage.includes('row-level security') ||
     rawMessage.includes('permission denied') ||
     rawMessage.includes('insufficient privileges')
@@ -479,7 +535,15 @@ function mapDatabaseErrorToArabic(error: unknown, fallbackMessage: string): stri
     return 'تعارض في إعدادات خصوصية رقم الهاتف. يرجى إعادة المحاولة.';
   }
 
-  if (rawMessage.includes('failed to fetch') || rawMessage.includes('network')) {
+  if (code === '23503' || rawMessage.includes('foreign key constraint')) {
+    return 'تعذر ربط تفاصيل الحساب لأن سجل الملف الشخصي غير مكتمل بعد. يرجى تحديث الصفحة أو إعادة تسجيل الدخول.';
+  }
+
+  if (
+    rawMessage.includes('failed to fetch') ||
+    rawMessage.includes('network') ||
+    rawMessage.includes('timeout')
+  ) {
     return 'تعذر حفظ أو جلب بيانات الحساب بسبب مشكلة في الاتصال بالإنترنت.';
   }
 
@@ -1635,35 +1699,74 @@ export async function saveSupabaseUserAccountBundle(
     const { profile: profilePayload, privateDetails: privatePayload } =
       mapUserProfileToDbUpsert(normalizedUser, extra);
 
-    const profileRes = await client
-      .from('profiles')
-      .upsert(profilePayload, { onConflict: 'id' })
-      .select(PROFILE_SELECT_COLUMNS)
-      .single();
+    const { id: _profileId, ...profileUpdateFields } = profilePayload;
+    const { user_id: _privateUserId, ...privateUpdateFields } = privatePayload;
 
-    if (profileRes.error) {
+    let profileRes = await client
+      .from('profiles')
+      .update(profileUpdateFields)
+      .eq('id', sessionUser.id)
+      .select(PROFILE_SELECT_COLUMNS)
+      .maybeSingle();
+
+    if (!profileRes.error && !profileRes.data) {
+      profileRes = await client
+        .from('profiles')
+        .insert(profilePayload)
+        .select(PROFILE_SELECT_COLUMNS)
+        .single();
+
+      if (profileRes.error && getDatabaseErrorCode(profileRes.error) === '23505') {
+        profileRes = await client
+          .from('profiles')
+          .update(profileUpdateFields)
+          .eq('id', sessionUser.id)
+          .select(PROFILE_SELECT_COLUMNS)
+          .maybeSingle();
+      }
+    }
+
+    if (profileRes.error || !profileRes.data) {
       return {
         success: false,
         bundle: null,
         errorMessage: mapDatabaseErrorToArabic(
-          profileRes.error,
+          profileRes.error || new Error('profile_save_empty'),
           'تعذر حفظ بيانات الملف الشخصي. يرجى التحقق والمحاولة مرة أخرى.'
         ),
       };
     }
 
-    const privateRes = await client
+    let privateRes = await client
       .from('user_private_details')
-      .upsert(privatePayload, { onConflict: 'user_id' })
+      .update(privateUpdateFields)
+      .eq('user_id', sessionUser.id)
       .select(PRIVATE_DETAILS_SELECT_COLUMNS)
-      .single();
+      .maybeSingle();
 
-    if (privateRes.error) {
+    if (!privateRes.error && !privateRes.data) {
+      privateRes = await client
+        .from('user_private_details')
+        .insert(privatePayload)
+        .select(PRIVATE_DETAILS_SELECT_COLUMNS)
+        .single();
+
+      if (privateRes.error && getDatabaseErrorCode(privateRes.error) === '23505') {
+        privateRes = await client
+          .from('user_private_details')
+          .update(privateUpdateFields)
+          .eq('user_id', sessionUser.id)
+          .select(PRIVATE_DETAILS_SELECT_COLUMNS)
+          .maybeSingle();
+      }
+    }
+
+    if (privateRes.error || !privateRes.data) {
       return {
         success: false,
         bundle: null,
         errorMessage: mapDatabaseErrorToArabic(
-          privateRes.error,
+          privateRes.error || new Error('private_details_save_empty'),
           'تعذر حفظ بيانات التواصل الخاصة بالحساب.'
         ),
       };
@@ -1896,10 +1999,15 @@ async function processSupabaseAuthCallbackUrl(
   }
 
   try {
-    const code = searchParams.get('code')?.trim();
+    const code = searchParams.get('code')?.trim() || hashParams.get('code')?.trim();
     const flowId =
-      (searchParams.get('sb_flow_id') || searchParams.get('flow_id') || '').trim() ||
-      undefined;
+      (
+        searchParams.get('sb_flow_id') ||
+        hashParams.get('sb_flow_id') ||
+        searchParams.get('flow_id') ||
+        hashParams.get('flow_id') ||
+        ''
+      ).trim() || undefined;
 
     if (code) {
       const { data, error } = await client.auth.exchangeCodeForSession(
@@ -1908,6 +2016,26 @@ async function processSupabaseAuthCallbackUrl(
       );
 
       if (error || !data?.session) {
+        if (!isRecoveryHint) {
+          try {
+            const existingSessionRes = await client.auth.getSession();
+            const existingSession = existingSessionRes?.data?.session ?? null;
+            if (existingSession) {
+              passwordRecoveryActive = false;
+              return {
+                handled: true,
+                success: true,
+                session: existingSession,
+                user: existingSession.user ?? null,
+                isPasswordRecovery: false,
+                message: 'تم تسجيل الدخول وتفعيل الجلسة بنجاح.',
+              };
+            }
+          } catch {
+            // Fall through to mapped exchangeCodeForSession error
+          }
+        }
+
         const mapped = mapSupabaseAuthErrorToArabic(
           error || new Error('auth_code_exchange_failed'),
           'انتهت صلاحية رابط التحقق أو تعذر استعادة الجلسة. يرجى طلب رابط جديد.'
@@ -2093,7 +2221,7 @@ export async function handleSupabaseAuthCallbackUrl(
 
   const promise = processSupabaseAuthCallbackUrl(parsed)
     .then((res) => {
-      if (res.success || res.errorCode !== 'network_error') {
+      if (res.success || res.errorCode === 'oauth_cancelled') {
         cacheCompletedAuthCallback(dedupeKey, res);
       }
       return res;

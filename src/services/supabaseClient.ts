@@ -19,20 +19,31 @@ function readEnvString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function isValidHttpUrl(value: string): boolean {
-  if (!value) return false;
+function normalizeSupabaseUrl(value: unknown): string {
+  const trimmed = readEnvString(value);
+  if (!trimmed) return '';
   try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return '';
+    }
+    const cleanedPath = parsed.pathname
+      .replace(/\/(rest|auth|storage|functions)\/v\d+\/?$/i, '')
+      .replace(/\/+$/, '');
+    return `${parsed.origin}${cleanedPath}`;
   } catch {
-    return false;
+    return '';
   }
+}
+
+function isValidHttpUrl(value: string): boolean {
+  return Boolean(normalizeSupabaseUrl(value));
 }
 
 export function getSupabaseConfig(): SupabaseConfig {
   const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : undefined;
   return {
-    url: readEnvString(env?.VITE_SUPABASE_URL),
+    url: normalizeSupabaseUrl(env?.VITE_SUPABASE_URL),
     anonKey: readEnvString(env?.VITE_SUPABASE_ANON_KEY),
   };
 }

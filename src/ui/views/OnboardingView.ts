@@ -579,6 +579,9 @@ function renderAuthMethodStep(): string {
   const isForgotPassword = !isRecoveryActive && authSubView === 'forgot_password';
   const isForgotOtp = !isRecoveryActive && authSubView === 'forgot_otp';
   const stateAuthError = !authErrorMessage && !authSuccessMessage ? state.getSupabaseAuthError() || '' : '';
+  if (isGoogleSubmitting && !state.isProcessingAuthDeepLink() && (stateAuthError || authErrorMessage)) {
+    isGoogleSubmitting = false;
+  }
   const visibleError = authErrorMessage || stateAuthError;
   const isAuthBusy =
     isAuthSubmitting ||

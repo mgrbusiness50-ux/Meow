@@ -222,6 +222,7 @@ jobs:
           MANDATORY: ${{ inputs.mandatory == true && 'true' || 'false' }}
         run: |
           mkdir -p gh-pages-apk/updates
+          touch gh-pages-apk/.nojekyll
           export PUBLISHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           node -e '
             const fs = require("fs");
@@ -258,8 +259,8 @@ jobs:
           keep_files: true
           commit_message: "chore(release): update apk-release.json for v${{ steps.meta.outputs.app_version }} (build ${{ steps.meta.outputs.build_number }})"
 
-      - name: Publish apk-release.json to same-repo gh-pages (only when explicitly enabled)
-        if: (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_github_release == true)) && vars.OTA_PUBLISH_TARGET == 'gh_pages'
+      - name: Publish apk-release.json to same-repo gh-pages branch
+        if: (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_github_release == true)) && vars.OTA_PUBLISH_TARGET != 'external_github_pages' && vars.OTA_PUBLISH_TARGET != 'disabled' && vars.OTA_PUBLISH_TARGET != 'none'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -362,5 +362,178 @@ describe('Supabase Auth flows: Google OAuth deep link, Email signup (Confirm Ema
     expect(continueRes.success).toBe(true);
     expect(state.getOnboardingStep()).toBe('owner_details');
   });
+
+  it('saves account bundle using update-first then insert-fallback without upsert, and maps 42501 RLS errors clearly', async () => {
+    const fakeSession = {
+      access_token: 'tok_save',
+      user: { id: 'u-save-1', email: 'owner@example.com' },
+    };
+    mockGetSession.mockResolvedValue({ data: { session: fakeSession }, error: null });
+
+    const returnedProfile = {
+      id: 'u-save-1',
+      role: 'user',
+      name: 'كريم',
+      avatar_url: '',
+      gender: 'male',
+      city: 'القاهرة',
+      governorate: 'القاهرة',
+      markaz: '',
+      village: '',
+      location_id: 'loc-1',
+      governorate_id: 'gov-1',
+      markaz_id: null,
+      city_id: 'city-1',
+      village_id: null,
+      lat: null,
+      lng: null,
+      show_phone_in_profile: false,
+      privacy_mode: 'private',
+      show_phone_only_after_approval: false,
+      notifications_enabled: true,
+      advice_dismissed: false,
+      onboarding_done: true,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    const returnedPrivate = {
+      user_id: 'u-save-1',
+      email: 'owner@example.com',
+      phone: '01012345678',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+
+    const profileUpdateMock = vi.fn(() => ({
+      eq: () => ({
+        select: () => ({
+          maybeSingle: vi.fn(async () => ({ data: returnedProfile, error: null })),
+        }),
+      }),
+    }));
+    const privateUpdateMock = vi.fn(() => ({
+      eq: () => ({
+        select: () => ({
+          maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+        }),
+      }),
+    }));
+    const privateInsertMock = vi.fn(() => ({
+      select: () => ({
+        single: vi.fn(async () => ({ data: returnedPrivate, error: null })),
+      }),
+    }));
+    const upsertSpy = vi.fn();
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return { update: profileUpdateMock, upsert: upsertSpy };
+      }
+      if (table === 'user_private_details') {
+        return { update: privateUpdateMock, insert: privateInsertMock, upsert: upsertSpy };
+      }
+      return {};
+    });
+
+    const { saveSupabaseUserAccountBundle } = await import(
+      '../src/services/supabaseAuthService.ts'
+    );
+
+    const saveRes = await saveSupabaseUserAccountBundle(
+      {
+        id: 'u-save-1',
+        name: 'كريم',
+        email: 'owner@example.com',
+        phone: '01012345678',
+        avatar: '',
+        gender: 'male',
+        city: 'القاهرة',
+        governorate: 'القاهرة',
+        locationId: 'loc-1',
+        governorateId: 'gov-1',
+        cityId: 'city-1',
+        showPhoneInProfile: false,
+        notificationsEnabled: true,
+      },
+      { onboardingDone: true }
+    );
+
+    expect(saveRes.success).toBe(true);
+    expect(saveRes.bundle?.profile?.name).toBe('كريم');
+    expect(saveRes.bundle?.onboardingDone).toBe(true);
+    expect(profileUpdateMock).toHaveBeenCalledTimes(1);
+    expect(privateUpdateMock).toHaveBeenCalledTimes(1);
+    expect(privateInsertMock).toHaveBeenCalledTimes(1);
+    expect(upsertSpy).not.toHaveBeenCalled();
+
+    // Verify 42501 RLS error mapping
+    mockFrom.mockImplementationOnce(() => ({
+      update: () => ({
+        eq: () => ({
+          select: () => ({
+            maybeSingle: vi.fn(async () => ({
+              data: null,
+              error: { code: '42501', message: 'new row violates row-level security policy' },
+            })),
+          }),
+        }),
+      }),
+    }));
+
+    const rlsRes = await saveSupabaseUserAccountBundle({
+      id: 'u-save-1',
+      name: 'كريم',
+      email: 'owner@example.com',
+      phone: '01012345678',
+      avatar: '',
+      city: 'القاهرة',
+      showPhoneInProfile: false,
+      notificationsEnabled: true,
+    });
+    expect(rlsRes.success).toBe(false);
+    expect(rlsRes.errorMessage).toBe('لا تملك صلاحية لتنفيذ هذه العملية على بيانات الحساب.');
+  });
+
+  it('recovers existing session when PKCE verifier is missing and maps bad_oauth_state / DB signup errors', async () => {
+    const { handleSupabaseAuthCallbackUrl } = await import(
+      '../src/services/supabaseAuthService.ts'
+    );
+
+    const stateErr = await handleSupabaseAuthCallbackUrl(
+      'com.meow.app://auth-callback?error=server_error&error_code=bad_oauth_state&error_description=Unable+to+verify+state'
+    );
+    expect(stateErr.success).toBe(false);
+    expect(stateErr.errorCode).toBe('bad_oauth_state');
+
+    const dbUserErr = await handleSupabaseAuthCallbackUrl(
+      'com.meow.app://auth-callback?error=server_error&error_description=Database+error+saving+new+user'
+    );
+    expect(dbUserErr.success).toBe(false);
+    expect(dbUserErr.errorMessage).toContain('تعذر إكمال حفظ حساب Google في قاعدة بيانات Supabase');
+
+    const existingSession = {
+      access_token: 'tok_existing',
+      user: { id: 'g-existing', email: 'existing@gmail.com' },
+    };
+    mockExchangeCodeForSession.mockResolvedValueOnce({
+      data: { session: null },
+      error: { message: 'both auth code and code verifier should be non-empty' },
+    });
+    mockGetSession.mockResolvedValueOnce({
+      data: { session: existingSession },
+      error: null,
+    });
+
+    const recovered = await handleSupabaseAuthCallbackUrl(
+      'com.meow.app://auth-callback#code=hash_pkce_code_999&sb_flow_id=flow_999'
+    );
+    expect(mockExchangeCodeForSession).toHaveBeenCalledWith('hash_pkce_code_999', {
+      flowId: 'flow_999',
+    });
+    expect(recovered.success).toBe(true);
+    expect(recovered.session).toEqual(existingSession);
+  });
 });
+
 

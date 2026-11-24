@@ -453,24 +453,47 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.is_not_blocked(uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_not_blocked(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_not_blocked(uuid, uuid) TO authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.get_my_profile_role() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_my_profile_role() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_my_profile_role() TO authenticated, service_role;
 
--- Prevent clients from directly writing privileged columns even before triggers fire
-REVOKE INSERT (role, deleted_at) ON public.profiles FROM anon, authenticated;
-REVOKE UPDATE (role, deleted_at) ON public.profiles FROM anon, authenticated;
+-- Explicit schema, table, and sequence privileges for authenticated & service_role
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON SCHEMA public TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+
+REVOKE ALL ON public.profiles FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;
+
+REVOKE ALL ON public.user_private_details FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_private_details TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE ON public.pets TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.group_adoption_members TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.health_records TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.saved_pets TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.contact_requests TO authenticated;
+GRANT SELECT ON public.conversations TO authenticated;
+REVOKE INSERT, DELETE ON public.conversations FROM anon, authenticated;
+GRANT SELECT, UPDATE ON public.conversation_user_state TO authenticated;
+REVOKE INSERT, DELETE ON public.conversation_user_state FROM anon, authenticated;
 
 -- Restrict client UPDATE on messages strictly to the read status column and block DELETE
-REVOKE UPDATE, DELETE ON public.messages FROM anon, authenticated;
+REVOKE ALL ON public.messages FROM anon, authenticated;
+GRANT SELECT, INSERT ON public.messages TO authenticated;
 GRANT UPDATE (status) ON public.messages TO authenticated;
 
--- Prevent clients from inserting or deleting conversation_user_state rows (managed by triggers/RPCs)
-REVOKE INSERT, DELETE ON public.conversation_user_state FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.notifications TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.blocked_users TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.reports TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.support_messages TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.user_custom_stickers TO authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
 -- ============================================================================
 -- 3. ENABLE ROW LEVEL SECURITY ON ALL 15 TABLES
@@ -496,6 +519,22 @@ ALTER TABLE public.user_custom_stickers ENABLE ROW LEVEL SECURITY;
 -- 4. RLS POLICIES FOR ALL 15 TABLES
 -- ============================================================================
 
+-- Remove any legacy/conflicting policies on account tables before recreating canonical ones
+DO $$
+DECLARE
+  pol record;
+BEGIN
+  FOR pol IN
+    SELECT schemaname, tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN ('profiles', 'user_private_details')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I', pol.policyname, pol.schemaname, pol.tablename);
+  END LOOP;
+END
+$$;
+
 -- 4.1 profiles
 DROP POLICY IF EXISTS profiles_select_policy ON public.profiles;
 CREATE POLICY profiles_select_policy ON public.profiles
@@ -511,7 +550,7 @@ CREATE POLICY profiles_insert_self ON public.profiles
   FOR INSERT TO authenticated
   WITH CHECK (
     auth.uid() = id
-    AND role = 'user'
+    AND COALESCE(role, 'user') = 'user'
     AND deleted_at IS NULL
   );
 
@@ -522,7 +561,7 @@ CREATE POLICY profiles_update_self ON public.profiles
   WITH CHECK (
     auth.uid() = id
     AND deleted_at IS NULL
-    AND role = public.get_my_profile_role()
+    AND role IS NOT DISTINCT FROM public.get_my_profile_role()
   );
 
 -- 4.2 user_private_details
@@ -541,6 +580,11 @@ CREATE POLICY private_details_update_self ON public.user_private_details
   FOR UPDATE TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS private_details_delete_self ON public.user_private_details;
+CREATE POLICY private_details_delete_self ON public.user_private_details
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
 -- 4.3 pets
 DROP POLICY IF EXISTS pets_select_policy ON public.pets;
