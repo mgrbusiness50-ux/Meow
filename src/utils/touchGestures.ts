@@ -517,10 +517,6 @@ export function attachPullToRefresh(
 ): void {
   if (!targetEl) return;
 
-  const readyLabel = options.readyLabel || 'اسحب للتحديث';
-  const releaseLabel = options.releaseLabel || 'أفلت للتحديث';
-  const refreshingLabel = options.refreshingLabel || 'جاري التحديث...';
-
   let startX = 0;
   let startY = 0;
   let pullDistance = 0;
@@ -534,30 +530,30 @@ export function attachPullToRefresh(
     const el = document.createElement('div');
     el.id = 'meow-ptr-indicator';
     el.className =
-      'fixed left-1/2 -translate-x-1/2 z-[125] pointer-events-none px-4 py-2 rounded-full bg-white/95 border-2 border-brand-peachBorder shadow-md flex items-center gap-2 text-xs font-bold text-brand-brown transition-opacity duration-150 opacity-0';
-    el.style.top = 'calc(env(safe-area-inset-top, 0px) + 0.75rem)';
+      'fixed left-1/2 -translate-x-1/2 z-[125] pointer-events-none w-11 h-11 rounded-full bg-white/95 dark:bg-[#27201B]/95 border-2 border-brand-peachBorder dark:border-warm-darkBorder shadow-md flex items-center justify-center transition-opacity duration-150 opacity-0';
+    el.style.top = 'calc(env(safe-area-inset-top, 0px) + 0.65rem)';
     el.innerHTML =
-      '<i class="fa-solid fa-arrow-down text-brand-orange transition-transform duration-150" data-ptr-icon></i><span data-ptr-text></span>';
+      '<div class="meow-ptr-dots" data-ptr-dots aria-hidden="true"><span></span><span></span><span></span></div>';
     document.body.appendChild(el);
     indicatorEl = el;
     return el;
   };
 
-  const updateIndicator = (dist: number, stateText: string, armed: boolean, spinning = false) => {
+  const updateIndicator = (dist: number, armed: boolean, spinning = false) => {
     const el = ensureIndicator();
-    const icon = el.querySelector('[data-ptr-icon]') as HTMLElement | null;
-    const text = el.querySelector('[data-ptr-text]') as HTMLElement | null;
-    if (text) text.textContent = stateText;
-    if (icon) {
-      if (spinning) {
-        icon.className = 'fa-solid fa-spinner fa-spin text-brand-orange';
-        icon.style.transform = '';
+    const dots = el.querySelector('[data-ptr-dots]') as HTMLElement | null;
+    if (dots) {
+      dots.classList.toggle('is-spinning', spinning);
+      if (!spinning) {
+        const progress = Math.min(1, Math.max(0.25, dist / 70));
+        dots.style.transform = `scale(${armed ? 1.05 : 0.72 + progress * 0.28})`;
+        dots.style.opacity = String(armed ? 1 : 0.55 + progress * 0.45);
       } else {
-        icon.className = 'fa-solid fa-arrow-down text-brand-orange transition-transform duration-150';
-        icon.style.transform = armed ? 'rotate(180deg)' : 'rotate(0deg)';
+        dots.style.transform = '';
+        dots.style.opacity = '1';
       }
     }
-    const clampedY = Math.min(72, dist * 0.55);
+    const clampedY = Math.min(68, dist * 0.52);
     el.style.opacity = dist > 8 || spinning ? '1' : '0';
     el.style.transform = `translate(-50%, ${clampedY}px)`;
   };
@@ -623,7 +619,7 @@ export function attachPullToRefresh(
       if (pullDistance > 12) {
         e.preventDefault();
         const armed = pullDistance >= 70;
-        updateIndicator(pullDistance, armed ? releaseLabel : readyLabel, armed, false);
+        updateIndicator(pullDistance, armed, false);
       }
     },
     {passive: false}
@@ -634,7 +630,7 @@ export function attachPullToRefresh(
     active = false;
     if (pullDistance >= 70 && !refreshing) {
       refreshing = true;
-      updateIndicator(52, refreshingLabel, false, true);
+      updateIndicator(52, false, true);
       window.setTimeout(async () => {
         try {
           await options.onRefresh();

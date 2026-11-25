@@ -8,7 +8,7 @@ import {
   formatVaccinationStatus as formatVaccination,
 } from '../../utils/petFormatters.ts';
 import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
-import { attachHorizontalCarouselSwipe } from '../../utils/touchGestures.ts';
+import { attachHorizontalCarouselSwipe, showMobileToast } from '../../utils/touchGestures.ts';
 
 let activePhotoIndex = 0;
 let lastOpenedPetId: string | null = null;
@@ -1083,11 +1083,13 @@ export function renderPetDetailModal(pet: Pet | null): string {
                 }.
               </p>
 
+              <div id="pet-detail-request-error" class="hidden rounded-2xl bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-xs font-bold text-rose-700"></div>
+
               <div class="grid grid-cols-2 gap-3 pt-2">
                 <button
                   id="confirm-send-request-btn"
                   type="button"
-                  class="h-[52px] rounded-full bg-brand-orange text-white font-black text-sm sm:text-base shadow-soft hover:bg-brand-orangeHover transition-all active:scale-95 cursor-pointer font-baloo"
+                  class="h-[52px] rounded-full bg-brand-orange text-white font-black text-sm sm:text-base shadow-soft hover:bg-brand-orangeHover transition-all active:scale-95 cursor-pointer font-baloo disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   تأكيد وإرسال ✓
                 </button>
@@ -1435,6 +1437,10 @@ export function attachPetDetailModalEvents(pet: Pet | null): void {
   const openConfirmBtn = document.getElementById('modal-open-confirmation-btn');
   if (openConfirmBtn) {
     openConfirmBtn.addEventListener('click', () => {
+      if (pet.status === 'mating' && !state.getPrimaryUserMatingPet()) {
+        showMobileToast('يجب إضافة أليف أو تفعيل حالته «للتزاوج» أولاً من ملفك الشخصي', 'danger', 2600);
+        return;
+      }
       pendingRequestMemberId =
         isGroupAdoption && !pet.mustAdoptTogether && selectedMember ? selectedMember.petId : null;
       isConfirmationDialogOpen = true;
@@ -1459,16 +1465,28 @@ export function attachPetDetailModalEvents(pet: Pet | null): void {
   }
 
   // Confirm and Send Request
-  const confirmSendBtn = document.getElementById('confirm-send-request-btn');
+  const confirmSendBtn = document.getElementById('confirm-send-request-btn') as HTMLButtonElement | null;
+  const requestErrorBox = document.getElementById('pet-detail-request-error');
   if (confirmSendBtn) {
-    confirmSendBtn.addEventListener('click', () => {
+    confirmSendBtn.addEventListener('click', async () => {
+      if (confirmSendBtn.disabled) return;
       const requestedMember = pendingRequestMemberId
         ? groupMembers.find((m) => m.petId === pendingRequestMemberId) || null
         : null;
-      isConfirmationDialogOpen = false;
-      activeGroupMemberId = 'all';
-      pendingRequestMemberId = null;
-      state.setSelectedPetForDetail(null);
+      const matingPet = pet.status === 'mating' ? state.getPrimaryUserMatingPet() : undefined;
+      if (pet.status === 'mating' && !matingPet) {
+        if (requestErrorBox) {
+          requestErrorBox.textContent = 'يجب إضافة أو تفعيل أليف «للتزاوج» أولاً قبل إرسال طلب تزاوج.';
+          requestErrorBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (requestErrorBox) {
+        requestErrorBox.classList.add('hidden');
+        requestErrorBox.textContent = '';
+      }
+
       const message =
         pet.status === 'mating'
           ? `السلام عليكم، أود التنسيق معكم بخصوص تزاوج أليفي مع ${pet.name}.`
@@ -1480,8 +1498,27 @@ export function attachPetDetailModalEvents(pet: Pet | null): void {
               .join('، ')}).`
           : `السلام عليكم، أود تقديم طلب لتبني ${pet.name}.`;
 
-      state.sendContactRequest(pet, message);
+      confirmSendBtn.disabled = true;
+      confirmSendBtn.textContent = 'جاري الإرسال...';
+
+      const res = await state.sendContactRequestAsync(pet, message, matingPet?.id);
+      if (!res.success) {
+        confirmSendBtn.disabled = false;
+        confirmSendBtn.textContent = 'تأكيد وإرسال ✓';
+        if (requestErrorBox) {
+          requestErrorBox.textContent = res.errorMessage || 'تعذر إرسال الطلب. حاول مرة أخرى.';
+          requestErrorBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      isConfirmationDialogOpen = false;
+      activeGroupMemberId = 'all';
+      pendingRequestMemberId = null;
+      state.setSelectedPetForDetail(null);
+      state.setChatSubTab('requests');
       state.setCurrentTab('chat');
+      showMobileToast('تم إرسال الطلب بنجاح', 'success', 1800);
     });
   }
 }

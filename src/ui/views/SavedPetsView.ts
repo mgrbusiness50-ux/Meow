@@ -111,29 +111,29 @@ export function renderSavedPetsView(): string {
             ? renderSavedPetsList(adoptionSaved, 'adoption')
             : activeSubTab === 'clinics'
             ? `
-            <div class="bg-white/80 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-8 text-center space-y-4 shadow-card">
-              <div class="w-20 h-20 rounded-3xl bg-amber-500/15 border-2 border-amber-500/30 text-amber-500 flex items-center justify-center mx-auto text-3xl shadow-soft">
+            <div class="bg-white/80 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-6 text-center space-y-3 shadow-card">
+              <div class="w-14 h-14 rounded-2xl bg-amber-500/15 border-2 border-amber-500/30 text-amber-500 flex items-center justify-center mx-auto text-xl shadow-soft">
                 <i class="fa-solid fa-lock"></i>
               </div>
-              <h3 class="text-xl font-black text-brand-dark dark:text-white">قسم عيادات المحفوظات مقفول حالياً</h3>
-              <p class="text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
+              <h3 class="text-lg font-black text-brand-dark dark:text-white">قسم عيادات المحفوظات مقفول حالياً</h3>
+              <p class="text-xs sm:text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
                 هذا القسم مخصص لحفظ العيادات البيطرية والمستشفيات المفضلة لديك وسيتوفر فور تدشين شبكة العيادات في التحديث القادم.
               </p>
-              <span class="inline-block px-4 py-1.5 rounded-full bg-amber-500/15 text-amber-500 text-xs font-black">
+              <span class="inline-block px-3.5 py-1 rounded-full bg-amber-500/15 text-amber-500 text-xs font-black">
                 مقفول • قريباً
               </span>
             </div>
             `
             : `
-            <div class="bg-white/80 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-8 text-center space-y-4 shadow-card">
-              <div class="w-20 h-20 rounded-3xl bg-amber-500/15 border-2 border-amber-500/30 text-amber-500 flex items-center justify-center mx-auto text-3xl shadow-soft">
+            <div class="bg-white/80 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-6 text-center space-y-3 shadow-card">
+              <div class="w-14 h-14 rounded-2xl bg-amber-500/15 border-2 border-amber-500/30 text-amber-500 flex items-center justify-center mx-auto text-xl shadow-soft">
                 <i class="fa-solid fa-lock"></i>
               </div>
-              <h3 class="text-xl font-black text-brand-dark dark:text-white">قسم متجر المحفوظات مقفول حالياً</h3>
-              <p class="text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
+              <h3 class="text-lg font-black text-brand-dark dark:text-white">قسم متجر المحفوظات مقفول حالياً</h3>
+              <p class="text-xs sm:text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
                 هذا القسم مخصص لحفظ المنتجات ومستلزمات الحيوانات الأليفة المفضلة لديك وسيتوفر فور إطلاق متجر Meow الرسمي.
               </p>
-              <span class="inline-block px-4 py-1.5 rounded-full bg-amber-500/15 text-amber-500 text-xs font-black">
+              <span class="inline-block px-3.5 py-1 rounded-full bg-amber-500/15 text-amber-500 text-xs font-black">
                 مقفول • قريباً
               </span>
             </div>
@@ -148,18 +148,18 @@ export function renderSavedPetsView(): string {
 function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
   if (pets.length === 0) {
     return `
-      <div class="bg-white/70 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-8 text-center space-y-4 shadow-card">
-        <div class="w-20 h-20 rounded-3xl bg-red-500/15 border-2 border-red-500/30 text-red-500 flex items-center justify-center mx-auto text-3xl shadow-soft">
+      <div class="bg-white/70 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-6 text-center space-y-3 shadow-card">
+        <div class="w-14 h-14 rounded-2xl bg-red-500/15 border-2 border-red-500/30 text-red-500 flex items-center justify-center mx-auto text-xl shadow-soft">
           <i class="fa-regular fa-heart"></i>
         </div>
-        <h3 class="text-xl font-black text-brand-dark dark:text-white">لا توجد حيوانات محفوظة في قسم ${type === 'mating' ? 'التزاوج' : 'التبني'}</h3>
-        <p class="text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
+        <h3 class="text-lg font-black text-brand-dark dark:text-white">لا توجد حيوانات محفوظة في قسم ${type === 'mating' ? 'التزاوج' : 'التبني'}</h3>
+        <p class="text-xs sm:text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
           اضغط على علامة القلب ❤️ الموجودة على أي بطاقة حيوان لحفظها والرجوع إليها بسهولة في أي وقت!
         </p>
         <button
           type="button"
           id="go-browse-saved-btn"
-          class="px-6 py-2.5 rounded-full bg-brand-orange text-white text-xs sm:text-sm font-black shadow-soft hover:bg-brand-orangeHover transition-all cursor-pointer font-baloo active:scale-95"
+          class="h-10 px-5 rounded-full bg-brand-orange text-white text-xs sm:text-sm font-black shadow-soft hover:bg-brand-orangeHover transition-all cursor-pointer font-baloo active:scale-95"
         >
           تصفح ${type === 'mating' ? 'حيوانات التزاوج' : 'حيوانات التبني'} الآن
         </button>
@@ -184,7 +184,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
           if (isGroup) {
             return `
               <div
-                class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card min-w-0"
+                class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card meow-card-enter min-w-0"
                 data-pet-detail-id="${escapeAttr(pet.id)}"
               >
                 <div class="relative w-full aspect-[4/4.2] rounded-t-3xl bg-brand-peachBorder/30 dark:bg-[#241E1A]">
@@ -202,11 +202,11 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                     <button
                       type="button"
                       aria-label="إزالة من المحفوظات"
-                      class="remove-saved-pet-btn w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
+                      class="remove-saved-pet-btn w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
                       data-pet-save-id="${escapeAttr(pet.id)}"
                       title="إزالة من المحفوظات"
                     >
-                      <i class="fa-solid fa-heart text-sm"></i>
+                      <i class="fa-solid fa-heart text-xs"></i>
                     </button>
                     ${
                       pet.ownerId !== currentUserId
@@ -218,14 +218,14 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                             petId: pet.id,
                             reportTargetType: 'pet',
                             buttonClass:
-                              'w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
+                              'w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
                             dropdownAlign: 'left',
                           })
                         : ''
                     }
                   </div>
 
-                  <div class="absolute top-2.5 right-2.5 bg-brand-orange text-white px-3 py-1 rounded-full text-[11px] font-black shadow-sm font-baloo pointer-events-none z-20">
+                  <div class="absolute top-2 right-2 bg-brand-orange text-white px-2.5 py-0.5 rounded-full text-[10px] font-black shadow-sm font-baloo pointer-events-none z-20">
                     <span>تبني جماعي (${groupCount})</span>
                   </div>
 
@@ -266,7 +266,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
 
           return `
             <div
-              class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card min-w-0"
+              class="bg-white dark:bg-[#1F1A16] rounded-3xl border-2 border-brand-peachBorder dark:border-[#3A3027] shadow-card hover:shadow-soft transition-all duration-300 relative group flex flex-col cursor-pointer saved-pet-card meow-card-enter min-w-0"
               data-pet-detail-id="${escapeAttr(pet.id)}"
             >
               <!-- Pet Photo & Save Heart Button -->
@@ -285,11 +285,11 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                   <button
                     type="button"
                     aria-label="إزالة من المحفوظات"
-                    class="remove-saved-pet-btn w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
+                    class="remove-saved-pet-btn w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-red-500 flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md"
                     data-pet-save-id="${escapeAttr(pet.id)}"
                     title="إزالة من المحفوظات"
                   >
-                    <i class="fa-solid fa-heart text-sm"></i>
+                    <i class="fa-solid fa-heart text-xs"></i>
                   </button>
                   ${
                     pet.ownerId !== currentUserId
@@ -301,7 +301,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                           petId: pet.id,
                           reportTargetType: 'pet',
                           buttonClass:
-                            'w-9 h-9 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
+                            'w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
                           dropdownAlign: 'left',
                         })
                       : ''
@@ -309,7 +309,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                 </div>
 
                 <!-- Status Badge (No star) -->
-                <div class="absolute top-2.5 right-2.5 bg-brand-orange text-white px-3.5 py-1 rounded-full text-xs font-black shadow-sm font-baloo pointer-events-none z-20">
+                <div class="absolute top-2 right-2 bg-brand-orange text-white px-2.5 py-0.5 rounded-full text-[11px] font-black shadow-sm font-baloo pointer-events-none z-20">
                   <span>${pet.status === 'mating' ? 'للزواج' : 'للتبني'}</span>
                 </div>
               </div>

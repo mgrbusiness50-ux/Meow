@@ -1,13 +1,15 @@
 import { state } from '../../state.ts';
 import { Pet } from '../../types.ts';
 import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
-import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
+import { attachSheetDragToDismiss, showMobileToast } from '../../utils/touchGestures.ts';
 
 export function renderContactRequestModal(targetPet: Pet | null): string {
   if (!targetPet) return '';
 
   const userPets = state.getUserPets();
+  const eligibleMatingPets = userPets.filter((p) => p.status === 'mating');
   const isMating = targetPet.status === 'mating';
+  const missingMatingPet = isMating && eligibleMatingPets.length === 0;
   const safePetPhoto = sanitizeImageSrc(targetPet.photos?.[0]);
 
   return `
@@ -54,28 +56,40 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
           </span>
         </div>
 
-        <!-- If Mating: Select which of user's pets to pair -->
+        <!-- If Mating: Select which of user's eligible mating pets to pair -->
         ${
           isMating
-            ? `
-            <div class="space-y-1">
-              <label for="select-user-mating-pet" class="block text-xs font-black text-brand-dark">
-                اختر حيوانك الأليف المقترح للتزاوج:
-              </label>
-              <select
-                id="select-user-mating-pet"
-                class="w-full min-h-[44px] bg-white border border-brand-peachBorder rounded-2xl px-3 py-2 text-xs font-bold text-brand-dark focus:outline-none focus:border-brand-orange shadow-sm cursor-pointer"
-              >
-                ${userPets
-                  .map(
-                    (p) => `
-                  <option value="${escapeAttr(p.id)}">${escapeHtml(p.name)} (${escapeHtml(p.breed)} - ${p.gender === 'male' ? 'ذكر' : 'أنثى'} - ${p.ageYears} سنة)</option>
-                `
-                  )
-                  .join('')}
-              </select>
-            </div>
-            `
+            ? missingMatingPet
+              ? `
+                <div class="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold leading-relaxed space-y-1">
+                  <div class="flex items-center gap-1.5 font-black">
+                    <i class="fa-solid fa-circle-exclamation text-rose-600"></i>
+                    <span>لا يوجد حيوان متاح للتزاوج في حسابك</span>
+                  </div>
+                  <p class="m-0">
+                    يجب أن يكون لديك حيوان بحالة «للتزاوج» في حسابك أولاً قبل إرسال طلب تزاوج. يمكنك إضافة أليف جديد أو تغيير حالته من ملفك الشخصي.
+                  </p>
+                </div>
+              `
+              : `
+                <div class="space-y-1">
+                  <label for="select-user-mating-pet" class="block text-xs font-black text-brand-dark">
+                    اختر حيوانك الأليف المقترح للتزاوج:
+                  </label>
+                  <select
+                    id="select-user-mating-pet"
+                    class="w-full min-h-[44px] bg-white border border-brand-peachBorder rounded-2xl px-3 py-2 text-xs font-bold text-brand-dark focus:outline-none focus:border-brand-orange shadow-sm cursor-pointer"
+                  >
+                    ${eligibleMatingPets
+                      .map(
+                        (p) => `
+                      <option value="${escapeAttr(p.id)}">${escapeHtml(p.name)} (${escapeHtml(p.breed)} - ${p.gender === 'male' ? 'ذكر' : 'أنثى'} - ${p.ageYears} سنة)</option>
+                    `
+                      )
+                      .join('')}
+                  </select>
+                </div>
+              `
             : ''
         }
 
@@ -96,6 +110,8 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
           ></textarea>
         </div>
 
+        <div id="contact-request-error" class="hidden p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold"></div>
+
         <!-- Privacy & Flow Notice -->
         <div class="p-3 rounded-2xl bg-[#fff5ea] border border-brand-peachBorder text-xs text-brand-subtleGray space-y-1">
           <div class="flex items-center gap-1.5 text-brand-orange font-black">
@@ -112,8 +128,13 @@ export function renderContactRequestModal(targetPet: Pet | null): string {
           <button id="cancel-contact-request-btn" type="button" class="h-11 px-5 rounded-full bg-white border border-brand-peachBorder text-brand-dark font-extrabold text-xs sm:text-sm hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer">
             إلغاء
           </button>
-          <button id="submit-contact-request-btn" type="button" class="h-11 px-6 rounded-full bg-brand-orange text-white font-black text-xs sm:text-sm shadow-soft hover:bg-brand-orange/95 transition active:scale-95 cursor-pointer">
-            إرسال الطلب الآن ✈️
+          <button
+            id="submit-contact-request-btn"
+            type="button"
+            ${missingMatingPet ? 'disabled' : ''}
+            class="h-11 px-6 rounded-full bg-brand-orange text-white font-black text-xs sm:text-sm shadow-soft hover:bg-brand-orange/95 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+          >
+            <span id="submit-contact-request-label">إرسال الطلب الآن ✈️</span>
           </button>
         </div>
 
@@ -152,12 +173,19 @@ export function attachContactRequestModalEvents(targetPet: Pet | null): void {
   }
 
   const submitBtn = document.getElementById('submit-contact-request-btn') as HTMLButtonElement | null;
+  const submitLabel = document.getElementById('submit-contact-request-label');
+  const errorBox = document.getElementById('contact-request-error');
+
   if (submitBtn) {
-    submitBtn.addEventListener('click', () => {
+    submitBtn.addEventListener('click', async () => {
       if (submitBtn.disabled) return;
-      submitBtn.disabled = true;
-      const messageTextarea = document.getElementById('contact-request-message') as HTMLTextAreaElement;
-      const petSelect = document.getElementById('select-user-mating-pet') as HTMLSelectElement;
+      if (errorBox) {
+        errorBox.classList.add('hidden');
+        errorBox.textContent = '';
+      }
+
+      const messageTextarea = document.getElementById('contact-request-message') as HTMLTextAreaElement | null;
+      const petSelect = document.getElementById('select-user-mating-pet') as HTMLSelectElement | null;
 
       const message =
         messageTextarea && messageTextarea.value.trim()
@@ -168,10 +196,25 @@ export function attachContactRequestModalEvents(targetPet: Pet | null): void {
 
       const selectedUserPetId = petSelect ? petSelect.value : undefined;
 
-      state.sendContactRequest(targetPet, message, selectedUserPetId);
+      submitBtn.disabled = true;
+      if (submitLabel) submitLabel.textContent = 'جاري إرسال الطلب...';
+
+      const res = await state.sendContactRequestAsync(targetPet, message, selectedUserPetId);
+
+      if (!res.success) {
+        submitBtn.disabled = false;
+        if (submitLabel) submitLabel.textContent = 'إرسال الطلب الآن ✈️';
+        if (errorBox) {
+          errorBox.textContent = res.errorMessage || 'تعذر إرسال الطلب. حاول مرة أخرى.';
+          errorBox.classList.remove('hidden');
+        }
+        return;
+      }
+
       state.setSelectedPetForRequest(null);
-      // Switch to Chat tab to see the pending request
+      state.setChatSubTab('requests');
       state.setCurrentTab('chat');
+      showMobileToast('تم إرسال طلب التواصل بنجاح', 'success', 1800);
     });
   }
 }

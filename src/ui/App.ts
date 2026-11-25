@@ -41,6 +41,9 @@ import { APP_VERSION_INFO } from '../config/appVersion.ts';
 
 export class MeowApp {
   private container: HTMLElement;
+  private lastScrollY = 0;
+  private isHeaderHidden = false;
+  private scrollTicking = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -66,9 +69,64 @@ export class MeowApp {
         }
       });
     }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(
+        'scroll',
+        () => {
+          if (this.scrollTicking) return;
+          this.scrollTicking = true;
+          window.requestAnimationFrame(() => {
+            this.handleSmartScroll();
+            this.scrollTicking = false;
+          });
+        },
+        { passive: true }
+      );
+    }
+
     state.subscribe(() => {
       this.render();
     });
+  }
+
+  private handleSmartScroll(): void {
+    const header = document.getElementById('main-header');
+    if (!header || state.getOnboardingStep() !== 'completed') return;
+    if (
+      state.isSettingsOpen() ||
+      state.getIsFilterModalOpen() ||
+      state.isNotificationsOpen() ||
+      Boolean(state.getSelectedPetForDetail()) ||
+      Boolean(state.getSelectedPetForRequest()) ||
+      state.isAddPetModalVisible() ||
+      state.isEditOwnerModalVisible() ||
+      state.isSavedPetsVisible() ||
+      state.isContactOpen()
+    ) {
+      return;
+    }
+
+    const currentY = Math.max(0, window.scrollY || window.pageYOffset || 0);
+    const delta = currentY - this.lastScrollY;
+
+    if (currentY <= 24) {
+      this.setHeaderHidden(false, header);
+    } else if (delta > 8 && currentY > 56) {
+      this.setHeaderHidden(true, header);
+    } else if (delta < -6) {
+      this.setHeaderHidden(false, header);
+    }
+
+    this.lastScrollY = currentY;
+  }
+
+  private setHeaderHidden(hidden: boolean, headerEl?: HTMLElement | null): void {
+    this.isHeaderHidden = hidden;
+    const header = headerEl ?? document.getElementById('main-header');
+    if (!header) return;
+    header.classList.toggle('-translate-y-full', hidden);
+    header.classList.toggle('pointer-events-none', hidden);
   }
 
   public init(): void {
@@ -140,13 +198,19 @@ export class MeowApp {
         tabHtml = renderMatingView();
     }
 
+    this.isHeaderHidden = false;
+    this.lastScrollY = typeof window !== 'undefined' ? Math.max(0, window.scrollY || 0) : 0;
+
     this.container.innerHTML = `
       <div class="min-h-full flex flex-col justify-between bg-warm-bg dark:bg-warm-darkBg text-warm-text dark:text-white transition-colors duration-200">
+        <!-- Dark Top Gradient Scrim under Android Status Bar -->
+        <div id="status-bar-scrim" aria-hidden="true"></div>
+
         <!-- App Header (Hidden when inside chat room so chat has dedicated header) -->
         ${isInsideChatRoom ? '' : renderHeader()}
 
         <!-- Main Tab Content -->
-        <main class="flex-1 flex flex-col ${isInsideChatRoom ? 'p-0 m-0 pb-0' : ''}" style="${isInsideChatRoom ? '' : 'padding-bottom: calc(6rem + env(safe-area-inset-bottom));'}">
+        <main class="flex-1 flex flex-col meow-view-enter ${isInsideChatRoom ? 'p-0 m-0 pb-0' : ''}" style="${isInsideChatRoom ? '' : 'padding-bottom: calc(6rem + env(safe-area-inset-bottom));'}">
           ${tabHtml}
         </main>
 

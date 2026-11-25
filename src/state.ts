@@ -20,13 +20,32 @@ import {
   AppNotification,
 } from './types.ts';
 import {
-  CURRENT_USER,
-  INITIAL_USER_PETS,
-  INITIAL_MATING_PETS,
-  INITIAL_ADOPTION_PETS,
-  INITIAL_HEALTH_RECORDS,
-  INITIAL_CONTACT_REQUESTS,
-} from './mockData.ts';
+  addCustomStickerInSupabase,
+  addHealthRecordInSupabase,
+  createContactRequestInSupabase,
+  createReportInSupabase,
+  deleteCustomStickerInSupabase,
+  dismissNotificationInSupabase,
+  hideConversationInSupabase,
+  hydrateSupabaseWorkspace,
+  markContactRequestCelebratedInSupabase,
+  markConversationReadInSupabase,
+  markNotificationsReadInSupabase,
+  removeGroupAdoptionInSupabase,
+  respondContactRequestInSupabase,
+  saveGroupAdoptionInSupabase,
+  sendMessageInSupabase,
+  setConversationPinnedInSupabase,
+  softDeletePetInSupabase,
+  submitSupportMessageToSupabase,
+  subscribeToSupabaseWorkspaceRealtime,
+  syncBlockInSupabase,
+  toggleSavedPetInSupabase,
+  upsertPetInSupabase,
+  withdrawContactRequestInSupabase,
+} from './services/supabaseDataService.ts';
+import type { CustomStickerModel } from './services/supabaseMappers.ts';
+import { generateUuid, isValidUuid } from './utils/uuid.ts';
 import {
   normalizeArabic,
   findGovernorateByCity,
@@ -147,8 +166,8 @@ export type OnboardingStep =
   | 'completed';
 
 class AppStateManager {
-  private user: UserProfile = { ...CURRENT_USER };
-  private userPets: Pet[] = INITIAL_USER_PETS.map((p) => ({ ...p }));
+  private user: UserProfile = createUnauthenticatedUserProfile(true);
+  private userPets: Pet[] = [];
   private userGroupAdoptionListing: Pet | null = null;
   private pendingGroupChoicePetId: string | null = null;
   private isGroupAdoptionEditorOpen: boolean = false;
@@ -160,17 +179,12 @@ class AppStateManager {
     kind: 'stop_group' | 'dissolve_group' | 'stop_individual' | 'enable_individual';
     petId?: string;
   } | null = null;
-  private matingPets: Pet[] = [...INITIAL_MATING_PETS];
-  private adoptionPets: Pet[] = [...INITIAL_ADOPTION_PETS];
-  private contactRequests: ContactRequest[] = [
-    {
-      ...INITIAL_CONTACT_REQUESTS[0],
-      senderPet: INITIAL_MATING_PETS[0],
-    },
-  ];
-  // 1. CHAT EMPTY BY DEFAULT AS REQUESTED ("والشات سيبه فاضي زي ما شفته في استيتش")
+  private matingPets: Pet[] = [];
+  private adoptionPets: Pet[] = [];
+  private contactRequests: ContactRequest[] = [];
   private conversations: Conversation[] = [];
-  private healthRecords: HealthRecordItem[] = [...INITIAL_HEALTH_RECORDS];
+  private healthRecords: HealthRecordItem[] = [];
+  private customStickers: CustomStickerModel[] = [];
 
   private currentTab: MainTab = 'mating';
   private chatSubTab: 'chats' | 'requests' = 'chats';
@@ -245,13 +259,12 @@ class AppStateManager {
   );
   private activeConfettiBurstKey: string | null = null;
   private firestoreNotificationsUnsub: (() => void) | null = null;
+  private workspaceRealtimeUnsub: (() => void) | null = null;
+  private isWorkspaceHydrating: boolean = false;
+  private activeWorkspaceHydratePromise: Promise<void> | null = null;
 
   // 3. SAVED PETS STATE (Heart Save Button)
-  private savedPetIds: Set<string> = new Set(
-    typeof window !== 'undefined'
-      ? JSON.parse(localStorage.getItem('meow_saved_pets') || '[]')
-      : []
-  );
+  private savedPetIds: Set<string> = new Set();
   private isSavedPetsOpen: boolean = false;
   private savedPetsSubTab: 'mating' | 'adoption' | 'clinics' | 'store' = 'mating';
 
@@ -259,22 +272,10 @@ class AppStateManager {
   private isContactViewOpen: boolean = false;
 
   // 3.2 BLOCKED USERS & REPORT STATE
-  private blockedUsers: BlockedUser[] =
-    typeof window !== 'undefined'
-      ? JSON.parse(localStorage.getItem('meow_blocked_users') || '[]')
-      : [];
+  private blockedUsers: BlockedUser[] = [];
   private pendingBlockTarget: PendingBlockTarget | null = null;
   private pendingDeleteConversationId: string | null = null;
-  private reports: ReportRecord[] =
-    typeof window !== 'undefined'
-      ? (() => {
-          try {
-            return JSON.parse(localStorage.getItem('meow_reports_v1') || '[]');
-          } catch {
-            return [];
-          }
-        })()
-      : [];
+  private reports: ReportRecord[] = [];
   private pendingReportTarget: PendingReportTarget | null = null;
   private lastSubmittedReportNotice: { targetUserName: string; reasonLabel: string } | null = null;
 
@@ -461,16 +462,47 @@ class AppStateManager {
         this.user.privacyMode = storedShowPhone ? 'public' : 'private';
         this.user.showPhoneOnlyAfterApproval = storedShowPhone;
         this.user.notificationsEnabled = this.notificationsEnabled;
+        try {
+          const savedRaw = JSON.parse(localStorage.getItem('meow_saved_pets') || '[]');
+          if (Array.isArray(savedRaw)) this.savedPetIds = new Set(savedRaw);
+        } catch {
+          // ignore
+        }
+        try {
+          const blockedRaw = JSON.parse(localStorage.getItem('meow_blocked_users') || '[]');
+          if (Array.isArray(blockedRaw)) this.blockedUsers = blockedRaw;
+        } catch {
+          // ignore
+        }
+        try {
+          const reportsRaw = JSON.parse(localStorage.getItem('meow_reports_v1') || '[]');
+          if (Array.isArray(reportsRaw)) this.reports = reportsRaw;
+        } catch {
+          // ignore
+        }
+        try {
+          const stickersRaw = JSON.parse(localStorage.getItem('meow_custom_stickers_v1') || '[]');
+          if (Array.isArray(stickersRaw)) {
+            this.customStickers = stickersRaw
+              .filter((s) => s && typeof s.imageUrl === 'string')
+              .map((s) => ({
+                id: String(s.id || generateUuid()),
+                imageUrl: String(s.imageUrl),
+                title: String(s.title || 'ملصق مخصص'),
+                createdAt: String(s.createdAt || new Date().toISOString()),
+              }));
+          }
+        } catch {
+          // ignore
+        }
         this.userPets.forEach((p) => {
           p.ownerShowPhone = storedShowPhone;
           p.ownerPrivacy = this.user.privacyMode;
         });
+        this.restoreProcessedRequestStatuses();
+        this.loadPersistedNotifications();
+        this.reconcileNotificationsWithState(true);
       }
-      this.restoreProcessedRequestStatuses();
-      this.loadPersistedNotifications();
-      this.reconcileNotificationsWithState(true);
-    } else {
-      this.seedInitialRequestNotification();
     }
     this.recalculateAllCompatibilities();
     if (typeof document !== 'undefined') {
@@ -704,39 +736,9 @@ class AppStateManager {
         }
       }
     } catch {
-      // Ignore parse error and fall back to seed
+      // Ignore parse error
     }
-    this.seedInitialRequestNotification();
-  }
-
-  private seedInitialRequestNotification(): void {
-    const initialReq = this.contactRequests[0];
-    if (!initialReq) return;
-    const seedId = `notif_seed_${initialReq.id}`;
-    if (this.dismissedNotificationIds.has(seedId)) {
-      this.notifications = [];
-      return;
-    }
-    const alreadyRead = Boolean(
-      this.readNotificationIds.has(seedId) ||
-        this.isRequestAlreadyHandled(initialReq.id)
-    );
-    this.notifications = [
-      {
-        id: seedId,
-        type: 'contact_request',
-        title: `طلب ${initialReq.type === 'mating' ? 'تزاوج' : 'تبني'} جديد`,
-        body: `${initialReq.senderName} أرسل طلباً بخصوص «${initialReq.receiverPetName}».`,
-        read: alreadyRead,
-        targetTab: 'chat',
-        targetSubTab: 'requests',
-        targetRequestId: initialReq.id,
-        targetPetId: initialReq.senderPetId || initialReq.receiverPetId,
-        createdAt: new Date().toISOString(),
-        timestampLabel: initialReq.timestamp || 'الآن',
-      },
-    ];
-    this.persistNotifications();
+    this.notifications = [];
   }
 
   private persistNotifications(): void {
@@ -1087,10 +1089,7 @@ class AppStateManager {
       if (!res.bundle.exists || !res.bundle.profile) {
         // Brand-new Auth user whose profiles row hasn't been created yet: let them complete owner_details (upsert creates the row)
         const sessionUser = opts?.session?.user ?? this.supabaseSession?.user ?? null;
-        const metaAvatar =
-          (sessionUser?.user_metadata?.avatar_url as string | undefined) ||
-          (sessionUser?.user_metadata?.picture as string | undefined) ||
-          '';
+        const metaAvatar = this.extractGoogleAvatarFromSessionUser(sessionUser);
         this.rawSupabaseAvatarUrl = metaAvatar;
         this.loadedSupabaseUserId = userId;
         this.supabaseAccountBundle = res.bundle;
@@ -1121,6 +1120,8 @@ class AppStateManager {
             this.deferOrSetOnboardingStep('owner_details');
           }
         }
+        void this.hydrateSupabaseWorkspaceForUser(userId);
+        this.ensureWorkspaceRealtime(userId);
         this.notify();
         return res;
       }
@@ -1130,7 +1131,10 @@ class AppStateManager {
       this.supabaseAuthError = null;
       this.applySupabaseAccountBundle(res.bundle, {
         isPasswordRecovery: Boolean(opts?.isPasswordRecovery),
+        sessionUser: opts?.session?.user ?? this.supabaseSession?.user ?? null,
       });
+      void this.hydrateSupabaseWorkspaceForUser(userId);
+      this.ensureWorkspaceRealtime(userId);
       this.cleanupWebAuthCallbackParams();
       this.notify();
       return res;
@@ -1146,15 +1150,47 @@ class AppStateManager {
     }
   }
 
+  private extractGoogleAvatarFromSessionUser(sessionUser?: Session['user'] | null): string {
+    if (!sessionUser) return '';
+    const meta = (sessionUser.user_metadata || {}) as Record<string, unknown>;
+    const candidates: unknown[] = [
+      meta.avatar_url,
+      meta.picture,
+      meta.avatar,
+      meta.photo_url,
+      meta.profilePictureUri,
+    ];
+    if (Array.isArray(sessionUser.identities)) {
+      for (const identity of sessionUser.identities) {
+        const idData = (identity?.identity_data || {}) as Record<string, unknown>;
+        candidates.push(idData.avatar_url, idData.picture, idData.avatar, idData.photo_url);
+      }
+    }
+    for (const cand of candidates) {
+      if (typeof cand === 'string') {
+        const trimmed = cand.trim();
+        if (trimmed && /^https?:\/\//i.test(trimmed)) {
+          return trimmed;
+        }
+      }
+    }
+    return '';
+  }
+
   private applySupabaseAccountBundle(
     bundle: SupabaseUserAccountBundle,
-    opts?: { isPasswordRecovery?: boolean }
+    opts?: { isPasswordRecovery?: boolean; sessionUser?: Session['user'] | null }
   ): void {
     const profile = bundle.profile;
     if (!profile) return;
 
-    this.rawSupabaseAvatarUrl = bundle.rawProfile?.avatar_url || profile.avatar || '';
-    const runtimeAvatar = this.rawSupabaseAvatarUrl || DEFAULT_USER_AVATAR_FALLBACK;
+    const existingRawAvatar = (bundle.rawProfile?.avatar_url || profile.avatar || '').trim();
+    const sessionGoogleAvatar = this.extractGoogleAvatarFromSessionUser(
+      opts?.sessionUser ?? this.supabaseSession?.user ?? null
+    );
+    const resolvedRawAvatar = existingRawAvatar || sessionGoogleAvatar;
+    this.rawSupabaseAvatarUrl = resolvedRawAvatar;
+    const runtimeAvatar = resolvedRawAvatar || DEFAULT_USER_AVATAR_FALLBACK;
     const showPhone = Boolean(profile.showPhoneInProfile);
     const notifEnabled = profile.notificationsEnabled !== false;
 
@@ -1166,6 +1202,13 @@ class AppStateManager {
       showPhoneOnlyAfterApproval: showPhone,
       notificationsEnabled: notifEnabled,
     };
+
+    if (!existingRawAvatar && sessionGoogleAvatar && !this.isOnboardingPreviewSession) {
+      void this.persistSupabaseAccountBundle({
+        adviceDismissed: Boolean(bundle.adviceDismissed),
+        onboardingDone: Boolean(bundle.onboardingDone),
+      });
+    }
 
     this.notificationsEnabled = notifEnabled;
     this.isAdviceDismissed = Boolean(bundle.adviceDismissed);
@@ -1261,11 +1304,85 @@ class AppStateManager {
     }
   }
 
+  private async hydrateSupabaseWorkspaceForUser(userId: string): Promise<void> {
+    if (
+      !isSupabaseConfigured() ||
+      this.isOnboardingPreviewSession ||
+      !isValidUuid(userId) ||
+      this.supabaseAuthUserId !== userId
+    ) {
+      return;
+    }
+    if (this.activeWorkspaceHydratePromise) {
+      return this.activeWorkspaceHydratePromise;
+    }
+    this.isWorkspaceHydrating = true;
+    let run: Promise<void> | null = null;
+    run = (async () => {
+      try {
+        const res = await hydrateSupabaseWorkspace(userId);
+        if (!res.success || !res.data || this.supabaseAuthUserId !== userId) return;
+        const w = res.data;
+        this.userPets = w.userPets;
+        this.userGroupAdoptionListing = w.userGroupAdoptionListing;
+        this.matingPets = w.matingPets;
+        this.adoptionPets = w.adoptionPets;
+        this.savedPetIds = new Set(w.savedPetIds);
+        this.contactRequests = w.contactRequests;
+        this.conversations = w.conversations;
+        this.notifications = w.notifications;
+        this.healthRecords = w.healthRecords;
+        this.blockedUsers = w.blockedUsers;
+        this.reports = w.reports;
+        this.customStickers = w.customStickers;
+        this.syncOwnedPetsMetadataWithUser(userId);
+        this.recalculateAllCompatibilities();
+        this.reconcileNotificationsWithState(true);
+        this.notify();
+      } catch (err) {
+        console.warn('Workspace hydration skipped:', err);
+      } finally {
+        this.isWorkspaceHydrating = false;
+        if (this.activeWorkspaceHydratePromise === run) {
+          this.activeWorkspaceHydratePromise = null;
+        }
+      }
+    })();
+    this.activeWorkspaceHydratePromise = run;
+    return run;
+  }
+
+  private ensureWorkspaceRealtime(userId: string): void {
+    if (!isSupabaseConfigured() || this.isOnboardingPreviewSession || !isValidUuid(userId)) {
+      return;
+    }
+    if (this.workspaceRealtimeUnsub) {
+      this.workspaceRealtimeUnsub();
+      this.workspaceRealtimeUnsub = null;
+    }
+    try {
+      this.workspaceRealtimeUnsub = subscribeToSupabaseWorkspaceRealtime(userId, () => {
+        if (this.supabaseAuthUserId === userId) {
+          void this.hydrateSupabaseWorkspaceForUser(userId);
+        }
+      });
+    } catch {
+      this.workspaceRealtimeUnsub = null;
+    }
+  }
+
   private clearLocalSupabaseSessionState(opts?: {
     errorMessage?: string | null;
     markReady?: boolean;
     preserveOnboardingSubstep?: boolean;
   }): void {
+    if (this.workspaceRealtimeUnsub) {
+      this.workspaceRealtimeUnsub();
+      this.workspaceRealtimeUnsub = null;
+    }
+    this.activeWorkspaceHydratePromise = null;
+    this.isWorkspaceHydrating = false;
+
     this.supabaseSession = null;
     this.supabaseAuthUserId = null;
     this.supabaseAccountBundle = null;
@@ -1284,6 +1401,21 @@ class AppStateManager {
 
     if (!this.isOnboardingPreviewSession) {
       this.user = createUnauthenticatedUserProfile(this.notificationsEnabled);
+      this.userPets = [];
+      this.userGroupAdoptionListing = null;
+      this.matingPets = [];
+      this.adoptionPets = [];
+      this.contactRequests = [];
+      this.conversations = [];
+      this.notifications = [];
+      this.healthRecords = [];
+      this.blockedUsers = [];
+      this.reports = [];
+      this.savedPetIds = new Set();
+      this.customStickers = [];
+      this.activeConversationId = null;
+      this.selectedPetForDetail = null;
+      this.selectedPetForRequest = null;
       this.syncOwnedPetsMetadataWithUser('');
 
       if (typeof localStorage !== 'undefined') {
@@ -1908,6 +2040,7 @@ class AppStateManager {
   ): boolean {
     let changed = false;
     let readIdsAdded = false;
+    const supabaseMarkedIds: string[] = [];
     this.notifications.forEach((n) => {
       if (!predicate(n)) return;
       if (!this.readNotificationIds.has(n.id)) {
@@ -1917,6 +2050,7 @@ class AppStateManager {
       if (!n.read) {
         n.read = true;
         changed = true;
+        supabaseMarkedIds.push(n.id);
         if (!isSupabaseConfigured()) {
           void syncNotificationToFirestore(n).catch((err) =>
             console.warn('Firestore notification read sync skipped:', err)
@@ -1926,6 +2060,13 @@ class AppStateManager {
     });
     if (readIdsAdded) {
       this.persistReadNotificationIds();
+    }
+    if (
+      supabaseMarkedIds.length > 0 &&
+      this.isSupabaseAuthenticated() &&
+      !this.isOnboardingPreviewSession
+    ) {
+      void markNotificationsReadInSupabase(this.user.id, supabaseMarkedIds);
     }
     if (changed) {
       this.persistNotifications();
@@ -1957,7 +2098,9 @@ class AppStateManager {
     this.persistReadNotificationIds();
     this.notifications = this.notifications.filter((n) => n.id !== notificationId);
     this.persistNotifications();
-    if (!isSupabaseConfigured()) {
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void dismissNotificationInSupabase(this.user.id, notificationId);
+    } else if (!isSupabaseConfigured()) {
       void deleteNotificationFromFirestore(notificationId).catch((err) =>
         console.warn('Firestore notification delete skipped:', err)
       );
@@ -1965,7 +2108,10 @@ class AppStateManager {
     this.notify();
   }
 
-  public refreshFeed(sourceTab?: 'mating' | 'adoption' | 'chat'): void {
+  public async refreshFeed(sourceTab?: 'mating' | 'adoption' | 'chat'): Promise<void> {
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession && this.supabaseAuthUserId) {
+      await this.hydrateSupabaseWorkspaceForUser(this.supabaseAuthUserId);
+    }
     if (sourceTab === 'mating' || sourceTab === 'adoption' || !sourceTab) {
       this.recalculateAllCompatibilities();
     }
@@ -2408,6 +2554,10 @@ class AppStateManager {
     this.onboardingStep = 'completed';
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('meow_onboarding_done', 'true');
+    }
+    if (this.supabaseAuthUserId) {
+      void this.hydrateSupabaseWorkspaceForUser(this.supabaseAuthUserId);
+      this.ensureWorkspaceRealtime(this.supabaseAuthUserId);
     }
     this.notify();
     return { success: true };
@@ -3177,12 +3327,23 @@ class AppStateManager {
     return this.contactRequests.filter(
       (r) =>
         !this.isUserBlocked(r.senderId) &&
+        !(r.receiverOwnerId && this.isUserBlocked(r.receiverOwnerId)) &&
         !(r.receiverPet?.ownerId && this.isUserBlocked(r.receiverPet.ownerId))
     );
   }
 
+  public getIncomingContactRequests(): ContactRequest[] {
+    return this.getContactRequests().filter((r) => r.senderId !== this.user.id);
+  }
+
+  public getOutgoingContactRequests(): ContactRequest[] {
+    return this.getContactRequests().filter((r) => r.senderId === this.user.id);
+  }
+
   public getPendingRequestsCount(): number {
-    return this.getContactRequests().filter((r) => r.status === 'pending').length;
+    return this.getContactRequests().filter(
+      (r) => r.senderId !== this.user.id && !r.isWithdrawn && r.status === 'pending'
+    ).length;
   }
 
   public getConversations(): Conversation[] {
@@ -3258,9 +3419,13 @@ class AppStateManager {
     this.activeConfettiBurstKey = key;
     this.persistCelebratedApprovals();
     if (conv.requestId) {
-      void markMatingCelebratedInFirestore(conv.requestId).catch((err) =>
-        console.warn('Firestore mating celebration sync skipped:', err)
-      );
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void markContactRequestCelebratedInSupabase(conv.requestId, this.user.id);
+      } else {
+        void markMatingCelebratedInFirestore(conv.requestId).catch((err) =>
+          console.warn('Firestore mating celebration sync skipped:', err)
+        );
+      }
     }
     return true;
   }
@@ -3322,6 +3487,9 @@ class AppStateManager {
           true
         );
         this.triggerMatingCelebrationIfNeeded(conv);
+        if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+          void markConversationReadInSupabase(conv.id);
+        }
       }
     }
     this.notify();
@@ -3332,6 +3500,9 @@ class AppStateManager {
     if (!conv) return;
     conv.isPinned = true;
     conv.pinnedAt = Date.now();
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void setConversationPinnedInSupabase(id, this.user.id, true);
+    }
     this.notify();
   }
 
@@ -3340,6 +3511,9 @@ class AppStateManager {
     if (!conv) return;
     conv.isPinned = false;
     conv.pinnedAt = undefined;
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void setConversationPinnedInSupabase(id, this.user.id, false);
+    }
     this.notify();
   }
 
@@ -3377,6 +3551,9 @@ class AppStateManager {
     }
     if (this.pendingDeleteConversationId === id) {
       this.pendingDeleteConversationId = null;
+    }
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void hideConversationInSupabase(id);
     }
     this.notify();
   }
@@ -4452,6 +4629,9 @@ class AppStateManager {
       targetPet.adoptionType = 'individual';
       targetPet.alsoListedIndividually = false;
       this.recalculateAllCompatibilities();
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void upsertPetInSupabase(targetPet, this.user.id);
+      }
       this.notify();
       return;
     }
@@ -4471,6 +4651,9 @@ class AppStateManager {
       if (pet && pet.status === 'adoption') {
         pet.adoptionType = 'individual';
         pet.alsoListedIndividually = false;
+        if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+          void upsertPetInSupabase(pet, this.user.id);
+        }
         this.notify();
       }
     }
@@ -4493,6 +4676,7 @@ class AppStateManager {
       targetPet.adoptionType = 'individual';
       targetPet.alsoListedIndividually = false;
     }
+    const previousGroupId = this.userGroupAdoptionListing?.id;
     // Separate mode: dissolve any group listing so every adoption pet is displayed independently
     if (this.userGroupAdoptionListing) {
       const groupId = this.userGroupAdoptionListing.id;
@@ -4516,6 +4700,17 @@ class AppStateManager {
     });
     this.pendingGroupChoicePetId = null;
     this.recalculateAllCompatibilities();
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      if (previousGroupId) {
+        void removeGroupAdoptionInSupabase({
+          groupPetId: previousGroupId,
+          ownerId: this.user.id,
+          updatedPets: this.userPets.filter((p) => p.status === 'adoption'),
+        });
+      } else if (targetPet) {
+        void upsertPetInSupabase(targetPet, this.user.id);
+      }
+    }
     this.notify();
   }
 
@@ -4631,6 +4826,7 @@ class AppStateManager {
       }
     });
 
+    const revertedPets: Pet[] = [];
     const selectedSet = new Set(selectedPets.map((p) => p.id));
     // Any pet previously in group that was unselected reverts to individual adoption if still adoption
     if (this.userGroupAdoptionListing?.groupPetIds) {
@@ -4640,6 +4836,7 @@ class AppStateManager {
           if (prevPet && prevPet.status === 'adoption') {
             prevPet.adoptionType = 'individual';
             prevPet.alsoListedIndividually = false;
+            revertedPets.push(prevPet);
           }
         }
       });
@@ -4661,8 +4858,9 @@ class AppStateManager {
     );
 
     const existingId = this.userGroupAdoptionListing?.id;
+    const groupId = existingId && isValidUuid(existingId) ? existingId : generateUuid();
     this.userGroupAdoptionListing = {
-      id: existingId || `user_group_adopt_${Date.now()}`,
+      id: groupId,
       name: members.map((m) => m.name).join(' و '),
       species: primary.species,
       breed: uniqueBreeds.join(' • '),
@@ -4713,6 +4911,16 @@ class AppStateManager {
       createdAt: new Date().toISOString().split('T')[0],
     };
 
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void saveGroupAdoptionInSupabase({
+        groupPet: this.userGroupAdoptionListing,
+        members,
+        updatedMemberPets: selectedPets,
+        revertedMemberPets: revertedPets,
+        ownerId: this.user.id,
+      });
+    }
+
     this.isGroupAdoptionEditorOpen = false;
     this.groupEditorPreselectIds = [];
     this.recalculateAllCompatibilities();
@@ -4724,6 +4932,7 @@ class AppStateManager {
     if (!this.userGroupAdoptionListing) return;
     const groupIds = this.userGroupAdoptionListing.groupPetIds || [];
     const groupId = this.userGroupAdoptionListing.id;
+    const updatedPets: Pet[] = [];
 
     groupIds.forEach((id) => {
       const pet = this.userPets.find((p) => p.id === id);
@@ -4731,12 +4940,13 @@ class AppStateManager {
         pet.status = 'adoption';
         pet.adoptionType = 'individual';
         pet.alsoListedIndividually = false;
+        updatedPets.push(pet);
       }
     });
 
     if (this.savedPetIds.has(groupId)) {
       this.savedPetIds.delete(groupId);
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && !this.isSupabaseAuthenticated()) {
         localStorage.setItem('meow_saved_pets', JSON.stringify(Array.from(this.savedPetIds)));
       }
     }
@@ -4749,6 +4959,13 @@ class AppStateManager {
     this.groupEditorPreselectIds = [];
     this.groupEditorPublishMode = 'group_only';
     this.recalculateAllCompatibilities();
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void removeGroupAdoptionInSupabase({
+        groupPetId: groupId,
+        ownerId: this.user.id,
+        updatedPets,
+      });
+    }
     this.notify();
   }
 
@@ -4756,6 +4973,7 @@ class AppStateManager {
     if (!this.userGroupAdoptionListing) return;
     const groupIds = this.userGroupAdoptionListing.groupPetIds || [];
     const groupId = this.userGroupAdoptionListing.id;
+    const updatedPets: Pet[] = [];
 
     groupIds.forEach((id) => {
       const pet = this.userPets.find((p) => p.id === id);
@@ -4768,11 +4986,12 @@ class AppStateManager {
         pet.adoptionType = undefined;
         pet.alsoListedIndividually = false;
       }
+      updatedPets.push(pet);
     });
 
     if (this.savedPetIds.has(groupId)) {
       this.savedPetIds.delete(groupId);
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && !this.isSupabaseAuthenticated()) {
         localStorage.setItem('meow_saved_pets', JSON.stringify(Array.from(this.savedPetIds)));
       }
     }
@@ -4785,6 +5004,13 @@ class AppStateManager {
     this.groupEditorPreselectIds = [];
     this.groupEditorPublishMode = 'group_only';
     this.recalculateAllCompatibilities();
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void removeGroupAdoptionInSupabase({
+        groupPetId: groupId,
+        ownerId: this.user.id,
+        updatedPets,
+      });
+    }
     this.notify();
   }
 
@@ -4806,11 +5032,15 @@ class AppStateManager {
       pet.alsoListedIndividually = false;
     }
     this.recalculateAllCompatibilities();
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void upsertPetInSupabase(pet, this.user.id);
+    }
     this.notify();
   }
 
   private removePetFromGroupListing(petId: string): void {
     if (!this.userGroupAdoptionListing?.groupPetIds?.includes(petId)) return;
+    const oldGroupId = this.userGroupAdoptionListing.id;
     const hadDual = this.userGroupAdoptionListing.groupPetIds.some((id) => {
       const p = this.userPets.find((pet) => pet.id === id);
       return Boolean(p?.alsoListedIndividually);
@@ -4827,6 +5057,13 @@ class AppStateManager {
         p.alsoListedIndividually = false;
       });
       this.userGroupAdoptionListing = null;
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void removeGroupAdoptionInSupabase({
+          groupPetId: oldGroupId,
+          ownerId: this.user.id,
+          updatedPets: remainingPets,
+        });
+      }
       return;
     }
 
@@ -4848,6 +5085,13 @@ class AppStateManager {
         p.alsoListedIndividually = false;
       });
       this.userGroupAdoptionListing = null;
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void removeGroupAdoptionInSupabase({
+          groupPetId: oldGroupId,
+          ownerId: this.user.id,
+          updatedPets: remainingPets,
+        });
+      }
     } else {
       this.saveGroupAdoptionListing({
         orderedPetIds: remainingMembers.map((m) => m.petId),
@@ -4963,14 +5207,18 @@ class AppStateManager {
 
       this.recalculateAllCompatibilities();
       this.isAddPetModalOpen = false;
-      void syncPetToFirestore(updatedPet).catch((err) =>
-        console.warn('Firestore pet update sync skipped:', err)
-      );
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void upsertPetInSupabase(updatedPet, this.user.id);
+      } else if (!isSupabaseConfigured()) {
+        void syncPetToFirestore(updatedPet).catch((err) =>
+          console.warn('Firestore pet update sync skipped:', err)
+        );
+      }
       this.notify();
       return updatedPet;
     } else {
       const newPet: Pet = {
-        id: `user_pet_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: generateUuid(),
         name: petData.name ?? '',
         species: petData.species ?? 'cat',
         breed: petData.breed ?? '',
@@ -5011,12 +5259,40 @@ class AppStateManager {
       this.userPets.push(newPet);
       this.recalculateAllCompatibilities();
       this.isAddPetModalOpen = false;
-      void syncPetToFirestore(newPet).catch((err) =>
-        console.warn('Firestore new pet sync skipped:', err)
-      );
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void upsertPetInSupabase(newPet, this.user.id);
+      } else if (!isSupabaseConfigured()) {
+        void syncPetToFirestore(newPet).catch((err) =>
+          console.warn('Firestore new pet sync skipped:', err)
+        );
+      }
       this.notify();
       return newPet;
     }
+  }
+
+  public async savePetAsync(
+    petData: Partial<Pet>
+  ): Promise<{ success: boolean; pet?: Pet; errorMessage?: string }> {
+    const saved = this.savePet(petData);
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      const res = await upsertPetInSupabase(saved, this.user.id);
+      if (!res.success) {
+        return {
+          success: false,
+          errorMessage: res.errorMessage || 'تعذر حفظ بيانات الأليف في قاعدة البيانات.',
+        };
+      }
+      if (res.data) {
+        const idx = this.userPets.findIndex((p) => p.id === saved.id);
+        if (idx !== -1) {
+          this.userPets[idx] = { ...saved, ...res.data };
+        }
+        this.notify();
+        return { success: true, pet: this.userPets[idx] || res.data };
+      }
+    }
+    return { success: true, pet: saved };
   }
 
   public getPendingDeletePet(): Pet | null {
@@ -5049,9 +5325,13 @@ class AppStateManager {
     if (this.pendingStatusChange?.petId === petId) this.pendingStatusChange = null;
     this.removePetFromGroupListing(petId);
     this.recalculateAllCompatibilities();
-    void deletePetFromFirestore(petId).catch((err) =>
-      console.warn('Firestore pet delete sync skipped:', err)
-    );
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void softDeletePetInSupabase(petId, this.user.id);
+    } else if (!isSupabaseConfigured()) {
+      void deletePetFromFirestore(petId).catch((err) =>
+        console.warn('Firestore pet delete sync skipped:', err)
+      );
+    }
     this.notify();
   }
 
@@ -5137,6 +5417,9 @@ class AppStateManager {
         pet.alsoListedIndividually = false;
       }
       this.recalculateAllCompatibilities();
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void upsertPetInSupabase(pet, this.user.id);
+      }
       this.notify();
     }
   }
@@ -5451,10 +5734,14 @@ class AppStateManager {
 
   // Communication & Requests
   public sendContactRequest(targetPet: Pet, message: string, selectedUserPetId?: string): ContactRequest {
-    const userPet = this.userPets.find((p) => p.id === selectedUserPetId) || this.userPets[0];
+    const isMating = targetPet.status !== 'adoption';
+    const userPet = isMating
+      ? this.userPets.find((p) => p.id === selectedUserPetId && p.status === 'mating') ||
+        this.getPrimaryUserMatingPet()
+      : this.userPets.find((p) => p.id === selectedUserPetId) || this.userPets[0];
 
     const newRequest: ContactRequest = {
-      id: `req_${Date.now()}`,
+      id: generateUuid(),
       senderId: this.user.id,
       senderName: this.user.name,
       senderAvatar: this.user.avatar,
@@ -5463,12 +5750,14 @@ class AppStateManager {
       senderPet: userPet,
       senderPhone: this.user.showPhoneInProfile ? this.user.phone : undefined,
       senderShowPhone: Boolean(this.user.showPhoneInProfile),
+      receiverOwnerId: targetPet.ownerId,
       receiverPetId: targetPet.id,
       receiverPetName: targetPet.name,
       receiverPet: targetPet,
       message,
       type: targetPet.status === 'adoption' ? 'adoption' : 'mating',
       status: 'pending',
+      isWithdrawn: false,
       timestamp: 'الآن',
     };
 
@@ -5476,27 +5765,121 @@ class AppStateManager {
       return newRequest;
     }
 
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      if (isMating && !userPet?.id) {
+        return newRequest;
+      }
+      this.contactRequests.unshift(newRequest);
+      this.selectedPetForRequest = null;
+      void createContactRequestInSupabase({
+        id: newRequest.id,
+        senderId: this.user.id,
+        receiverId: targetPet.ownerId,
+        senderPetId: userPet?.id || null,
+        receiverPetId: targetPet.id,
+        type: newRequest.type,
+        message,
+      }).then((res) => {
+        if (!res.success) {
+          this.contactRequests = this.contactRequests.filter((r) => r.id !== newRequest.id);
+          this.notify();
+        }
+      });
+      this.notify();
+      return newRequest;
+    }
+
     this.contactRequests.unshift(newRequest);
     this.selectedPetForRequest = null;
-    void syncContactRequestToFirestore(newRequest).catch((err) =>
-      console.warn('Firestore contact request sync skipped:', err)
-    );
-    this.addNotification({
-      type: 'contact_request',
-      title: `طلب ${newRequest.type === 'mating' ? 'تزاوج' : 'تبني'} جديد`,
-      body: `تم إرسال طلب بخصوص «${targetPet.name}» إلى ${targetPet.ownerName}.`,
-      read: true,
-      targetTab: 'chat',
-      targetSubTab: 'requests',
-      targetRequestId: newRequest.id,
-      targetPetId: targetPet.id,
-    });
+    if (!isSupabaseConfigured()) {
+      void syncContactRequestToFirestore(newRequest).catch((err) =>
+        console.warn('Firestore contact request sync skipped:', err)
+      );
+    }
+    this.notify();
     return newRequest;
+  }
+
+  public async sendContactRequestAsync(
+    targetPet: Pet,
+    message: string,
+    selectedUserPetId?: string
+  ): Promise<{ success: boolean; request?: ContactRequest; errorMessage?: string }> {
+    if (this.isUserBlocked(targetPet.ownerId)) {
+      return { success: false, errorMessage: 'تعذر إرسال الطلب لأن هذا الحساب محظور.' };
+    }
+    const isMating = targetPet.status !== 'adoption';
+    const userPet = isMating
+      ? this.userPets.find((p) => p.id === selectedUserPetId && p.status === 'mating') ||
+        this.getPrimaryUserMatingPet()
+      : this.userPets.find((p) => p.id === selectedUserPetId) || this.userPets[0];
+
+    if (isMating && !userPet) {
+      return {
+        success: false,
+        errorMessage: 'يجب إضافة أو تفعيل أليف «للتزاوج» أولاً قبل إرسال طلب تزاوج.',
+      };
+    }
+
+    const reqId = generateUuid();
+    const newRequest: ContactRequest = {
+      id: reqId,
+      senderId: this.user.id,
+      senderName: this.user.name,
+      senderAvatar: this.user.avatar,
+      senderPetId: userPet?.id,
+      senderPetName: userPet?.name,
+      senderPet: userPet,
+      senderPhone: this.user.showPhoneInProfile ? this.user.phone : undefined,
+      senderShowPhone: Boolean(this.user.showPhoneInProfile),
+      receiverOwnerId: targetPet.ownerId,
+      receiverPetId: targetPet.id,
+      receiverPetName: targetPet.name,
+      receiverPet: targetPet,
+      message,
+      type: isMating ? 'mating' : 'adoption',
+      status: 'pending',
+      isWithdrawn: false,
+      timestamp: 'الآن',
+    };
+
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      const res = await createContactRequestInSupabase({
+        id: reqId,
+        senderId: this.user.id,
+        receiverId: targetPet.ownerId,
+        senderPetId: userPet?.id || null,
+        receiverPetId: targetPet.id,
+        type: newRequest.type,
+        message,
+      });
+      if (!res.success) {
+        return {
+          success: false,
+          errorMessage: res.errorMessage || 'تعذر إرسال طلب التواصل. حاول مرة أخرى.',
+        };
+      }
+      this.contactRequests.unshift(newRequest);
+      this.selectedPetForRequest = null;
+      this.notify();
+      return { success: true, request: newRequest };
+    }
+
+    this.contactRequests.unshift(newRequest);
+    this.selectedPetForRequest = null;
+    if (!isSupabaseConfigured()) {
+      void syncContactRequestToFirestore(newRequest).catch((err) =>
+        console.warn('Firestore contact request sync skipped:', err)
+      );
+    }
+    this.notify();
+    return { success: true, request: newRequest };
   }
 
   public approveContactRequest(requestId: string): void {
     const req = this.contactRequests.find((r) => r.id === requestId);
     if (!req) return;
+    if (req.senderId === this.user.id) return;
 
     const isOutgoing = req.senderId === this.user.id;
     const allPets = this.getAllPets();
@@ -5552,12 +5935,32 @@ class AppStateManager {
     this.processedRequestStatuses[req.id] = 'accepted';
     this.persistProcessedRequestStatuses();
 
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      this.markNotificationsReadWhere((n) => n.targetRequestId === req.id, true);
+      void respondContactRequestInSupabase(req.id, this.user.id, 'accepted').then(async (res) => {
+        await this.hydrateSupabaseWorkspaceForUser(this.user.id);
+        const conv =
+          (res.data?.conversationId
+            ? this.conversations.find((c) => c.id === res.data?.conversationId)
+            : undefined) || this.conversations.find((c) => c.requestId === req.id);
+        if (conv) {
+          this.currentTab = 'chat';
+          this.chatSubTab = 'chats';
+          this.setActiveConversationId(conv.id);
+        } else {
+          this.notify();
+        }
+      });
+      this.notify();
+      return;
+    }
+
     let conv = this.conversations.find(
       (c) => c.requestId === requestId || c.otherUserId === otherUserId
     );
     if (!conv) {
       const now = Date.now();
-      const convId = `conv_${now}`;
+      const convId = generateUuid();
       const sysText = isGroupSubject
         ? `تمت الموافقة على طلب التواصل بخصوص التبني الجماعي «${subjectPet?.name || req.receiverPetName}» (${subjectPet?.groupCount || subjectPet?.groupMembers?.length || 2} حيوانات: ${groupNamesSummary}) • ${groupRuleText}. يمكنك مراجعة تفاصيل كل حيوان من اللوحة بالأعلى.`
         : 'تمت الموافقة على طلب التواصل بنجاح 🐾. يمكنك التحدث مباشرة داخل التطبيق بأمان، ولا يظهر رقم الهاتف إلا عند تفعيله من إعدادات الخصوصية.';
@@ -5589,7 +5992,7 @@ class AppStateManager {
         photoEntries: subjectPet?.photoEntries ? subjectPet.photoEntries.map((e) => ({ ...e })) : undefined,
         messages: [
           {
-            id: `msg_sys_${now}`,
+            id: generateUuid(),
             conversationId: convId,
             senderId: 'system',
             senderName: 'Meow',
@@ -5598,7 +6001,7 @@ class AppStateManager {
             isFromUser: false,
           },
           {
-            id: `msg_init_${now}`,
+            id: generateUuid(),
             conversationId: convId,
             senderId: req.senderId,
             senderName: req.senderName,
@@ -5623,12 +6026,14 @@ class AppStateManager {
     );
     const celebrated = this.triggerMatingCelebrationIfNeeded(conv);
 
-    void syncContactRequestToFirestore(req).catch((err) =>
-      console.warn('Firestore approve request sync skipped:', err)
-    );
-    void syncConversationToFirestore(conv).catch((err) =>
-      console.warn('Firestore conversation sync skipped:', err)
-    );
+    if (!isSupabaseConfigured()) {
+      void syncContactRequestToFirestore(req).catch((err) =>
+        console.warn('Firestore approve request sync skipped:', err)
+      );
+      void syncConversationToFirestore(conv).catch((err) =>
+        console.warn('Firestore conversation sync skipped:', err)
+      );
+    }
 
     this.addNotification({
       id: `notif_approve_${req.id}`,
@@ -5653,16 +6058,32 @@ class AppStateManager {
 
   public rejectContactRequest(requestId: string): void {
     const req = this.contactRequests.find((r) => r.id === requestId);
-    if (req) {
-      req.status = 'rejected';
-      this.processedRequestStatuses[req.id] = 'rejected';
-      this.persistProcessedRequestStatuses();
-      this.markNotificationsReadWhere((n) => n.targetRequestId === req.id, true);
+    if (!req || req.senderId === this.user.id) return;
+    req.status = 'rejected';
+    this.processedRequestStatuses[req.id] = 'rejected';
+    this.persistProcessedRequestStatuses();
+    this.markNotificationsReadWhere((n) => n.targetRequestId === req.id, true);
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void respondContactRequestInSupabase(req.id, this.user.id, 'rejected');
+    } else if (!isSupabaseConfigured()) {
       void syncContactRequestToFirestore(req).catch((err) =>
         console.warn('Firestore reject request sync skipped:', err)
       );
-      this.notify();
     }
+    this.notify();
+  }
+
+  public withdrawContactRequest(requestId: string): void {
+    const req = this.contactRequests.find((r) => r.id === requestId);
+    if (!req || req.senderId !== this.user.id || req.status !== 'pending' || req.isWithdrawn) {
+      return;
+    }
+    req.isWithdrawn = true;
+    req.status = 'rejected';
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void withdrawContactRequestInSupabase(req.id, this.user.id);
+    }
+    this.notify();
   }
 
   // SAVED PETS METHODS (Heart save button)
@@ -5672,16 +6093,19 @@ class AppStateManager {
 
   public toggleSavePet(petId: string): boolean {
     const isSaved = this.savedPetIds.has(petId);
+    const shouldSave = !isSaved;
     if (isSaved) {
       this.savedPetIds.delete(petId);
     } else {
       this.savedPetIds.add(petId);
     }
-    if (typeof window !== 'undefined') {
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void toggleSavedPetInSupabase(this.user.id, petId, shouldSave);
+    } else if (typeof window !== 'undefined') {
       localStorage.setItem('meow_saved_pets', JSON.stringify(Array.from(this.savedPetIds)));
     }
     this.notify();
-    return !isSaved;
+    return shouldSave;
   }
 
   public getSavedPetIds(): string[] {
@@ -5771,12 +6195,13 @@ class AppStateManager {
     const conv = this.conversations.find((c) => c.id === this.activeConversationId);
     if (!conv || this.isUserBlocked(conv.otherUserId)) return;
 
+    const msgId = generateUuid();
     let newMsg: ChatMessage;
 
     if (typeof payload === 'string') {
       if (!payload.trim()) return;
       newMsg = {
-        id: `msg_${Date.now()}`,
+        id: msgId,
         conversationId: conv.id,
         senderId: this.user.id,
         senderName: this.user.name,
@@ -5784,11 +6209,11 @@ class AppStateManager {
         type: 'text',
         timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         isFromUser: true,
-        status: 'delivered',
+        status: 'sent',
       };
     } else {
       newMsg = {
-        id: `msg_${Date.now()}`,
+        id: msgId,
         conversationId: conv.id,
         senderId: this.user.id,
         senderName: this.user.name,
@@ -5804,7 +6229,7 @@ class AppStateManager {
         stickerTitle: payload.stickerTitle,
         timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         isFromUser: true,
-        status: 'delivered',
+        status: 'sent',
       };
     }
 
@@ -5821,13 +6246,32 @@ class AppStateManager {
         : newMsg.text || '';
     conv.lastMessageTime = 'الآن';
     conv.updatedAt = Date.now();
-    void syncChatMessageToFirestore(conv.id, newMsg).catch((err) =>
-      console.warn('Firestore message sync skipped:', err)
-    );
+
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void sendMessageInSupabase({
+        id: newMsg.id,
+        conversationId: conv.id,
+        senderId: this.user.id,
+        message: newMsg,
+      }).then((res) => {
+        if (res.success && res.data) {
+          const targetMsg = conv.messages.find((m) => m.id === newMsg.id);
+          if (targetMsg) {
+            targetMsg.status = res.data.status || 'sent';
+            targetMsg.timestamp = res.data.timestamp || targetMsg.timestamp;
+            this.notify();
+          }
+        }
+      });
+    } else if (!isSupabaseConfigured()) {
+      void syncChatMessageToFirestore(conv.id, newMsg).catch((err) =>
+        console.warn('Firestore message sync skipped:', err)
+      );
+    }
     this.notify();
 
-    // Auto reply simulation strictly limited to local DEV sandbox mode
-    if (import.meta.env.DEV) {
+    // Auto reply simulation strictly limited to local unauthenticated DEV sandbox mode
+    if (import.meta.env.DEV && !this.isSupabaseAuthenticated()) {
       setTimeout(() => {
         if (
           !this.isUserBlocked(conv.otherUserId) &&
@@ -5843,7 +6287,7 @@ class AppStateManager {
               : 'أهلاً بك! شاكر لاهتمامك وتواصلك الراقي، أنا جاهز لأي استفسار أو لترتيب موعد المقابلة المناسبة.';
 
           const replyMsg: ChatMessage = {
-            id: `msg_rep_${Date.now()}`,
+            id: generateUuid(),
             conversationId: conv.id,
             senderId: conv.otherUserId,
             senderName: conv.otherUserName,
@@ -5881,15 +6325,128 @@ class AppStateManager {
   public addHealthRecord(record: Omit<HealthRecordItem, 'id'>): void {
     const newRecord: HealthRecordItem = {
       ...record,
-      id: `rec_${Date.now()}`,
+      id: generateUuid(),
     };
     this.healthRecords.unshift(newRecord);
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void addHealthRecordInSupabase(record, this.user.id).then((res) => {
+        if (res.success && res.data) {
+          const idx = this.healthRecords.findIndex((r) => r.id === newRecord.id);
+          if (idx !== -1) {
+            this.healthRecords[idx] = res.data;
+            this.notify();
+          }
+        }
+      });
+    }
     this.notify();
+  }
+
+  // CUSTOM STICKERS METHODS
+  public getCustomStickers(): CustomStickerModel[] {
+    return [...this.customStickers];
+  }
+
+  public async addCustomSticker(
+    imageUrl: string,
+    title?: string
+  ): Promise<{ success: boolean; sticker?: CustomStickerModel; errorMessage?: string }> {
+    const cleanUrl = (imageUrl || '').trim();
+    if (!cleanUrl) {
+      return { success: false, errorMessage: 'صورة الملصق غير صالحة.' };
+    }
+    const cleanTitle = (title || 'ملصق مخصص').trim() || 'ملصق مخصص';
+
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      const res = await addCustomStickerInSupabase({
+        userId: this.user.id,
+        imageUrl: cleanUrl,
+        title: cleanTitle,
+      });
+      if (!res.success || !res.data) {
+        return {
+          success: false,
+          errorMessage: res.errorMessage || 'تعذر حفظ الملصق المخصص.',
+        };
+      }
+      this.customStickers = [res.data, ...this.customStickers.filter((s) => s.id !== res.data!.id)];
+      this.notify();
+      return { success: true, sticker: res.data };
+    }
+
+    const localSticker: CustomStickerModel = {
+      id: generateUuid(),
+      imageUrl: cleanUrl,
+      title: cleanTitle,
+      createdAt: new Date().toISOString(),
+    };
+    this.customStickers = [localSticker, ...this.customStickers];
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('meow_custom_stickers_v1', JSON.stringify(this.customStickers));
+      } catch {
+        // Ignore storage error
+      }
+    }
+    this.notify();
+    return { success: true, sticker: localSticker };
+  }
+
+  public async removeCustomSticker(stickerId: string): Promise<void> {
+    this.customStickers = this.customStickers.filter((s) => s.id !== stickerId);
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      await deleteCustomStickerInSupabase(this.user.id, stickerId);
+    } else if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('meow_custom_stickers_v1', JSON.stringify(this.customStickers));
+      } catch {
+        // Ignore storage error
+      }
+    }
+    this.notify();
+  }
+
+  // SUPPORT MESSAGES (Contact Us -> Supabase)
+  public async submitSupportMessage(
+    subject: string,
+    message: string
+  ): Promise<{ success: boolean; errorMessage?: string }> {
+    const cleanSubject = (subject || '').trim();
+    const cleanMessage = (message || '').trim();
+    if (!cleanSubject || !cleanMessage) {
+      return { success: false, errorMessage: 'يرجى كتابة الموضوع وتفاصيل الرسالة أولاً.' };
+    }
+
+    if (isSupabaseConfigured() && !this.isOnboardingPreviewSession) {
+      if (!this.isSupabaseAuthenticated() || !this.supabaseAuthUserId) {
+        return {
+          success: false,
+          errorMessage: 'يرجى تسجيل الدخول أولاً لإرسال رسالة إلى فريق الدعم.',
+        };
+      }
+      const res = await submitSupportMessageToSupabase({
+        userId: this.supabaseAuthUserId,
+        senderName: this.user.name || 'مستخدم Meow',
+        senderEmail: this.user.email || '',
+        senderPhone: this.user.phone || '',
+        subject: cleanSubject,
+        message: cleanMessage,
+      });
+      if (!res.success) {
+        return {
+          success: false,
+          errorMessage: res.errorMessage || 'تعذر إرسال رسالتك إلى فريق الدعم. حاول مرة أخرى.',
+        };
+      }
+      return { success: true };
+    }
+
+    return { success: true };
   }
 
   // BLOCKED USERS METHODS
   private persistBlockedUsers(): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !this.isSupabaseAuthenticated()) {
       localStorage.setItem('meow_blocked_users', JSON.stringify(this.blockedUsers));
     }
   }
@@ -5924,9 +6481,13 @@ class AppStateManager {
       };
       this.blockedUsers.unshift(blockedEntry);
       this.persistBlockedUsers();
-      void syncBlockedUserToFirestore(blockedEntry, false).catch((err) =>
-        console.warn('Firestore block sync skipped:', err)
-      );
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void syncBlockInSupabase(this.user.id, blockedEntry, false);
+      } else if (!isSupabaseConfigured()) {
+        void syncBlockedUserToFirestore(blockedEntry, false).catch((err) =>
+          console.warn('Firestore block sync skipped:', err)
+        );
+      }
     }
 
     if (this.selectedPetForDetail && this.selectedPetForDetail.ownerId === target.userId) {
@@ -5956,16 +6517,20 @@ class AppStateManager {
     this.blockedUsers = this.blockedUsers.filter((u) => u.userId !== userId);
     this.persistBlockedUsers();
     if (existing) {
-      void syncBlockedUserToFirestore(existing, true).catch((err) =>
-        console.warn('Firestore unblock sync skipped:', err)
-      );
+      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+        void syncBlockInSupabase(this.user.id, existing, true);
+      } else if (!isSupabaseConfigured()) {
+        void syncBlockedUserToFirestore(existing, true).catch((err) =>
+          console.warn('Firestore unblock sync skipped:', err)
+        );
+      }
     }
     this.notify();
   }
 
   // REPORTS METHODS (Honest storage with pending_review status)
   private persistReports(): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !this.isSupabaseAuthenticated()) {
       try {
         localStorage.setItem('meow_reports_v1', JSON.stringify(this.reports));
       } catch {
@@ -5995,7 +6560,7 @@ class AppStateManager {
     if (!this.pendingReportTarget) return null;
     const target = this.pendingReportTarget;
     const record: ReportRecord = {
-      id: `rep_${Date.now()}`,
+      id: generateUuid(),
       targetUserId: target.targetUserId,
       targetUserName: target.targetUserName,
       targetType: target.targetType,
@@ -6010,9 +6575,13 @@ class AppStateManager {
     };
     this.reports.unshift(record);
     this.persistReports();
-    void syncReportToFirestore(record).catch((err) =>
-      console.warn('Firestore report sync skipped:', err)
-    );
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void createReportInSupabase(this.user.id, record);
+    } else if (!isSupabaseConfigured()) {
+      void syncReportToFirestore(record).catch((err) =>
+        console.warn('Firestore report sync skipped:', err)
+      );
+    }
     this.pendingReportTarget = null;
     this.lastSubmittedReportNotice = {
       targetUserName: target.targetUserName,

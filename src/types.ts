@@ -137,6 +137,7 @@ export interface ContactRequest {
   message: string;
   type: 'mating' | 'adoption';
   status: 'pending' | 'accepted' | 'rejected';
+  isWithdrawn?: boolean;
   timestamp: string;
   celebrated?: boolean;
 }

@@ -200,7 +200,7 @@ export function renderAdoptionView(): string {
 
                     return `
                       <article
-                        class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                        class="pet-card meow-card-enter min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                         data-pet-detail-id="${escapeAttr(pet.id)}"
                         data-pet-type="${escapeAttr(pet.species || 'cat')}"
                       >
@@ -217,15 +217,15 @@ export function renderAdoptionView(): string {
                           </div>
 
                           <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
-                          <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
+                          <div class="absolute top-2 left-2 flex items-center gap-1.5 z-30">
                             <button
                               type="button"
                               aria-label="حفظ الأليف"
-                              class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                              class="toggle-save-pet-btn w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
                               data-pet-save-id="${escapeAttr(pet.id)}"
                               title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                             >
-                              <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                              <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-sm transition-transform"></i>
                             </button>
                             ${
                               pet.ownerId !== currentUserId
@@ -237,7 +237,7 @@ export function renderAdoptionView(): string {
                                     petId: pet.id,
                                     reportTargetType: 'pet',
                                     buttonClass:
-                                      'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                      'w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
                                     dropdownAlign: 'left',
                                   })
                                 : ''
@@ -245,7 +245,7 @@ export function renderAdoptionView(): string {
                           </div>
 
                           <!-- Clear Group Adoption Status Badge -->
-                          <div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-[10px] sm:text-[11px] font-bold shadow-sm font-baloo pointer-events-none z-20 flex items-center gap-1">
+                          <div class="absolute top-2 right-2 bg-brand-orange/95 backdrop-blur-sm text-white px-2 py-0.5 rounded-xl text-[10px] sm:text-[11px] font-bold shadow-sm font-baloo pointer-events-none z-20 flex items-center gap-1">
                             <i class="fa-solid fa-people-roof text-[9px]"></i>
                             <span>تبني جماعي (${groupCount})</span>
                           </div>
@@ -307,7 +307,7 @@ export function renderAdoptionView(): string {
 
                   return `
                     <article
-                      class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                      class="pet-card meow-card-enter min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                       data-pet-detail-id="${escapeAttr(pet.id)}"
                       data-pet-type="${escapeAttr(pet.species || 'cat')}"
                     >
@@ -323,15 +323,15 @@ export function renderAdoptionView(): string {
                         </div>
 
                         <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
-                        <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
+                        <div class="absolute top-2 left-2 flex items-center gap-1.5 z-30">
                           <button
                             type="button"
                             aria-label="حفظ الأليف"
-                            class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                            class="toggle-save-pet-btn w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
                             data-pet-save-id="${escapeAttr(pet.id)}"
                             title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                           >
-                            <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                            <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-sm transition-transform"></i>
                           </button>
                           ${
                             pet.ownerId !== currentUserId
@@ -343,7 +343,7 @@ export function renderAdoptionView(): string {
                                   petId: pet.id,
                                   reportTargetType: 'pet',
                                   buttonClass:
-                                    'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                    'w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
                                   dropdownAlign: 'left',
                                 })
                               : ''
@@ -351,7 +351,7 @@ export function renderAdoptionView(): string {
                         </div>
 
                         <!-- Status Badge: Original rounded-xl style -->
-                        <div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm font-baloo pointer-events-none z-20">
+                        <div class="absolute top-2 right-2 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-sm font-baloo pointer-events-none z-20">
                           <span>للتبني</span>
                         </div>
                       </div>
@@ -373,7 +373,7 @@ export function renderAdoptionView(): string {
                 if (isGroup) {
                   return `
                     <article
-                      class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                      class="pet-card meow-card-enter bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                       data-pet-detail-id="${escapeAttr(pet.id)}"
                       data-pet-type="${escapeAttr(pet.species || 'cat')}"
                     >
@@ -389,15 +389,15 @@ export function renderAdoptionView(): string {
                         </div>
 
                         <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
-                        <div class="absolute top-3 left-3 flex items-center gap-2 z-30">
+                        <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
                           <button
                             type="button"
                             aria-label="حفظ الأليف"
-                            class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                            class="toggle-save-pet-btn w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
                             data-pet-save-id="${escapeAttr(pet.id)}"
                             title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                           >
-                            <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                            <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-sm transition-transform"></i>
                           </button>
                           ${
                             pet.ownerId !== currentUserId
@@ -409,7 +409,7 @@ export function renderAdoptionView(): string {
                                   petId: pet.id,
                                   reportTargetType: 'pet',
                                   buttonClass:
-                                    'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                    'w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
                                   dropdownAlign: 'left',
                                 })
                               : ''
@@ -417,8 +417,8 @@ export function renderAdoptionView(): string {
                         </div>
 
                         <!-- Group Adoption Badge -->
-                        <div class="absolute top-3 right-3 bg-brand-orange/95 backdrop-blur-sm text-white px-3 py-1 rounded-xl text-xs font-bold shadow-sm font-baloo pointer-events-none z-20 flex items-center gap-1.5">
-                          <i class="fa-solid fa-people-roof text-xs"></i>
+                        <div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-xl text-[11px] font-bold shadow-sm font-baloo pointer-events-none z-20 flex items-center gap-1.5">
+                          <i class="fa-solid fa-people-roof text-[10px]"></i>
                           <span>تبني جماعي • ${groupCount} حيوانات</span>
                         </div>
 
@@ -494,7 +494,7 @@ export function renderAdoptionView(): string {
                 // Single column / Full card view
                 return `
                   <article
-                    class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                    class="pet-card meow-card-enter bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                     data-pet-detail-id="${escapeAttr(pet.id)}"
                     data-pet-type="${escapeAttr(pet.species || 'cat')}"
                   >
@@ -513,15 +513,15 @@ export function renderAdoptionView(): string {
                       </div>
 
                       <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
-                      <div class="absolute top-3 left-3 flex items-center gap-2 z-30">
+                      <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
                         <button
                           type="button"
                           aria-label="حفظ الأليف"
-                          class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                          class="toggle-save-pet-btn w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
                           data-pet-save-id="${escapeAttr(pet.id)}"
                           title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                         >
-                          <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                          <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-sm transition-transform"></i>
                         </button>
                         ${
                           pet.ownerId !== currentUserId
@@ -533,7 +533,7 @@ export function renderAdoptionView(): string {
                                 petId: pet.id,
                                 reportTargetType: 'pet',
                                 buttonClass:
-                                  'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                  'w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
                                 dropdownAlign: 'left',
                               })
                             : ''
@@ -541,7 +541,7 @@ export function renderAdoptionView(): string {
                       </div>
 
                       <!-- Status Badge -->
-                      <div class="absolute top-3 right-3 bg-brand-orange/95 backdrop-blur-sm text-white px-3 py-1 rounded-xl text-xs font-bold shadow-sm font-baloo pointer-events-none z-20">
+                      <div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-xl text-[11px] font-bold shadow-sm font-baloo pointer-events-none z-20">
                         <span>للتبني</span>
                       </div>
 
@@ -693,9 +693,9 @@ export function attachAdoptionEvents(): void {
           state.getPendingBlockTarget() ||
           state.getPendingReportTarget()
       ),
-    onRefresh: () => {
-      state.refreshFeed('adoption');
-      showMobileToast('تم تحديث قائمة التبني', 'success', 1600);
+    onRefresh: async () => {
+      await state.refreshFeed('adoption');
+      showMobileToast('تم التحديث', 'success', 1500);
     },
   });
 }

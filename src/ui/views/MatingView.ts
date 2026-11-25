@@ -45,7 +45,7 @@ export function renderMatingView(): string {
       <div class="flex items-center justify-between gap-2 px-1">
         <div class="flex items-center gap-1.5 text-sm font-extrabold text-brand-dark">
           <span class="text-brand-orange text-lg">🐾</span>
-          <span class="text-sm font-black text-brand-orange px-2.5 py-1 rounded-xl bg-white border border-brand-peachBorder shadow-sm">${pets.length} متاح</span>
+          <span class="text-xs font-black text-brand-orange px-2.5 py-0.5 rounded-full bg-white border border-brand-peachBorder shadow-sm">${pets.length} متاح</span>
         </div>
         ${
           filters.recommendedMatchEnabled && refPet
@@ -126,7 +126,7 @@ export function renderMatingView(): string {
                 if (viewMode === 'grid') {
                   return `
                     <article
-                      class="pet-card min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                      class="pet-card meow-card-enter min-w-0 bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                       data-pet-detail-id="${escapeAttr(pet.id)}"
                       data-pet-type="${escapeAttr(pet.species)}"
                     >
@@ -142,15 +142,15 @@ export function renderMatingView(): string {
                         </div>
 
                         <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
-                        <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
+                        <div class="absolute top-2 left-2 flex items-center gap-1.5 z-30">
                           <button
                             type="button"
                             aria-label="حفظ الأليف"
-                            class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                            class="toggle-save-pet-btn w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
                             data-pet-save-id="${escapeAttr(pet.id)}"
                             title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                           >
-                            <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                            <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-sm transition-transform"></i>
                           </button>
                           ${
                             pet.ownerId !== currentUserId
@@ -162,7 +162,7 @@ export function renderMatingView(): string {
                                   petId: pet.id,
                                   reportTargetType: 'pet',
                                   buttonClass:
-                                    'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                    'w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
                                   dropdownAlign: 'left',
                                 })
                               : ''
@@ -170,7 +170,7 @@ export function renderMatingView(): string {
                         </div>
 
                         <!-- 'للزواج' Badge: Original rounded-xl style -->
-                        <div class="absolute top-2.5 right-2.5 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm font-baloo pointer-events-none z-20">
+                        <div class="absolute top-2 right-2 bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-sm font-baloo pointer-events-none z-20">
                           <span>للزواج</span>
                         </div>
                         ${
@@ -200,7 +200,7 @@ export function renderMatingView(): string {
                 // Single-column / Full card View Mode
                 return `
                   <article
-                    class="pet-card bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
+                    class="pet-card meow-card-enter bg-brand-lightCream dark:bg-[#27201B] rounded-3xl border border-brand-peachBorder dark:border-warm-darkBorder shadow-card flex flex-col group transition-all duration-300 hover:shadow-soft cursor-pointer relative"
                     data-pet-detail-id="${escapeAttr(pet.id)}"
                     data-pet-type="${escapeAttr(pet.species)}"
                   >
@@ -219,15 +219,15 @@ export function renderMatingView(): string {
                       </div>
 
                       <!-- Top-left actions: Heart Save Button + 3-Dots More Menu -->
-                      <div class="absolute top-3 left-3 flex items-center gap-2 z-30">
+                      <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-30">
                         <button
                           type="button"
                           aria-label="حفظ الأليف"
-                          class="toggle-save-pet-btn w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
+                          class="toggle-save-pet-btn w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md"
                           data-pet-save-id="${escapeAttr(pet.id)}"
                           title="${isSaved ? 'إزالة من المحفوظات' : 'حفظ في المحفوظات'}"
                         >
-                          <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-base transition-transform"></i>
+                          <i class="${isSaved ? 'fa-solid fa-heart text-red-500 scale-110' : 'fa-regular fa-heart text-white'} text-sm transition-transform"></i>
                         </button>
                         ${
                           pet.ownerId !== currentUserId
@@ -239,7 +239,7 @@ export function renderMatingView(): string {
                                 petId: pet.id,
                                 reportTargetType: 'pet',
                                 buttonClass:
-                                  'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                  'w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
                                 dropdownAlign: 'left',
                               })
                             : ''
@@ -247,8 +247,8 @@ export function renderMatingView(): string {
                       </div>
 
                       <!-- 'للزواج' Badge -->
-                      <div class="absolute top-3 right-3 flex items-center gap-1.5 z-20 pointer-events-none">
-                        <div class="bg-brand-orange/95 backdrop-blur-sm text-white px-3 py-1 rounded-xl text-xs font-bold shadow-sm font-baloo">
+                      <div class="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20 pointer-events-none">
+                        <div class="bg-brand-orange/95 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-xl text-[11px] font-bold shadow-sm font-baloo">
                           <span>للزواج</span>
                         </div>
                         ${
@@ -417,9 +417,9 @@ export function attachMatingEvents(): void {
           state.getPendingBlockTarget() ||
           state.getPendingReportTarget()
       ),
-    onRefresh: () => {
-      state.refreshFeed('mating');
-      showMobileToast('تم تحديث قائمة التزاوج', 'success', 1600);
+    onRefresh: async () => {
+      await state.refreshFeed('mating');
+      showMobileToast('تم التحديث', 'success', 1500);
     },
   });
 }

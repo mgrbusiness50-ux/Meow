@@ -304,3 +304,127 @@ a[role="button"]:not(.no-active-scale):active,
   will-change: transform, opacity;
 }
 
+/* Status bar top dark gradient scrim for Android edge-to-edge readability */
+#status-bar-scrim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(env(safe-area-inset-top, 0px) + 18px);
+  background: linear-gradient(
+    to bottom,
+    rgba(20, 14, 10, 0.42) 0%,
+    rgba(20, 14, 10, 0.16) 55%,
+    rgba(20, 14, 10, 0) 100%
+  );
+  pointer-events: none;
+  z-index: 55;
+}
+
+/* Smooth feed card & view entrance animations */
+@keyframes meow-card-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.meow-card-enter {
+  animation: meow-card-enter 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.meow-view-enter {
+  animation: meow-fade-in 0.24s ease-out both;
+}
+
+/* Pull-to-refresh circular 3-dots loader */
+@keyframes meow-ptr-dot-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.55);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+.meow-ptr-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.meow-ptr-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: #E67E22;
+  display: inline-block;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.meow-ptr-dots.is-spinning span {
+  animation: meow-ptr-dot-bounce 0.9s infinite ease-in-out both;
+}
+
+.meow-ptr-dots.is-spinning span:nth-child(1) {
+  animation-delay: -0.28s;
+}
+
+.meow-ptr-dots.is-spinning span:nth-child(2) {
+  animation-delay: -0.14s;
+}
+
+.meow-ptr-dots.is-spinning span:nth-child(3) {
+  animation-delay: 0s;
+}
+
+/* WhatsApp-style speech bubble tails */
+.meow-bubble-out,
+.meow-bubble-in {
+  position: relative;
+}
+
+.meow-bubble-out {
+  border-top-right-radius: 6px !important;
+}
+
+.meow-bubble-out::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -7px;
+  width: 11px;
+  height: 13px;
+  background-color: #E67E22;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  pointer-events: none;
+}
+
+.meow-bubble-in {
+  border-top-left-radius: 6px !important;
+}
+
+.meow-bubble-in::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -7px;
+  width: 11px;
+  height: 13px;
+  background-color: #FFFFFF;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  pointer-events: none;
+}
+
+.dark .meow-bubble-in::after {
+  background-color: #261E19;
+}
+
+

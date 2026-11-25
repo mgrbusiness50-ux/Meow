@@ -218,6 +218,33 @@ function normalizeEmail(email: string): string {
   return (email || '').trim().toLowerCase();
 }
 
+export function extractGoogleAvatarUrl(user?: User | null): string {
+  if (!user) return '';
+  const meta = (user.user_metadata || {}) as Record<string, unknown>;
+  const candidates: unknown[] = [
+    meta.avatar_url,
+    meta.picture,
+    meta.avatar,
+    meta.photo_url,
+    meta.profilePictureUri,
+  ];
+  if (Array.isArray(user.identities)) {
+    for (const identity of user.identities) {
+      const idData = (identity?.identity_data || {}) as Record<string, unknown>;
+      candidates.push(idData.avatar_url, idData.picture, idData.avatar, idData.photo_url);
+    }
+  }
+  for (const cand of candidates) {
+    if (typeof cand === 'string') {
+      const trimmed = cand.trim();
+      if (trimmed && /^https?:\/\//i.test(trimmed)) {
+        return trimmed;
+      }
+    }
+  }
+  return '';
+}
+
 function isValidEmailFormat(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -678,6 +705,16 @@ export async function signInWithGoogleSupabaseOAuth(opts?: {
               errorMessage: mapped.message,
               errorCode: mapped.code,
             };
+          }
+
+          const nativePhoto = (nativeCredential?.profilePictureUri || '').trim();
+          if (nativePhoto && data.user && !extractGoogleAvatarUrl(data.user)) {
+            void client.auth.updateUser({
+              data: {
+                avatar_url: nativePhoto,
+                picture: nativePhoto,
+              },
+            }).catch(() => {});
           }
 
           passwordRecoveryActive = false;
@@ -1619,6 +1656,7 @@ export async function fetchSupabaseUserAccountBundle(
     const rawProfile = (profileRes.data as unknown as DbProfileRow | null) ?? null;
     const rawPrivateDetails =
       (privateRes.data as unknown as DbUserPrivateDetailsRow | null) ?? null;
+    const oauthAvatar = extractGoogleAvatarUrl(sessionUser);
 
     if (!rawProfile) {
       return {
@@ -1636,9 +1674,27 @@ export async function fetchSupabaseUserAccountBundle(
       };
     }
 
-    const mapped = mapDbProfileToUserProfile(rawProfile, rawPrivateDetails);
+    let resolvedRawProfile = rawProfile;
+    if ((!rawProfile.avatar_url || !rawProfile.avatar_url.trim()) && oauthAvatar) {
+      const { data: avatarUpdated } = await client
+        .from('profiles')
+        .update({ avatar_url: oauthAvatar })
+        .eq('id', userId)
+        .select(PROFILE_SELECT_COLUMNS)
+        .maybeSingle();
+      if (avatarUpdated) {
+        resolvedRawProfile = avatarUpdated as unknown as DbProfileRow;
+      } else {
+        resolvedRawProfile = { ...rawProfile, avatar_url: oauthAvatar };
+      }
+    }
+
+    const mapped = mapDbProfileToUserProfile(resolvedRawProfile, rawPrivateDetails);
     if (!mapped.email && sessionUser.email) {
       mapped.email = sessionUser.email;
+    }
+    if (!mapped.avatar && oauthAvatar) {
+      mapped.avatar = oauthAvatar;
     }
 
     return {
@@ -1646,11 +1702,11 @@ export async function fetchSupabaseUserAccountBundle(
       bundle: {
         exists: true,
         profile: mapped,
-        role: rawProfile.role,
-        onboardingDone: Boolean(rawProfile.onboarding_done),
-        adviceDismissed: Boolean(rawProfile.advice_dismissed),
-        isDeleted: Boolean(rawProfile.deleted_at),
-        rawProfile,
+        role: resolvedRawProfile.role,
+        onboardingDone: Boolean(resolvedRawProfile.onboarding_done),
+        adviceDismissed: Boolean(resolvedRawProfile.advice_dismissed),
+        isDeleted: Boolean(resolvedRawProfile.deleted_at),
+        rawProfile: resolvedRawProfile,
         rawPrivateDetails,
       },
     };
@@ -1690,10 +1746,12 @@ export async function saveSupabaseUserAccountBundle(
       };
     }
 
+    const oauthAvatar = extractGoogleAvatarUrl(sessionUser);
     const normalizedUser: UserProfile = {
       ...userProfile,
       id: sessionUser.id,
       email: (userProfile.email || sessionUser.email || '').trim(),
+      avatar: (userProfile.avatar || '').trim() || oauthAvatar,
     };
 
     const { profile: profilePayload, privateDetails: privatePayload } =

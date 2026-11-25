@@ -24,16 +24,25 @@ import {
 } from '../../utils/touchGestures.ts';
 
 let chatCategoryFilter: 'all' | 'mating' | 'adoption' | 'clinics' = 'all';
+let requestsDirectionFilter: 'incoming' | 'outgoing' = 'incoming';
 let isStickersOpen = false;
 let isGroupDetailsExpanded = false;
 let lastRenderedChatRoomId: string | null = null;
 let previewChatImageUrl: string | null = null;
+let pendingChatAttachment: {
+  type: 'image' | 'file';
+  fileUrl: string;
+  fileName: string;
+  fileSize: string;
+} | null = null;
+let isStickerSearchOpen = false;
+let stickerSearchQuery = '';
 
 // Calm scattered pattern: cat paws, dog paws, pet toys (yarn ball, bone, mouse), and supplies (food bowl, collar bell)
 const ASYMMETRIC_PAW_SVG = encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
     <!-- آثار أقدام قطط هادئة -->
-    <g fill="#E67E22" fill-opacity="0.045">
+    <g fill="#E67E22" fill-opacity="0.10">
       <g transform="translate(26,24) rotate(-20) scale(0.8)">
         <circle cx="7" cy="8.5" r="2"/><circle cx="11" cy="6.5" r="2"/><circle cx="15" cy="7.5" r="2"/><circle cx="18" cy="10.5" r="1.8"/>
         <path d="M13 11c-2.6 0-4.6 1.8-4.6 4.2 0 2 1.8 3.3 4.2 3.3s4.2-1.3 4.2-3.3c0-2.4-1.2-4.2-3.8-4.2z"/>
@@ -45,7 +54,7 @@ const ASYMMETRIC_PAW_SVG = encodeURIComponent(
     </g>
 
     <!-- آثار أقدام كلاب مبعثرة -->
-    <g fill="#B46934" fill-opacity="0.042">
+    <g fill="#B46934" fill-opacity="0.095">
       <g transform="translate(182,24) rotate(24) scale(0.95)">
         <ellipse cx="6.5" cy="8" rx="2.1" ry="2.6"/><ellipse cx="11.5" cy="5.5" rx="2.1" ry="2.7"/><ellipse cx="16.8" cy="6.5" rx="2.1" ry="2.6"/><ellipse cx="20.5" cy="10.5" rx="1.9" ry="2.4"/>
         <path d="M13.5 11.5c-3.4 0-5.8 2.4-5.8 5.1 0 2.4 2.4 3.9 5.8 3.9s5.8-1.5 5.8-3.9c0-2.7-2.4-5.1-5.8-5.1z"/>
@@ -57,33 +66,33 @@ const ASYMMETRIC_PAW_SVG = encodeURIComponent(
     </g>
 
     <!-- عظمة لعبة -->
-    <g transform="translate(116,74) rotate(-18)" fill="#E67E22" fill-opacity="0.045">
+    <g transform="translate(116,74) rotate(-18)" fill="#E67E22" fill-opacity="0.10">
       <circle cx="4" cy="5" r="3.4"/><circle cx="4" cy="11" r="3.4"/>
       <circle cx="26" cy="5" r="3.4"/><circle cx="26" cy="11" r="3.4"/>
       <rect x="4" y="5.5" width="22" height="5" rx="2"/>
     </g>
 
     <!-- كرة خيط صوف -->
-    <g transform="translate(262,64) rotate(12)" stroke="#B46934" stroke-opacity="0.055" stroke-width="1.6" fill="none" stroke-linecap="round">
+    <g transform="translate(262,64) rotate(12)" stroke="#B46934" stroke-opacity="0.11" stroke-width="1.6" fill="none" stroke-linecap="round">
       <circle cx="14" cy="14" r="11"/>
       <path d="M6 10c5-2 11-1 16 4M4 16c6-1 13 1 18 5M9 23c4-4 9-9 13-15M24 21c3 2 5 1 7-1"/>
     </g>
 
     <!-- طبق طعام ومستلزمات -->
-    <g transform="translate(138,176) rotate(-8)" fill="#E67E22" fill-opacity="0.045">
+    <g transform="translate(138,176) rotate(-8)" fill="#E67E22" fill-opacity="0.10">
       <path d="M5 12c0-2 3-3 11-3s11 1 11 3l3 8c.4 1.2-.5 2-2 2H4c-1.5 0-2.4-.8-2-2l3-8z"/>
-      <ellipse cx="16" cy="10.5" rx="8.5" ry="2.1" fill="#B46934" fill-opacity="0.04"/>
+      <ellipse cx="16" cy="10.5" rx="8.5" ry="2.1" fill="#B46934" fill-opacity="0.095"/>
     </g>
 
     <!-- فأرة لعبة للقطط -->
-    <g transform="translate(206,258) rotate(-25)" fill="#B46934" fill-opacity="0.045" stroke="#B46934" stroke-opacity="0.045" stroke-width="1.4" stroke-linecap="round">
+    <g transform="translate(206,258) rotate(-25)" fill="#B46934" fill-opacity="0.10" stroke="#B46934" stroke-opacity="0.10" stroke-width="1.4" stroke-linecap="round">
       <ellipse cx="14" cy="14" rx="9" ry="5.5"/>
       <circle cx="9" cy="8.5" r="2.6"/><circle cx="13" cy="8.2" r="2.3"/>
       <path d="M23 14c4 0 6-3 8-2" fill="none"/>
     </g>
 
     <!-- جرس طوق -->
-    <g transform="translate(96,264) rotate(14)" stroke="#E67E22" stroke-opacity="0.055" stroke-width="1.6" fill="#E67E22" fill-opacity="0.035">
+    <g transform="translate(96,264) rotate(14)" stroke="#E67E22" stroke-opacity="0.11" stroke-width="1.6" fill="#E67E22" fill-opacity="0.085">
       <circle cx="12" cy="13" r="8"/>
       <circle cx="12" cy="4" r="2.2" fill="none"/>
       <path d="M7 14h10" fill="none"/>
@@ -93,57 +102,21 @@ const ASYMMETRIC_PAW_SVG = encodeURIComponent(
 );
 const CHAT_PAW_BACKDROP_STYLE = `background-image: url("data:image/svg+xml,${ASYMMETRIC_PAW_SVG}"); background-size: 320px 320px; background-repeat: repeat;`;
 
-// Custom Sticker Management (لا استيكرز جاهزة - ميزة إنشاء استيكر من الصور وحفظها محلياً)
-export interface CustomSticker {
-  id: string;
-  imageUrl: string;
-  title: string;
-  createdAt: string;
-}
-
-function getCustomStickers(): CustomSticker[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem('meow_custom_stickers') || '[]');
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomSticker(imageUrl: string, title: string = 'استيكر مخصص'): CustomSticker {
-  const stickers = getCustomStickers();
-  const newStk: CustomSticker = {
-    id: `stk_${Date.now()}`,
-    imageUrl,
-    title,
-    createdAt: new Date().toISOString(),
-  };
-  stickers.unshift(newStk);
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('meow_custom_stickers', JSON.stringify(stickers));
-  }
-  return newStk;
-}
-
-function deleteCustomSticker(id: string): void {
-  const stickers = getCustomStickers().filter((s) => s.id !== id);
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('meow_custom_stickers', JSON.stringify(stickers));
-  }
-}
-
 // Audio recording state
 let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: Blob[] = [];
+let activeRecorderMimeType = 'audio/webm';
 let isRecordingAudio = false;
 let recordingSeconds = 0;
-let recordingTimer: any = null;
+let recordingTimer: ReturnType<typeof setInterval> | null = null;
 let currentlyPlayingAudio: HTMLAudioElement | null = null;
 let currentPlayingMsgId: string | null = null;
 
 export function renderChatView(): string {
-  const requests = state.getContactRequests();
-  const pendingRequests = requests.filter((r) => r.status === 'pending');
+  const incomingRequests = state.getIncomingContactRequests();
+  const outgoingRequests = state.getOutgoingContactRequests();
+  const incomingPendingCount = state.getPendingRequestsCount();
+  const totalRequestsCount = incomingRequests.length + outgoingRequests.length;
   const conversations = state.getConversations();
   const activeConversation = state.getActiveConversation();
   const activeSubTab = state.getChatSubTab();
@@ -163,14 +136,14 @@ export function renderChatView(): string {
   return `
     <div id="chat-list-view-root" class="w-full max-w-md mx-auto px-3.5 sm:px-4 pt-3 pb-6 flex-1 min-w-0">
 
-      <!-- Categories & Filters Order (1. الكل, 2. التزاوج, 3. التبني, 4. العيادات) - Enlarged Pill Buttons -->
-      <div class="mb-4 flex flex-col gap-3">
-        <div class="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1" data-no-ptr="true">
+      <!-- Categories & Filters Order (1. الكل, 2. التزاوج, 3. التبني, 4. العيادات) -->
+      <div class="mb-3.5 flex flex-col gap-2.5">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1" data-no-ptr="true">
           <!-- 1. الكل -->
           <button
             data-chat-filter="all"
             type="button"
-            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
+            class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
               chatCategoryFilter === 'all'
                 ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
                 : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
@@ -183,7 +156,7 @@ export function renderChatView(): string {
           <button
             data-chat-filter="mating"
             type="button"
-            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
+            class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
               chatCategoryFilter === 'mating'
                 ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
                 : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
@@ -196,7 +169,7 @@ export function renderChatView(): string {
           <button
             data-chat-filter="adoption"
             type="button"
-            class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
+            class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
               chatCategoryFilter === 'adoption'
                 ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
                 : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
@@ -210,25 +183,25 @@ export function renderChatView(): string {
             <button
               data-chat-filter="clinics"
               type="button"
-              class="chat-category-btn h-12 px-5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap font-baloo bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] opacity-80 hover:opacity-100 flex items-center gap-2 shadow-sm ${
+              class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] opacity-85 hover:opacity-100 flex items-center gap-1.5 shadow-sm ${
                 chatCategoryFilter === 'clinics' ? 'border-brand-orange bg-brand-orange/10' : ''
               }"
             >
-              <i class="fa-solid fa-house-medical text-sm text-brand-orange"></i>
+              <i class="fa-solid fa-house-medical text-xs text-brand-orange"></i>
               <span>العيادات</span>
-              <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-brand-cream dark:bg-[#342A24] text-brand-orange border border-brand-peachBorder/80 dark:border-warm-darkBorder">
+              <span class="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-brand-cream dark:bg-[#342A24] text-brand-orange border border-brand-peachBorder/80 dark:border-warm-darkBorder">
                 قريباً
               </span>
             </button>
           </div>
         </div>
 
-        <!-- Switcher Between Active Chats & Contact Requests - Enlarged Pill Switcher -->
-        <div class="bg-white/90 dark:bg-[#27201B] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-full p-1.5 flex items-center gap-1.5 shadow-sm">
+        <!-- Switcher Between Active Chats & Contact Requests -->
+        <div class="bg-white/90 dark:bg-[#27201B] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-full p-1 flex items-center gap-1 shadow-sm">
           <button
             id="subtab-chats-btn"
             type="button"
-            class="flex-1 h-11 px-4 rounded-full text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo ${
+            class="flex-1 h-10 px-3.5 rounded-full text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo ${
               activeSubTab === 'chats'
                 ? 'bg-brand-orange text-white shadow-soft'
                 : 'text-brand-dark/70 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
@@ -243,7 +216,7 @@ export function renderChatView(): string {
           <button
             id="subtab-requests-btn"
             type="button"
-            class="flex-1 h-11 px-4 rounded-full text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo ${
+            class="flex-1 h-10 px-3.5 rounded-full text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo ${
               activeSubTab === 'requests'
                 ? 'bg-brand-orange text-white shadow-soft'
                 : 'text-brand-dark/70 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
@@ -251,9 +224,9 @@ export function renderChatView(): string {
           >
             <span>طلبات التواصل</span>
             ${
-              pendingRequests.length > 0
-                ? `<span class="px-2 py-0.5 rounded-full text-[11px] bg-red-500 text-white font-black animate-pulse">${pendingRequests.length}</span>`
-                : `<span class="px-2 py-0.5 rounded-full text-[11px] bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white">${requests.length}</span>`
+              incomingPendingCount > 0
+                ? `<span class="px-2 py-0.5 rounded-full text-[11px] bg-red-500 text-white font-black animate-pulse">${incomingPendingCount}</span>`
+                : `<span class="px-2 py-0.5 rounded-full text-[11px] bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white">${totalRequestsCount}</span>`
             }
           </button>
         </div>
@@ -264,25 +237,25 @@ export function renderChatView(): string {
       ${
         chatCategoryFilter === 'clinics'
           ? `
-          <div class="bg-white/80 dark:bg-[#27201B]/80 border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-8 text-center space-y-4 shadow-card" dir="rtl">
-            <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-brand-orange/20 to-brand-peachBorder/40 dark:from-brand-orange/30 dark:to-warm-darkBorder text-brand-orange flex items-center justify-center mx-auto text-3xl border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder shadow-soft relative">
-              <i class="fa-solid fa-house-medical text-3xl text-brand-orange drop-shadow-sm"></i>
-              <span class="absolute -bottom-1 -right-1 w-7 h-7 bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder rounded-full flex items-center justify-center text-brand-orange text-xs shadow-sm">
+          <div class="bg-white/80 dark:bg-[#27201B]/80 border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-6 text-center space-y-3 shadow-card meow-card-enter" dir="rtl">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-orange/20 to-brand-peachBorder/40 dark:from-brand-orange/30 dark:to-warm-darkBorder text-brand-orange flex items-center justify-center mx-auto text-2xl border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder shadow-soft relative">
+              <i class="fa-solid fa-house-medical text-2xl text-brand-orange drop-shadow-sm"></i>
+              <span class="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder rounded-full flex items-center justify-center text-brand-orange text-[11px] shadow-sm">
                 <i class="fa-solid fa-stethoscope"></i>
               </span>
             </div>
-            <h3 class="text-lg sm:text-xl font-black font-baloo text-warm-text dark:text-white">محادثات العيادات البيطرية</h3>
-            <p class="text-sm sm:text-base font-bold text-warm-textSec dark:text-[#D1C7BD] max-w-sm mx-auto leading-relaxed">
+            <h3 class="text-lg font-black font-baloo text-warm-text dark:text-white">محادثات العيادات البيطرية</h3>
+            <p class="text-xs sm:text-sm font-bold text-warm-textSec dark:text-[#D1C7BD] max-w-xs mx-auto leading-relaxed">
               هذا القسم سيكون متاحاً قريباً للتواصل المباشر مع الأطباء البيطريين وحجز الاستشارات والمواعيد.
             </p>
-            <span class="inline-block text-xs font-black px-4 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/60">
+            <span class="inline-block text-xs font-black px-3.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/60">
               قريباً في التحديث القادم
             </span>
           </div>
           `
           : activeSubTab === 'chats'
           ? renderConversationsList(filteredConversations)
-          : renderRequestsList(requests)
+          : renderRequestsList(incomingRequests, outgoingRequests)
       }
 
     </div>
@@ -292,27 +265,27 @@ export function renderChatView(): string {
 function renderConversationsList(conversations: ReturnType<typeof state.getConversations>): string {
   if (conversations.length === 0) {
     return `
-      <div class="relative flex flex-col items-center justify-center text-center px-4 py-12 overflow-hidden bg-white/60 dark:bg-[#27201B]/80 border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl shadow-card" data-purpose="empty-messages-state">
-        <div class="relative mb-6">
-          <div class="w-28 h-28 rounded-full bg-gradient-to-tr from-brand-orange/20 to-brand-peachBorder/40 dark:to-warm-darkBorder flex items-center justify-center relative">
-            <div class="w-20 h-20 rounded-full bg-white dark:bg-[#342A24] flex items-center justify-center shadow-soft border-2 border-brand-peachBorder/60 dark:border-warm-darkBorder">
-              <i class="fa-solid fa-comments text-3xl text-brand-orange"></i>
+      <div class="relative flex flex-col items-center justify-center text-center px-4 py-7 overflow-hidden bg-white/75 dark:bg-[#27201B]/80 border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl shadow-card meow-card-enter" data-purpose="empty-messages-state">
+        <div class="relative mb-4">
+          <div class="w-20 h-20 rounded-full bg-gradient-to-tr from-brand-orange/20 to-brand-peachBorder/40 dark:to-warm-darkBorder flex items-center justify-center relative">
+            <div class="w-14 h-14 rounded-full bg-white dark:bg-[#342A24] flex items-center justify-center shadow-soft border-2 border-brand-peachBorder/60 dark:border-warm-darkBorder">
+              <i class="fa-solid fa-comments text-2xl text-brand-orange"></i>
             </div>
-            <span class="absolute -bottom-1 -right-1 w-8 h-8 bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-full flex items-center justify-center text-brand-orange text-xs shadow-sm">
-              🐾
+            <span class="absolute -bottom-1 -right-1 w-7 h-7 bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-full flex items-center justify-center text-brand-orange text-xs shadow-sm">
+              <i class="fa-solid fa-paw"></i>
             </span>
           </div>
         </div>
 
-        <h2 class="text-2xl font-black text-brand-dark dark:text-white mb-2 tracking-tight font-baloo">لا توجد رسائل حتى الآن</h2>
-        <p class="text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs leading-relaxed mb-6">
+        <h2 class="text-lg sm:text-xl font-black text-brand-dark dark:text-white mb-1.5 tracking-tight font-baloo">لا توجد رسائل حتى الآن</h2>
+        <p class="text-xs sm:text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs leading-relaxed mb-5">
           ابدأ المحادثة مع أصحاب الحيوانات الأليفة للتبني أو التزاوج وشارك حبك للمياو!
         </p>
 
         <button
           type="button"
           id="explore-pets-btn"
-          class="px-8 py-3 rounded-2xl bg-brand-orange text-white font-black text-sm shadow-soft hover:bg-brand-orangeHover transition-all flex items-center gap-2 cursor-pointer font-baloo active:scale-95"
+          class="h-11 px-6 rounded-full bg-brand-orange text-white font-black text-sm shadow-soft hover:bg-brand-orangeHover transition-all flex items-center gap-2 cursor-pointer font-baloo active:scale-95"
         >
           <i class="fa-solid fa-magnifying-glass text-xs"></i>
           <span>استكشف الحيوانات المتاحة</span>
@@ -352,9 +325,9 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
           return `
             <div
               data-conversation-id="${escapeAttr(conv.id)}"
-              class="conversation-item-card ${
+              class="conversation-item-card meow-card-enter ${
                 conv.isPinned
-                  ? 'bg-[#FFFDF7] border-2 border-brand-orange/70 shadow-sm'
+                  ? 'bg-[#FFFDF7] dark:bg-[#2F251E] border-2 border-brand-orange/70 shadow-sm'
                   : 'bg-white/90 dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder shadow-sm'
               } rounded-3xl p-3.5 flex items-center justify-between gap-3.5 cursor-pointer hover:border-brand-orange/80 transition-all duration-200 group active:scale-[0.99]"
             >
@@ -363,11 +336,14 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                   <img
                     src="${escapeAttr(sanitizeImageSrc(conv.otherUserAvatar, SAFE_FALLBACK_AVATAR_SVG))}"
                     alt="${escapeAttr(conv.otherUserName)}"
+                    referrerpolicy="no-referrer"
+                    onerror="this.onerror=null;this.src='${escapeAttr(SAFE_FALLBACK_AVATAR_SVG)}';"
                     class="w-12 h-12 rounded-2xl object-cover border-2 border-brand-peachBorder dark:border-warm-darkBorder group-hover:border-brand-orange transition"
                   />
                   <img
                     src="${escapeAttr(sanitizeImageSrc((isGroupConv && groupThumbs[0]) || conv.petPhoto, SAFE_FALLBACK_PET_SVG))}"
                     alt="${escapeAttr(conv.petName)}"
+                    onerror="this.onerror=null;this.src='${escapeAttr(SAFE_FALLBACK_PET_SVG)}';"
                     class="w-5 h-5 rounded-full object-cover border-2 border-white dark:border-[#27201B] absolute -bottom-1 -right-1 shadow-sm"
                   />
                 </div>
@@ -471,22 +447,84 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
   `;
 }
 
-function renderRequestsList(requests: ReturnType<typeof state.getContactRequests>): string {
-  if (requests.length === 0) {
+function renderRequestsList(
+  incomingRequests: ReturnType<typeof state.getIncomingContactRequests>,
+  outgoingRequests: ReturnType<typeof state.getOutgoingContactRequests>
+): string {
+  const incomingPendingCount = incomingRequests.filter(
+    (r) => r.status === 'pending' && !r.isWithdrawn
+  ).length;
+  const activeList =
+    requestsDirectionFilter === 'incoming' ? incomingRequests : outgoingRequests;
+
+  const directionSwitcherHtml = `
+    <div class="bg-white/90 dark:bg-[#27201B] border border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-2xl p-1 flex items-center gap-1 shadow-sm">
+      <button
+        type="button"
+        data-req-direction="incoming"
+        class="req-direction-btn flex-1 h-9 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer font-baloo ${
+          requestsDirectionFilter === 'incoming'
+            ? 'bg-brand-orange text-white shadow-sm'
+            : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+        }"
+      >
+        <span>الواردة</span>
+        <span class="px-1.5 py-0.5 rounded-full text-[10px] ${
+          requestsDirectionFilter === 'incoming'
+            ? 'bg-white text-brand-orange font-black'
+            : incomingPendingCount > 0
+              ? 'bg-red-500 text-white font-black'
+              : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
+        }">${incomingRequests.length}</span>
+      </button>
+
+      <button
+        type="button"
+        data-req-direction="outgoing"
+        class="req-direction-btn flex-1 h-9 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer font-baloo ${
+          requestsDirectionFilter === 'outgoing'
+            ? 'bg-brand-orange text-white shadow-sm'
+            : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+        }"
+      >
+        <span>الصادرة</span>
+        <span class="px-1.5 py-0.5 rounded-full text-[10px] ${
+          requestsDirectionFilter === 'outgoing'
+            ? 'bg-white text-brand-orange font-black'
+            : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
+        }">${outgoingRequests.length}</span>
+      </button>
+    </div>
+  `;
+
+  if (activeList.length === 0) {
     return `
-      <div class="bg-white/75 border-2 border-brand-peachBorder rounded-[30px] p-8 text-center space-y-3 shadow-card">
-        <div class="w-16 h-16 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center mx-auto text-2xl border-2 border-brand-peachBorder/60">
-          <i class="fa-solid fa-inbox"></i>
+      <div class="space-y-3">
+        ${directionSwitcherHtml}
+        <div class="bg-white/75 dark:bg-[#27201B]/80 border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-6 text-center space-y-2.5 shadow-card meow-card-enter">
+          <div class="w-14 h-14 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center mx-auto text-xl border-2 border-brand-peachBorder/60 dark:border-warm-darkBorder">
+            <i class="fa-solid ${requestsDirectionFilter === 'incoming' ? 'fa-inbox' : 'fa-paper-plane'}"></i>
+          </div>
+          <h3 class="text-base sm:text-lg font-black text-brand-dark dark:text-white font-baloo m-0">
+            ${
+              requestsDirectionFilter === 'incoming'
+                ? 'لا توجد طلبات واردة حالياً'
+                : 'لم ترسل أي طلبات تواصل بعد'
+            }
+          </h3>
+          <p class="text-xs sm:text-sm font-bold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
+            ${
+              requestsDirectionFilter === 'incoming'
+                ? 'عندما يبدي أحد أصحاب الحيوانات اهتمامه بحيوانك، ستظهر هنا طلباته للموافقة أو الرفض.'
+                : 'الطلبات التي ترسلها للتزاوج أو التبني ستظهر هنا لمتابعة حالتها أو سحبها قبل الموافقة.'
+            }
+          </p>
         </div>
-        <h3 class="text-lg font-black text-brand-dark font-baloo">لا توجد طلبات تواصل حالياً</h3>
-        <p class="text-sm font-bold text-brand-subtleGray max-w-xs mx-auto leading-relaxed">
-          عندما يبدي أحد أصحاب الحيوانات اهتمامه بحيوانك أو ترسل طلب تواصل، ستظهر هنا الطلبات للموافقة.
-        </p>
       </div>
     `;
   }
 
-  const privacy = state.getRequestsPrivacySummary(requests);
+  const privacy = state.getRequestsPrivacySummary(activeList);
   const privacyNoticeText = !privacy.hasPublicPhoneRequests
     ? 'الخصوصية مفعّلة: أرقام الهواتف مخفية افتراضياً وفق إعدادات الحسابات، ويمكنك التواصل بأمان داخل المحادثة.'
     : !privacy.hasHiddenPhoneRequests
@@ -495,19 +533,28 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
 
   return `
     <div class="space-y-3">
-      <div class="p-3.5 rounded-[24px] bg-brand-orange/10 border-2 border-brand-peachBorder/80 text-xs font-bold text-brand-dark flex items-center gap-2.5 shadow-sm">
-        <i class="fa-solid fa-shield-halved text-brand-orange text-base shrink-0"></i>
+      ${directionSwitcherHtml}
+
+      <div class="p-3 rounded-2xl bg-brand-orange/10 border border-brand-peachBorder/80 dark:border-warm-darkBorder text-xs font-bold text-brand-dark dark:text-[#EFE6DD] flex items-center gap-2.5 shadow-sm">
+        <i class="fa-solid fa-shield-halved text-brand-orange text-sm shrink-0"></i>
         <span>${privacyNoticeText}</span>
       </div>
 
-      ${requests
+      ${activeList
         .map((req) => {
-          const isPending = req.status === 'pending';
+          const isWithdrawn = Boolean(req.isWithdrawn);
+          const isPending = req.status === 'pending' && !isWithdrawn;
           const isAccepted = req.status === 'accepted';
-          const isRejected = req.status === 'rejected';
+          const isRejected = req.status === 'rejected' && !isWithdrawn;
           const previewPet = state.getPetForRequestPreview(req);
           const isGroupPet = previewPet?.adoptionType === 'group';
           const isIncoming = req.senderId !== state.getUser().id;
+          const displayUserName = isIncoming
+            ? req.senderName
+            : previewPet?.ownerName || 'صاحب الأليف';
+          const displayUserAvatar = isIncoming
+            ? req.senderAvatar
+            : previewPet?.ownerAvatar || '';
           const menuTargetUserId = isIncoming ? req.senderId : (previewPet?.ownerId || '');
           const menuTargetUserName = isIncoming ? req.senderName : (previewPet?.ownerName || 'صاحب الأليف');
           const menuTargetUserAvatar = isIncoming ? req.senderAvatar : (previewPet?.ownerAvatar || '');
@@ -519,34 +566,44 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
           const reqLocation = previewPet?.city || previewPet?.governorate || '';
 
           return `
-            <div class="bg-white/95 border-2 border-brand-peachBorder rounded-[30px] p-4 shadow-sm space-y-2.5 text-right">
+            <div class="meow-card-enter bg-white/95 dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-4 shadow-sm space-y-2.5 text-right">
               <div class="flex items-center justify-between gap-2.5">
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <img src="${escapeAttr(sanitizeImageSrc(req.senderAvatar, SAFE_FALLBACK_AVATAR_SVG))}" alt="${escapeAttr(req.senderName)}" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shadow-sm shrink-0" />
+                  <img
+                    src="${escapeAttr(sanitizeImageSrc(displayUserAvatar, SAFE_FALLBACK_AVATAR_SVG))}"
+                    alt="${escapeAttr(displayUserName)}"
+                    referrerpolicy="no-referrer"
+                    onerror="this.onerror=null;this.src='${escapeAttr(SAFE_FALLBACK_AVATAR_SVG)}';"
+                    class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder dark:border-warm-darkBorder shadow-sm shrink-0"
+                  />
                   <div class="min-w-0">
                     <div class="flex items-center gap-1.5 flex-wrap">
-                      <h4 class="text-sm sm:text-base font-black text-brand-dark truncate font-baloo m-0">${escapeHtml(req.senderName)}</h4>
+                      <h4 class="text-sm sm:text-base font-black text-brand-dark dark:text-white truncate font-baloo m-0">${
+                        isIncoming ? escapeHtml(displayUserName) : `إلى: ${escapeHtml(displayUserName)}`
+                      }</h4>
                       <span class="text-[10px] font-black px-2.5 py-0.5 rounded-full ${
                         req.type === 'mating'
-                          ? 'bg-brand-orange/10 text-brand-orange border border-brand-peachBorder'
-                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          ? 'bg-brand-orange/10 text-brand-orange border border-brand-peachBorder dark:border-warm-darkBorder'
+                          : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60'
                       }">
                         ${req.type === 'mating' ? 'تزاوج' : 'تبني'}
                       </span>
                     </div>
-                    <div class="text-[11px] font-bold text-brand-subtleGray truncate mt-0.5">
-                      بخصوص: <strong class="text-brand-dark">${escapeHtml(req.receiverPetName)}</strong> • ${escapeHtml(req.timestamp)}
+                    <div class="text-[11px] font-bold text-brand-subtleGray dark:text-[#A89F91] truncate mt-0.5">
+                      بخصوص: <strong class="text-brand-dark dark:text-white">${escapeHtml(req.receiverPetName)}</strong> • ${escapeHtml(req.timestamp)}
                     </div>
                   </div>
                 </div>
 
                 <div class="flex items-center gap-1.5 shrink-0">
                   ${
-                    isAccepted
-                      ? `<span class="text-[11px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">تمت الموافقة</span>`
+                    isWithdrawn
+                      ? `<span class="text-[11px] font-black px-2.5 py-1 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">تم السحب</span>`
+                      : isAccepted
+                      ? `<span class="text-[11px] font-black px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">تمت الموافقة</span>`
                       : isRejected
-                      ? `<span class="text-[11px] font-black px-2.5 py-1 rounded-full bg-red-100 text-red-700">مرفوض</span>`
-                      : `<span class="text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">قيد الانتظار</span>`
+                      ? `<span class="text-[11px] font-black px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300">مرفوض</span>`
+                      : `<span class="text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">قيد الانتظار</span>`
                   }
                   ${
                     menuTargetUserId && menuTargetUserId !== state.getUser().id
@@ -558,7 +615,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                           petName: previewPet?.name || req.senderPetName || req.receiverPetName,
                           reportTargetType: 'request',
                           buttonClass:
-                            'w-10 h-10 rounded-full bg-brand-cream/80 hover:bg-brand-peachBorder/40 text-brand-subtleGray hover:text-brand-dark flex items-center justify-center transition cursor-pointer active:scale-90',
+                            'w-8 h-8 rounded-full bg-brand-cream/80 dark:bg-[#342A24] hover:bg-brand-peachBorder/40 text-brand-subtleGray hover:text-brand-dark dark:hover:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
                           dropdownAlign: 'left',
                         })
                       : ''
@@ -571,24 +628,25 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                   ? `
                     <div
                       data-preview-request-id="${escapeAttr(req.id)}"
-                      class="preview-request-pet-card p-2.5 rounded-[22px] bg-[#FFF9E9]/90 border border-brand-peachBorder/80 flex items-center justify-between gap-2.5 hover:border-brand-orange/70 transition cursor-pointer"
+                      class="preview-request-pet-card p-2.5 rounded-2xl bg-[#FFF9E9]/90 dark:bg-[#342A24]/80 border border-brand-peachBorder/80 dark:border-warm-darkBorder flex items-center justify-between gap-2.5 hover:border-brand-orange/70 transition cursor-pointer"
                     >
                       <div class="flex items-center gap-2.5 min-w-0">
                         <img
                           src="${escapeAttr(sanitizeImageSrc(reqThumb, SAFE_FALLBACK_PET_SVG))}"
                           alt="${escapeAttr(previewPet.name)}"
-                          class="w-10 h-10 rounded-full object-cover border border-brand-peachBorder shrink-0"
+                          onerror="this.onerror=null;this.src='${escapeAttr(SAFE_FALLBACK_PET_SVG)}';"
+                          class="w-10 h-10 rounded-full object-cover border border-brand-peachBorder dark:border-warm-darkBorder shrink-0"
                         />
                         <div class="min-w-0">
                           <div class="flex items-center gap-1.5">
-                            <span class="text-xs font-black text-brand-dark font-baloo truncate">${escapeHtml(previewPet.name)}</span>
+                            <span class="text-xs font-black text-brand-dark dark:text-white font-baloo truncate">${escapeHtml(previewPet.name)}</span>
                             ${
                               isGroupPet
                                 ? `<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-brand-orange text-white shrink-0">جماعي (${reqGroupCount})</span>`
                                 : ''
                             }
                           </div>
-                          <p class="text-[11px] font-bold text-brand-subtleGray truncate m-0">
+                          <p class="text-[11px] font-bold text-brand-subtleGray dark:text-[#A89F91] truncate m-0">
                             ${isGroupPet ? (previewPet.mustAdoptTogether ? 'معاً فقط' : 'معاً أو منفرداً') : escapeHtml(previewPet.breed)}${reqLocation ? ` • ${escapeHtml(reqLocation)}` : ''}
                           </p>
                         </div>
@@ -596,7 +654,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                       <button
                         type="button"
                         data-preview-request-id="${escapeAttr(req.id)}"
-                        class="preview-request-pet-btn h-9 px-3.5 rounded-full bg-white border border-brand-peachBorder hover:border-brand-orange text-brand-orange text-xs font-black transition cursor-pointer shrink-0 font-baloo active:scale-95"
+                        class="preview-request-pet-btn h-8 px-3 rounded-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder hover:border-brand-orange text-brand-orange text-xs font-black transition cursor-pointer shrink-0 font-baloo active:scale-95"
                       >
                         معاينة
                       </button>
@@ -605,27 +663,39 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                   : ''
               }
 
-              <p class="text-xs font-semibold text-brand-dark/90 bg-[#FFFDF8] border border-brand-peachBorder/50 rounded-2xl px-3.5 py-2.5 m-0 leading-relaxed line-clamp-2">
+              <p class="text-xs font-semibold text-brand-dark/90 dark:text-[#EFE6DD] bg-[#FFFDF8] dark:bg-[#1E1713] border border-brand-peachBorder/50 dark:border-warm-darkBorder rounded-2xl px-3.5 py-2.5 m-0 leading-relaxed line-clamp-2">
                 "${escapeHtml(req.message)}"
               </p>
 
               ${
-                isPending
+                isIncoming && isPending
                   ? `
                   <div class="flex items-center justify-end gap-2 pt-1">
                     <button
                       data-reject-request-id="${escapeAttr(req.id)}"
-                      class="reject-request-btn h-10 px-5 rounded-full bg-white border-2 border-brand-peachBorder text-brand-dark text-xs font-bold hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer font-baloo"
+                      class="reject-request-btn h-9 px-4 rounded-full bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-white text-xs font-bold hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer font-baloo"
                       type="button"
                     >
                       رفض
                     </button>
                     <button
                       data-approve-request-id="${escapeAttr(req.id)}"
-                      class="approve-request-btn h-10 px-5 rounded-full bg-brand-orange text-white text-xs font-black shadow-soft hover:bg-brand-orangeHover transition active:scale-95 cursor-pointer font-baloo"
+                      class="approve-request-btn h-9 px-4 rounded-full bg-brand-orange text-white text-xs font-black shadow-soft hover:bg-brand-orangeHover transition active:scale-95 cursor-pointer font-baloo"
                       type="button"
                     >
                       موافقة ومحادثة
+                    </button>
+                  </div>
+                  `
+                  : !isIncoming && isPending
+                  ? `
+                  <div class="flex justify-end pt-1">
+                    <button
+                      data-withdraw-request-id="${escapeAttr(req.id)}"
+                      class="withdraw-request-btn h-9 px-4 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-300 text-xs font-black hover:bg-red-100 transition active:scale-95 cursor-pointer font-baloo"
+                      type="button"
+                    >
+                      سحب الطلب
                     </button>
                   </div>
                   `
@@ -635,7 +705,7 @@ function renderRequestsList(requests: ReturnType<typeof state.getContactRequests
                     <button
                       data-request-id="${escapeAttr(req.id)}"
                       data-other-user-id="${escapeAttr(menuTargetUserId)}"
-                      class="view-conversation-direct-btn h-10 px-4 rounded-full bg-white border-2 border-brand-orange text-brand-orange text-xs font-black hover:bg-brand-orange/10 transition active:scale-95 cursor-pointer font-baloo"
+                      class="view-conversation-direct-btn h-9 px-4 rounded-full bg-white dark:bg-[#342A24] border-2 border-brand-orange text-brand-orange text-xs font-black hover:bg-brand-orange/10 transition active:scale-95 cursor-pointer font-baloo"
                       type="button"
                     >
                       فتح المحادثة
@@ -660,6 +730,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
     lastRenderedChatRoomId = conv.id;
     isGroupDetailsExpanded = false;
     previewChatImageUrl = null;
+    pendingChatAttachment = null;
   }
 
   const resolvedPet = state.getPetForConversation(conv);
@@ -710,6 +781,8 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             <img
               src="${escapeAttr(sanitizeImageSrc(conv.otherUserAvatar, SAFE_FALLBACK_AVATAR_SVG))}"
               alt="${escapeAttr(conv.otherUserName)}"
+              referrerpolicy="no-referrer"
+              onerror="this.onerror=null;this.src='${escapeAttr(SAFE_FALLBACK_AVATAR_SVG)}';"
               class="w-12 h-12 rounded-full object-cover border-2 border-brand-orange shadow-sm"
             />
             <span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#27201B]"></span>
@@ -954,7 +1027,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             if (msg.senderId === 'system') {
               return `
                 <div class="flex justify-center my-2.5 select-none">
-                  <span class="px-4 py-2 rounded-full bg-white/90 dark:bg-[#27201B]/90 border border-brand-peachBorder/70 dark:border-warm-darkBorder text-xs sm:text-[13px] font-bold text-brand-orange text-center max-w-[88%] shadow-sm leading-relaxed font-baloo">
+                  <span class="px-3.5 py-1.5 rounded-lg bg-white/95 dark:bg-[#27201B]/95 border border-brand-peachBorder/70 dark:border-warm-darkBorder text-xs sm:text-[13px] font-bold text-brand-orange text-center max-w-[88%] shadow-sm leading-relaxed font-baloo">
                     ${escapeHtml(msg.text)}
                   </span>
                 </div>
@@ -964,24 +1037,24 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             const isUser = msg.isFromUser;
             const safeImgUrl = msg.fileUrl ? sanitizeImageSrc(msg.fileUrl, SAFE_FALLBACK_PET_SVG) : '';
             const safeDownloadUrl = msg.fileUrl ? sanitizeUrl(msg.fileUrl, '') : '';
-            const safeAudioUrl = msg.audioBlobUrl ? sanitizeAudioSrc(msg.audioBlobUrl) : '';
+            const safeAudioUrl = sanitizeAudioSrc(msg.audioBlobUrl || msg.fileUrl || '');
             const safeStickerUrl = msg.stickerUrl ? sanitizeImageSrc(msg.stickerUrl, SAFE_FALLBACK_PET_SVG) : '';
 
             return `
               <div class="flex flex-col ${isUser ? 'items-end' : 'items-start'} transition-all animate-fade-in group" data-msg-id="${escapeAttr(msg.id)}">
                 
-                <!-- Bubble Container (Bubble Style) -->
-                <div class="relative max-w-[86%] sm:max-w-[80%] px-4 py-3 shadow-card text-right ${
+                <!-- Bubble Container (WhatsApp Style with Speech Tail) -->
+                <div class="relative max-w-[86%] sm:max-w-[80%] px-4 py-2.5 shadow-sm text-right ${
                   isUser
-                    ? 'bg-[#FFEAD7] dark:bg-[#342419] text-brand-dark dark:text-white rounded-[26px] rounded-br-[8px] border border-brand-peachBorder/70 dark:border-warm-darkBorder'
-                    : 'bg-white dark:bg-[#27201B] text-brand-dark dark:text-white rounded-[26px] rounded-bl-[8px] border border-brand-peachBorder/80 dark:border-warm-darkBorder'
+                    ? 'meow-bubble-out bg-brand-orange text-white rounded-2xl'
+                    : 'meow-bubble-in bg-white dark:bg-[#261E19] text-brand-dark dark:text-white rounded-2xl border border-brand-peachBorder/70 dark:border-warm-darkBorder'
                 }">
 
                   <!-- 1. Text Message Content -->
                   ${
                     msg.type === 'text' || !msg.type
                       ? `
-                      <p class="text-[15px] sm:text-base font-bold leading-[1.65] m-0 break-words font-baloo select-text">
+                      <p class="text-[15px] sm:text-base font-bold leading-[1.6] m-0 break-words font-baloo select-text">
                         ${escapeHtml(msg.text || '')}
                       </p>
                       `
@@ -992,7 +1065,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                   ${
                     msg.type === 'image' && msg.fileUrl
                       ? `
-                      <div class="rounded-2xl overflow-hidden mb-2 border border-brand-peachBorder/40">
+                      <div class="rounded-xl overflow-hidden mb-1.5 border ${isUser ? 'border-white/25' : 'border-brand-peachBorder/40'}">
                         <img 
                           src="${escapeAttr(safeImgUrl)}" 
                           alt="صورة مرفقة" 
@@ -1000,7 +1073,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                           class="chat-msg-image-preview w-full max-h-60 object-cover cursor-pointer hover:opacity-95 transition" 
                         />
                       </div>
-                      ${msg.text ? `<p class="text-sm font-bold mt-1.5 leading-relaxed">${escapeHtml(msg.text)}</p>` : ''}
+                      ${msg.text ? `<p class="text-sm font-bold mt-1.5 mb-0 leading-relaxed">${escapeHtml(msg.text)}</p>` : ''}
                       `
                       : ''
                   }
@@ -1009,24 +1082,25 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                   ${
                     msg.type === 'file'
                       ? `
-                      <div class="flex items-center gap-2.5 p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-brand-peachBorder/40 mb-1">
-                        <div class="w-9 h-9 rounded-lg bg-brand-orange/20 text-brand-orange flex items-center justify-center shrink-0">
+                      <div class="flex items-center gap-2.5 p-2 rounded-xl ${isUser ? 'bg-black/15 border border-white/20' : 'bg-black/5 dark:bg-white/5 border border-brand-peachBorder/40'} mb-1">
+                        <div class="w-9 h-9 rounded-lg ${isUser ? 'bg-white/20 text-white' : 'bg-brand-orange/20 text-brand-orange'} flex items-center justify-center shrink-0">
                           <i class="fa-solid fa-file-lines text-base"></i>
                         </div>
                         <div class="min-w-0 flex-1 text-right">
                           <p class="text-xs font-black truncate m-0 font-baloo">${escapeHtml(msg.fileName || 'ملف مرفق')}</p>
-                          <span class="text-[10px] text-brand-subtleGray font-bold">${escapeHtml(msg.fileSize || 'ملف')}</span>
+                          <span class="text-[10px] ${isUser ? 'text-white/80' : 'text-brand-subtleGray'} font-bold">${escapeHtml(msg.fileSize || 'ملف')}</span>
                         </div>
                         ${
                           safeDownloadUrl
                             ? `
-                            <a href="${escapeAttr(safeDownloadUrl)}" download="${escapeAttr(msg.fileName || 'meow_file')}" rel="noopener noreferrer" class="w-9 h-9 rounded-full bg-brand-orange text-white flex items-center justify-center text-xs shrink-0 active:scale-90 transition" title="تحميل">
+                            <a href="${escapeAttr(safeDownloadUrl)}" download="${escapeAttr(msg.fileName || 'meow_file')}" rel="noopener noreferrer" class="w-9 h-9 rounded-full ${isUser ? 'bg-white text-brand-orange' : 'bg-brand-orange text-white'} flex items-center justify-center text-xs shrink-0 active:scale-90 transition" title="تحميل">
                               <i class="fa-solid fa-download"></i>
                             </a>
                             `
                             : ''
                         }
                       </div>
+                      ${msg.text ? `<p class="text-sm font-bold mt-1.5 mb-0 leading-relaxed">${escapeHtml(msg.text)}</p>` : ''}
                       `
                       : ''
                   }
@@ -1038,7 +1112,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                       <div class="flex items-center gap-3 py-1 min-w-[200px]" data-audio-msg="${escapeAttr(msg.id)}">
                         <button
                           type="button"
-                          class="play-audio-msg-btn w-10 h-10 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0 shadow-soft active:scale-90 transition cursor-pointer"
+                          class="play-audio-msg-btn w-10 h-10 rounded-full ${isUser ? 'bg-white text-brand-orange' : 'bg-brand-orange text-white'} flex items-center justify-center shrink-0 shadow-soft active:scale-90 transition cursor-pointer"
                           data-audio-url="${escapeAttr(safeAudioUrl)}"
                           data-msg-id="${escapeAttr(msg.id)}"
                           aria-label="تشغيل الرسالة الصوتية"
@@ -1049,19 +1123,19 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                         <!-- Simulated / Real Audio Waveform bars -->
                         <div class="flex-1 flex flex-col gap-1 min-w-0">
                           <div class="flex items-center gap-0.5 h-6">
-                            <span class="w-1 h-3 bg-brand-orange rounded-full"></span>
-                            <span class="w-1 h-5 bg-brand-orange rounded-full"></span>
-                            <span class="w-1 h-2 bg-brand-orange/70 rounded-full"></span>
-                            <span class="w-1 h-6 bg-brand-orange rounded-full"></span>
-                            <span class="w-1 h-4 bg-brand-orange/60 rounded-full"></span>
-                            <span class="w-1 h-3 bg-brand-orange rounded-full"></span>
-                            <span class="w-1 h-5 bg-brand-orange rounded-full"></span>
-                            <span class="w-1 h-2 bg-brand-orange/80 rounded-full"></span>
-                            <span class="w-1 h-4 bg-brand-orange rounded-full"></span>
-                            <span class="w-1 h-5 bg-brand-orange/70 rounded-full"></span>
-                            <span class="w-1 h-3 bg-brand-orange rounded-full"></span>
+                            <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                            <span class="w-1 h-5 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                            <span class="w-1 h-2 ${isUser ? 'bg-white/75' : 'bg-brand-orange/70'} rounded-full"></span>
+                            <span class="w-1 h-6 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                            <span class="w-1 h-4 ${isUser ? 'bg-white/70' : 'bg-brand-orange/60'} rounded-full"></span>
+                            <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                            <span class="w-1 h-5 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                            <span class="w-1 h-2 ${isUser ? 'bg-white/80' : 'bg-brand-orange/80'} rounded-full"></span>
+                            <span class="w-1 h-4 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                            <span class="w-1 h-5 ${isUser ? 'bg-white/75' : 'bg-brand-orange/70'} rounded-full"></span>
+                            <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
                           </div>
-                          <span class="text-[10px] font-mono font-bold text-brand-subtleGray dark:text-[#A89F91]">
+                          <span class="text-[10px] font-mono font-bold ${isUser ? 'text-white/85' : 'text-brand-subtleGray dark:text-[#A89F91]'}">
                             ${msg.audioDuration ? `0:${msg.audioDuration.toString().padStart(2, '0')}` : '0:07'}
                           </span>
                         </div>
@@ -1074,14 +1148,14 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                   ${
                     msg.type === 'sticker'
                       ? `
-                      <div class="flex flex-col items-center justify-center py-2 px-2 select-none group">
+                      <div class="flex flex-col items-center justify-center py-1.5 px-1.5 select-none group">
                         ${
                           msg.stickerUrl
-                            ? `<img src="${escapeAttr(safeStickerUrl)}" alt="استيكر" class="max-w-[150px] max-h-[150px] object-contain drop-shadow-md rounded-2xl hover:scale-105 transition-transform" />`
+                            ? `<img src="${escapeAttr(safeStickerUrl)}" alt="استيكر" class="max-w-[145px] max-h-[145px] object-contain drop-shadow-md rounded-2xl hover:scale-105 transition-transform" />`
                             : `<span class="text-6xl sm:text-7xl filter drop-shadow-md transform hover:scale-110 active:scale-95 transition-transform duration-200 cursor-pointer animate-fade-in inline-block">${escapeHtml(msg.stickerEmoji || '🐾')}</span>`
                         }
-                        <span class="mt-1.5 px-3 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange text-[10px] font-black font-baloo border border-brand-orange/20 shadow-sm">
-                          ${escapeHtml(msg.stickerTitle || 'استيكر مخصص')}
+                        <span class="mt-1.5 px-3 py-0.5 rounded-full ${isUser ? 'bg-white/20 text-white border border-white/25' : 'bg-brand-orange/15 text-brand-orange border border-brand-orange/20'} text-[10px] font-black font-baloo shadow-sm">
+                          ${escapeHtml(msg.stickerTitle || 'ملصق مخصص')}
                         </span>
                       </div>
                       `
@@ -1089,12 +1163,12 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                   }
 
                   <!-- Timestamp & Read Receipts (WhatsApp Style in bottom corner) -->
-                  <div class="flex items-center justify-end gap-1.5 mt-1.5 -mb-0.5 text-[11px] text-brand-subtleGray dark:text-[#A89F91] font-bold select-none">
+                  <div class="flex items-center justify-end gap-1.5 mt-1 -mb-0.5 text-[11px] ${isUser ? 'text-white/85' : 'text-brand-subtleGray dark:text-[#A89F91]'} font-bold select-none">
                     <span>${escapeHtml(msg.timestamp)}</span>
                     ${
                       isUser
                         ? `
-                        <span class="text-blue-500 text-xs" title="تمت القراءة">
+                        <span class="${msg.status === 'read' ? 'text-sky-200' : 'text-white/90'} text-xs" title="تم الإرسال">
                           <i class="fa-solid fa-check-double"></i>
                         </span>
                         `
@@ -1118,12 +1192,13 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
         accept="image/*,application/pdf,.doc,.docx"
       />
 
-      <!-- Hidden File Input for Custom Sticker Creation -->
+      <!-- Hidden File Input for Custom Sticker Creation (supports multi-import) -->
       <input
         type="file"
         id="sticker-upload-input"
         class="hidden"
         accept="image/*"
+        multiple
       />
 
       <!-- Detached Floating Bubble Composer & Floating Audio/Sticker Drawers -->
@@ -1163,13 +1238,21 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
         </div>
 
         <!-- Floating Bubble Sticker Drawer -->
+        ${(() => {
+          const allStickers = state.getCustomStickers();
+          const filteredStickers = stickerSearchQuery.trim()
+            ? allStickers.filter((stk) =>
+                stk.title.toLowerCase().includes(stickerSearchQuery.trim().toLowerCase())
+              )
+            : allStickers;
+          return `
         <div 
           id="chat-stickers-drawer" 
-          class="${isStickersOpen ? 'flex' : 'hidden'} pointer-events-auto flex-col bg-[#FAF4ED]/98 backdrop-blur-md border-2 border-brand-peachBorder rounded-[30px] h-72 sm:h-80 transition-all overflow-hidden shadow-nav"
+          class="${isStickersOpen ? 'flex' : 'hidden'} pointer-events-auto flex-col bg-[#FAF4ED]/98 dark:bg-[#221B17]/98 backdrop-blur-md border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-[30px] h-72 sm:h-80 transition-all overflow-hidden shadow-nav"
         >
           <!-- 1. Top Drag Handle & Switcher Header -->
-          <div id="chat-stickers-drag-handle" class="pt-2.5 pb-2 px-4 flex flex-col items-center border-b border-brand-peachBorder/60 shrink-0 bg-[#FFF9E9]/95 touch-none cursor-grab">
-            <div class="w-11 h-1.5 bg-brand-peachBorder rounded-full mb-2"></div>
+          <div id="chat-stickers-drag-handle" class="pt-2.5 pb-2 px-4 flex flex-col items-center border-b border-brand-peachBorder/60 dark:border-warm-darkBorder shrink-0 bg-[#FFF9E9]/95 dark:bg-[#27201B] touch-none cursor-grab">
+            <div class="w-11 h-1.5 bg-brand-peachBorder dark:bg-warm-darkBorder rounded-full mb-2"></div>
             
             <!-- Controls Bar: Search Icon, Center Switcher Pills, Close Button -->
             <div class="w-full flex items-center justify-between gap-2">
@@ -1178,21 +1261,32 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               <button
                 type="button"
                 id="sticker-search-btn"
-                class="w-10 h-10 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:text-brand-orange flex items-center justify-center text-sm transition active:scale-90 cursor-pointer shadow-sm"
+                class="w-9 h-9 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder ${isStickerSearchOpen ? 'text-brand-orange border-brand-orange' : 'text-warm-textSec dark:text-[#D1C7BD]'} hover:text-brand-orange flex items-center justify-center text-sm transition active:scale-90 cursor-pointer shadow-sm shrink-0"
                 title="بحث في الملصقات"
               >
                 <i class="fa-solid fa-magnifying-glass"></i>
               </button>
 
-              <!-- Center Switcher Pill Tabs (Emoji / GIF / Stickers style) -->
-              <div class="flex items-center bg-brand-peachBorder/30 dark:bg-black/30 p-1 rounded-full border border-brand-peachBorder/60 dark:border-warm-darkBorder shadow-sm">
+              <!-- Center Switcher Pill + Import Stickers Action -->
+              <div class="flex items-center gap-1.5 min-w-0">
+                <div class="flex items-center bg-brand-peachBorder/30 dark:bg-black/30 p-1 rounded-full border border-brand-peachBorder/60 dark:border-warm-darkBorder shadow-sm">
+                  <button
+                    type="button"
+                    class="px-3 py-1 rounded-full text-xs font-black bg-white dark:bg-[#2F241C] text-brand-orange shadow-sm flex items-center gap-1.5 font-baloo cursor-pointer"
+                  >
+                    <i class="fa-solid fa-note-sticky text-xs"></i>
+                    <span>ملصقاتي</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange font-mono">${allStickers.length}</span>
+                  </button>
+                </div>
                 <button
                   type="button"
-                  class="px-3.5 py-1.5 rounded-full text-xs font-black bg-white dark:bg-[#2F241C] text-brand-orange shadow-sm flex items-center gap-1.5 font-baloo cursor-pointer"
+                  id="import-stickers-btn"
+                  class="h-8 px-2.5 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white text-[11px] font-black transition cursor-pointer font-baloo flex items-center gap-1 shrink-0 active:scale-95"
+                  title="استيراد عدة صور كملصقات"
                 >
-                  <i class="fa-solid fa-note-sticky text-xs"></i>
-                  <span>ملصقاتي</span>
-                  <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange font-mono">${getCustomStickers().length}</span>
+                  <i class="fa-solid fa-file-import text-[10px]"></i>
+                  <span>استيراد ملصقات</span>
                 </button>
               </div>
 
@@ -1200,13 +1294,29 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
               <button 
                 id="close-stickers-btn" 
                 type="button" 
-                class="w-10 h-10 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec hover:text-brand-orange flex items-center justify-center text-sm cursor-pointer transition active:scale-90 shadow-sm"
+                class="w-9 h-9 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec hover:text-brand-orange flex items-center justify-center text-sm cursor-pointer transition active:scale-90 shadow-sm shrink-0"
                 title="إغلاق لوحة الملصقات"
               >
                 <i class="fa-solid fa-xmark"></i>
               </button>
 
             </div>
+
+            ${
+              isStickerSearchOpen
+                ? `
+                <div class="w-full mt-2">
+                  <input
+                    id="sticker-search-input"
+                    type="text"
+                    value="${escapeAttr(stickerSearchQuery)}"
+                    placeholder="ابحث باسم الملصق..."
+                    class="w-full h-8 px-3 rounded-full bg-white dark:bg-[#1E1713] border border-brand-peachBorder dark:border-warm-darkBorder text-xs font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange"
+                  />
+                </div>
+                `
+                : ''
+            }
           </div>
 
           <!-- 2. Stickers Content Grid with Smooth Scroll -->
@@ -1214,22 +1324,22 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             
             <div class="grid grid-cols-4 sm:grid-cols-5 gap-3">
               
-              <!-- FIRST ITEM IN GRID: Dedicated 'Create sticker' / 'إنشاء استيكر' Tile (WhatsApp Style in Meow Palette) -->
+              <!-- FIRST ITEM IN GRID: Dedicated 'إنشاء استيكر' Tile -->
               <div
                 id="create-sticker-tile"
                 class="create-sticker-tile group aspect-square rounded-2xl border-2 border-dashed border-brand-orange/80 bg-brand-orange/5 hover:bg-brand-orange/15 hover:border-brand-orange flex flex-col items-center justify-center p-2 text-center cursor-pointer transition-all active:scale-95 shadow-sm"
-                title="إنشاء استيكر جديد من صورك"
+                title="إنشاء ملصق جديد من صورك"
               >
-                <div class="w-10 h-10 rounded-full bg-brand-orange text-white flex items-center justify-center shadow-soft mb-1.5 group-hover:scale-110 transition-transform">
-                  <i class="fa-solid fa-pen text-sm"></i>
+                <div class="w-9 h-9 rounded-full bg-brand-orange text-white flex items-center justify-center shadow-soft mb-1 group-hover:scale-110 transition-transform">
+                  <i class="fa-solid fa-plus text-sm"></i>
                 </div>
                 <span class="text-[11px] font-black text-brand-orange font-baloo leading-tight">
-                  إنشاء استيكر
+                  إنشاء ملصق
                 </span>
               </div>
 
               <!-- User's Saved Custom Stickers -->
-              ${getCustomStickers()
+              ${filteredStickers
                 .map(
                   (stk) => {
                     const safeStickerImg = sanitizeImageSrc(stk.imageUrl, SAFE_FALLBACK_PET_SVG);
@@ -1240,15 +1350,15 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
                     class="custom-sticker-send-btn w-full h-full flex items-center justify-center cursor-pointer active:scale-90 transition-transform"
                     data-sticker-url="${escapeAttr(safeStickerImg)}"
                     data-sticker-title="${escapeAttr(stk.title)}"
-                    title="إرسال هذا الاستيكر"
+                    title="إرسال هذا الملصق"
                   >
                     <img src="${escapeAttr(safeStickerImg)}" alt="${escapeAttr(stk.title)}" class="max-w-full max-h-full object-contain rounded-xl select-none" />
                   </button>
                   <button
                     type="button"
-                    class="delete-custom-sticker-btn absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center text-xs shadow-sm hover:scale-110 active:scale-90 transition cursor-pointer"
+                    class="delete-custom-sticker-btn absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-[11px] shadow-sm hover:scale-110 active:scale-90 transition cursor-pointer"
                     data-sticker-id="${escapeAttr(stk.id)}"
-                    title="حذف الاستيكر"
+                    title="حذف الملصق"
                   >
                     <i class="fa-solid fa-xmark"></i>
                   </button>
@@ -1262,11 +1372,19 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
 
             <!-- Helpful Warm Note if No Stickers Yet -->
             ${
-              getCustomStickers().length === 0
+              allStickers.length === 0
                 ? `
                 <div class="mt-4 p-3 rounded-2xl bg-white/70 dark:bg-[#27201B]/70 border border-brand-peachBorder/60 dark:border-warm-darkBorder text-center">
                   <p class="text-xs font-bold text-warm-textSec dark:text-[#D1C7BD] font-baloo m-0">
-                    حول أي صورة أليف عندك إلى استيكر بضغطة واحدة من زر «إنشاء استيكر» أعلاه!
+                    حوّل صور أليفك إلى ملصقات مخصصة محفوظة في حسابك عبر زر «إنشاء ملصق» أو «استيراد ملصقات».
+                  </p>
+                </div>
+                `
+                : filteredStickers.length === 0
+                ? `
+                <div class="mt-4 p-3 rounded-2xl bg-white/70 dark:bg-[#27201B]/70 border border-brand-peachBorder/60 dark:border-warm-darkBorder text-center">
+                  <p class="text-xs font-bold text-warm-textSec dark:text-[#D1C7BD] font-baloo m-0">
+                    لا توجد ملصقات مطابقة للبحث.
                   </p>
                 </div>
                 `
@@ -1275,72 +1393,74 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
 
           </div>
 
-          <!-- 3. Bottom Pack Navigation Bar (Like WhatsApp: Clock, Star, Pet Pack, Add) -->
+          <!-- 3. Bottom Pack Navigation Bar -->
           <div class="shrink-0 px-4 py-1.5 bg-[#FFF9E9] dark:bg-[#231C17] border-t border-brand-peachBorder/60 dark:border-warm-darkBorder flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <!-- Recents 🕒 -->
               <button type="button" class="text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90" title="الأخيرة">
                 <i class="fa-regular fa-clock"></i>
               </button>
-              <!-- Favorites ⭐ -->
               <button type="button" class="text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90" title="المفضلة">
                 <i class="fa-regular fa-star"></i>
               </button>
-              <!-- Meow Pet Pack 🐾 (Active Tab) -->
-              <button type="button" class="relative text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-base cursor-pointer active:scale-90" title="استيكرز مياو">
+              <button type="button" class="relative text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-base cursor-pointer active:scale-90" title="ملصقات مياو">
                 <i class="fa-solid fa-paw"></i>
                 <span class="absolute bottom-0.5 inset-x-0 mx-auto w-3.5 h-0.5 bg-brand-orange rounded-full"></span>
               </button>
             </div>
 
-            <!-- Add new sticker (+) button in bottom bar -->
             <button
               id="add-sticker-pack-btn"
               type="button"
               class="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-sm transition active:scale-90 cursor-pointer"
-              title="إضافة استيكر جديد من صورة"
+              title="إضافة ملصق جديد من صورة"
             >
               <i class="fa-solid fa-plus"></i>
             </button>
           </div>
 
         </div>
+          `;
+        })()}
 
         <!-- Floating Bubble Composer Bar -->
-        <div class="pointer-events-auto bg-[#FFF9E9]/95 backdrop-blur-md border-2 border-brand-peachBorder rounded-[34px] p-2 shadow-nav flex items-center gap-2">
-          <!-- Attachment Button (+) -->
+        <div class="pointer-events-auto bg-[#FFF9E9]/95 dark:bg-[#27201B]/95 backdrop-blur-md border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-[34px] p-2 shadow-nav flex items-center gap-2">
+          <!-- Attachment Button -->
           <button
             id="chat-attachment-btn"
             type="button"
-            class="w-11 h-11 rounded-full bg-white border-2 border-brand-peachBorder text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-lg transition-all active:scale-90 cursor-pointer shadow-sm shrink-0"
+            class="w-11 h-11 rounded-full bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-lg transition-all active:scale-90 cursor-pointer shadow-sm shrink-0"
             title="إرفاق صورة أو ملف"
             aria-label="إرفاق ملف"
           >
             <i class="fa-solid fa-paperclip"></i>
           </button>
 
-          <!-- Interactive Stickers Toggle Button -->
+          <!-- Interactive Stickers Toggle Button (Square Folded-Corner Cat Sticker Icon) -->
           <button
             id="chat-stickers-btn"
             type="button"
-            class="w-11 h-11 rounded-full bg-white border-2 ${
+            class="w-11 h-11 rounded-full bg-white dark:bg-[#342A24] border-2 ${
               isStickersOpen
                 ? 'border-brand-orange text-brand-orange bg-brand-orange/15 shadow-soft'
-                : 'border-brand-peachBorder text-warm-textSec'
-            } hover:border-brand-orange hover:text-brand-orange flex items-center justify-center text-lg transition-all active:scale-90 cursor-pointer shadow-sm shrink-0"
+                : 'border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD]'
+            } hover:border-brand-orange hover:text-brand-orange flex items-center justify-center transition-all active:scale-90 cursor-pointer shadow-sm shrink-0"
             title="ملصقات مياو"
             aria-label="ملصقات"
           >
-            <span class="text-lg select-none">😻</span>
+            <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 4h11l4 4v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+              <path d="M15 4v4h4" />
+              <path d="M8.5 11.5 9.5 10l1.5 1.2h2l1.5-1.2 1 1.5c.6.8.9 1.6.9 2.5 0 2.1-1.8 3.5-4.4 3.5S7.6 16.1 7.6 14c0-.9.3-1.7.9-2.5Z" />
+            </svg>
           </button>
 
           <!-- Floating Pill Input Field -->
-          <div class="flex-1 min-w-0 min-h-[48px] relative flex items-center bg-white border-2 border-brand-peachBorder/90 rounded-full px-4 py-1 shadow-sm focus-within:border-brand-orange transition-colors">
+          <div class="flex-1 min-w-0 min-h-[46px] relative flex items-center bg-white dark:bg-[#1E1713] border-2 border-brand-peachBorder/90 dark:border-warm-darkBorder rounded-full px-4 py-1 shadow-sm focus-within:border-brand-orange transition-colors">
             <input
               type="text"
               id="chat-message-input"
               placeholder="اكتب رسالة..."
-              class="w-full min-w-0 bg-transparent border-none py-1 text-[15px] sm:text-base font-bold text-brand-dark placeholder-brand-subtleGray focus:outline-none font-baloo"
+              class="w-full min-w-0 bg-transparent border-none py-1 text-[15px] sm:text-base font-bold text-brand-dark dark:text-white placeholder-brand-subtleGray dark:placeholder-[#A89F91] focus:outline-none font-baloo"
               autocomplete="off"
             />
           </div>
@@ -1348,7 +1468,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           <!-- Dynamic Action Button: Mic or Send -->
           <button
             id="chat-action-btn"
-            class="w-12 h-12 rounded-full bg-brand-orange text-white flex items-center justify-center hover:bg-brand-orangeHover active:scale-90 transition-all shadow-soft cursor-pointer shrink-0 font-baloo"
+            class="w-11 h-11 rounded-full bg-brand-orange text-white flex items-center justify-center hover:bg-brand-orangeHover active:scale-90 transition-all shadow-soft cursor-pointer shrink-0 font-baloo"
             type="button"
             aria-label="تسجيل صوتي أو إرسال"
             title="تسجيل صوتي"
@@ -1357,6 +1477,74 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
           </button>
         </div>
       </footer>
+
+      ${
+        pendingChatAttachment
+          ? `
+          <div id="chat-media-preview-modal" class="fixed inset-0 z-[92] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+            <div class="bg-[#FFFDF8] dark:bg-[#27201B] w-full max-w-md rounded-t-[30px] sm:rounded-[28px] border-2 border-brand-peachBorder dark:border-warm-darkBorder p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl space-y-3.5 animate-slide-up">
+              <div class="flex items-center justify-between gap-2 pb-2 border-b border-brand-peachBorder/60 dark:border-warm-darkBorder">
+                <h3 class="text-base font-black text-brand-dark dark:text-white font-baloo m-0">معاينة المرفق قبل الإرسال</h3>
+                <button
+                  id="cancel-chat-media-preview-btn"
+                  type="button"
+                  aria-label="إلغاء إرسال المرفق"
+                  class="w-9 h-9 rounded-full bg-black/5 dark:bg-white/10 text-brand-dark dark:text-white hover:bg-red-500 hover:text-white flex items-center justify-center transition cursor-pointer"
+                >
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+
+              ${
+                pendingChatAttachment.type === 'image'
+                  ? `
+                  <div class="rounded-2xl overflow-hidden bg-black/5 dark:bg-black/30 border border-brand-peachBorder/60 dark:border-warm-darkBorder flex items-center justify-center max-h-[46dvh]">
+                    <img src="${escapeAttr(sanitizeImageSrc(pendingChatAttachment.fileUrl, SAFE_FALLBACK_PET_SVG))}" alt="${escapeAttr(pendingChatAttachment.fileName)}" class="max-w-full max-h-[46dvh] object-contain" />
+                  </div>
+                  `
+                  : `
+                  <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white dark:bg-[#1E1713] border border-brand-peachBorder dark:border-warm-darkBorder">
+                    <div class="w-11 h-11 rounded-xl bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
+                      <i class="fa-solid fa-file-lines text-xl"></i>
+                    </div>
+                    <div class="min-w-0 flex-1 text-right">
+                      <p class="text-sm font-black text-brand-dark dark:text-white truncate m-0 font-baloo">${escapeHtml(pendingChatAttachment.fileName)}</p>
+                      <span class="text-xs font-bold text-brand-subtleGray dark:text-[#A89F91]">${escapeHtml(pendingChatAttachment.fileSize)}</span>
+                    </div>
+                  </div>
+                  `
+              }
+
+              <input
+                id="chat-media-caption-input"
+                type="text"
+                placeholder="أضف تعليقاً اختيارياً..."
+                class="w-full h-11 px-4 rounded-2xl bg-white dark:bg-[#1E1713] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-sm font-bold text-brand-dark dark:text-white placeholder-brand-subtleGray focus:outline-none focus:border-brand-orange font-baloo"
+                autocomplete="off"
+              />
+
+              <div class="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  id="cancel-chat-media-secondary-btn"
+                  type="button"
+                  class="h-11 rounded-full bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-white font-black text-sm hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer font-baloo"
+                >
+                  إلغاء
+                </button>
+                <button
+                  id="confirm-send-chat-media-btn"
+                  type="button"
+                  class="h-11 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white font-black text-sm shadow-soft flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer font-baloo"
+                >
+                  <span>إرسال</span>
+                  <i class="fa-solid fa-paper-plane text-xs"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          `
+          : ''
+      }
 
       ${
         previewChatImageUrl
@@ -1428,6 +1616,17 @@ export function attachChatEvents(): void {
     });
   }
 
+  // Incoming / Outgoing requests direction tabs
+  document.querySelectorAll<HTMLButtonElement>('.req-direction-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const dir = btn.getAttribute('data-req-direction');
+      if (dir === 'incoming' || dir === 'outgoing') {
+        requestsDirectionFilter = dir;
+        state.setChatSubTab('requests');
+      }
+    });
+  });
+
   // Pull-to-refresh on chat list (when outside active chat room and no modal open)
   const chatListRoot = document.getElementById('chat-list-view-root');
   if (chatListRoot && !currentActiveConv) {
@@ -1441,9 +1640,9 @@ export function attachChatEvents(): void {
             state.getPendingDeleteConversation() ||
             document.querySelector('.meow-more-dropdown:not(.hidden)')
         ),
-      onRefresh: () => {
-        state.refreshFeed('chat');
-        showMobileToast('تم تحديث المحادثات والطلبات', 'success');
+      onRefresh: async () => {
+        await state.refreshFeed('chat');
+        showMobileToast('تم التحديث', 'success', 1500);
       },
     });
   }
@@ -1512,6 +1711,7 @@ export function attachChatEvents(): void {
       }
       isGroupDetailsExpanded = false;
       previewChatImageUrl = null;
+      pendingChatAttachment = null;
       state.setActiveConversationId(null);
     });
   }
@@ -1650,7 +1850,7 @@ export function attachChatEvents(): void {
     });
   }
 
-  // File Attachment click
+  // File Attachment click (stages preview confirmation modal before sending)
   if (attachmentBtn && filePicker) {
     attachmentBtn.addEventListener('click', () => {
       filePicker.click();
@@ -1683,25 +1883,82 @@ export function attachChatEvents(): void {
             filePicker.value = '';
             return;
           }
-          state.sendMessage({
+          pendingChatAttachment = {
             type: 'image',
             fileUrl: safeUrl,
             fileName: file.name,
-            fileSize: `${(file.size / 1024).toFixed(0)} KB`,
-          });
+            fileSize: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+          };
         } else {
-          state.sendMessage({
+          pendingChatAttachment = {
             type: 'file',
             fileUrl: result,
             fileName: file.name,
             fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-          });
+          };
         }
         filePicker.value = '';
-        setTimeout(scrollToBottom, 100);
+        const activeId = state.getActiveConversation()?.id || null;
+        if (activeId) {
+          state.setActiveConversationId(activeId);
+        }
       };
 
       reader.readAsDataURL(file);
+    });
+  }
+
+  // Media preview modal actions (Cancel / Send with optional caption)
+  const previewModal = document.getElementById('chat-media-preview-modal');
+  const cancelMediaBtn = document.getElementById('cancel-chat-media-preview-btn');
+  const cancelMediaSecondaryBtn = document.getElementById('cancel-chat-media-secondary-btn');
+  const confirmSendMediaBtn = document.getElementById('confirm-send-chat-media-btn');
+  const mediaCaptionInput = document.getElementById('chat-media-caption-input') as HTMLInputElement | null;
+
+  const dismissPendingMedia = () => {
+    pendingChatAttachment = null;
+    if (filePicker) filePicker.value = '';
+    const activeId = state.getActiveConversation()?.id || null;
+    if (activeId) {
+      state.setActiveConversationId(activeId);
+    }
+  };
+
+  if (cancelMediaBtn) {
+    cancelMediaBtn.addEventListener('click', dismissPendingMedia);
+  }
+  if (cancelMediaSecondaryBtn) {
+    cancelMediaSecondaryBtn.addEventListener('click', dismissPendingMedia);
+  }
+  if (previewModal) {
+    previewModal.addEventListener('click', (e) => {
+      if (e.target === previewModal) {
+        dismissPendingMedia();
+      }
+    });
+  }
+  if (confirmSendMediaBtn) {
+    const sendPendingMedia = () => {
+      if (!pendingChatAttachment) return;
+      const caption = mediaCaptionInput?.value.trim() || '';
+      const attachment = pendingChatAttachment;
+      pendingChatAttachment = null;
+      state.sendMessage({
+        type: attachment.type,
+        fileUrl: attachment.fileUrl,
+        fileName: attachment.fileName,
+        fileSize: attachment.fileSize,
+        text: caption || undefined,
+      });
+      setTimeout(scrollToBottom, 100);
+    };
+
+    confirmSendMediaBtn.addEventListener('click', sendPendingMedia);
+    mediaCaptionInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendPendingMedia();
+      }
     });
   }
 
@@ -1711,6 +1968,9 @@ export function attachChatEvents(): void {
   const closeStickersBtn = document.getElementById('close-stickers-btn');
   const createStickerTile = document.getElementById('create-sticker-tile');
   const addStickerPackBtn = document.getElementById('add-sticker-pack-btn');
+  const importStickersBtn = document.getElementById('import-stickers-btn');
+  const stickerSearchBtn = document.getElementById('sticker-search-btn');
+  const stickerSearchInput = document.getElementById('sticker-search-input') as HTMLInputElement | null;
   const stickerUploadInput = document.getElementById('sticker-upload-input') as HTMLInputElement;
 
   if (stickersBtn && stickersDrawer) {
@@ -1748,7 +2008,35 @@ export function attachChatEvents(): void {
     });
   }
 
-  // Create Sticker File Picker Trigger (Both from the First Grid Tile & Bottom Add Button)
+  if (stickerSearchBtn) {
+    stickerSearchBtn.addEventListener('click', () => {
+      isStickerSearchOpen = !isStickerSearchOpen;
+      if (!isStickerSearchOpen) stickerSearchQuery = '';
+      isStickersOpen = true;
+      const activeId = state.getActiveConversation()?.id;
+      if (activeId) state.setActiveConversationId(activeId);
+    });
+  }
+
+  if (stickerSearchInput) {
+    stickerSearchInput.addEventListener('input', () => {
+      stickerSearchQuery = stickerSearchInput.value;
+      isStickersOpen = true;
+      const activeId = state.getActiveConversation()?.id;
+      if (activeId) {
+        state.setActiveConversationId(activeId);
+        window.requestAnimationFrame(() => {
+          const el = document.getElementById('sticker-search-input') as HTMLInputElement | null;
+          if (el) {
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+          }
+        });
+      }
+    });
+  }
+
+  // Create / Import Sticker File Picker Trigger
   const triggerStickerPicker = () => {
     if (stickerUploadInput) {
       stickerUploadInput.click();
@@ -1761,35 +2049,60 @@ export function attachChatEvents(): void {
   if (addStickerPackBtn) {
     addStickerPackBtn.addEventListener('click', triggerStickerPicker);
   }
+  if (importStickersBtn) {
+    importStickersBtn.addEventListener('click', triggerStickerPicker);
+  }
 
   if (stickerUploadInput) {
-    stickerUploadInput.addEventListener('change', () => {
-      const file = stickerUploadInput.files?.[0];
-      if (!file) return;
+    stickerUploadInput.addEventListener('change', async () => {
+      const files = Array.from(stickerUploadInput.files || []);
+      stickerUploadInput.value = '';
+      if (files.length === 0) return;
 
-      const check = validateUploadedFile(file, 'image');
-      if (!check.valid) {
-        showMobileToast(check.errorMessage || 'يرجى اختيار صورة صالحة للملصق.', 'danger');
-        stickerUploadInput.value = '';
-        return;
+      let addedCount = 0;
+      let lastError = '';
+
+      for (const file of files) {
+        const check = validateUploadedFile(file, 'image');
+        if (!check.valid) {
+          lastError = check.errorMessage || 'يرجى اختيار صور صالحة للملصقات.';
+          continue;
+        }
+
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const rawUrl = typeof e.target?.result === 'string' ? e.target.result : '';
+            resolve(sanitizeImageSrc(rawUrl, ''));
+          };
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(file);
+        });
+
+        if (!dataUrl) {
+          lastError = 'تعذر قراءة إحدى الصور المحددة.';
+          continue;
+        }
+
+        const title = file.name.replace(/\.[^/.]+$/, '') || 'ملصق مخصص';
+        const res = await state.addCustomSticker(dataUrl, title);
+        if (res.success) {
+          addedCount++;
+        } else if (res.errorMessage) {
+          lastError = res.errorMessage;
+        }
       }
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const rawUrl = typeof e.target?.result === 'string' ? e.target.result : '';
-        const dataUrl = sanitizeImageSrc(rawUrl, '');
-        if (dataUrl) {
-          saveCustomSticker(dataUrl, file.name.replace(/\.[^/.]+$/, ''));
-          // Keep sticker drawer open so user can immediately see and use their new sticker
-          isStickersOpen = true;
-          const activeId = state.getActiveConversation()?.id;
-          if (activeId) {
-            state.setActiveConversationId(activeId);
-          }
-        }
-      };
-      reader.readAsDataURL(file);
-      stickerUploadInput.value = '';
+      isStickersOpen = true;
+      if (addedCount > 0) {
+        showMobileToast(
+          addedCount === 1 ? 'تمت إضافة الملصق بنجاح' : `تمت إضافة ${addedCount} ملصقات بنجاح`,
+          'success',
+          1800
+        );
+      } else if (lastError) {
+        showMobileToast(lastError, 'danger');
+      }
     });
   }
 
@@ -1798,7 +2111,7 @@ export function attachChatEvents(): void {
   customStickerSendBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const stickerUrl = btn.getAttribute('data-sticker-url') || '';
-      const stickerTitle = btn.getAttribute('data-sticker-title') || 'استيكر مخصص';
+      const stickerTitle = btn.getAttribute('data-sticker-title') || 'ملصق مخصص';
 
       state.sendMessage({
         type: 'sticker',
@@ -1824,24 +2137,22 @@ export function attachChatEvents(): void {
   // Delete Custom Sticker
   const deleteStickerBtns = document.querySelectorAll<HTMLButtonElement>('.delete-custom-sticker-btn');
   deleteStickerBtns.forEach((btn) => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const id = btn.getAttribute('data-sticker-id');
       if (id) {
-        deleteCustomSticker(id);
         isStickersOpen = true;
-        const activeId = state.getActiveConversation()?.id;
-        if (activeId) {
-          state.setActiveConversationId(activeId);
-        }
+        await state.removeCustomSticker(id);
+        showMobileToast('تم حذف الملصق', 'default', 1400);
       }
     });
   });
 
-  // Start real Audio Recording via MediaRecorder
+  // Start real Audio Recording via MediaRecorder with Android WebView MIME negotiation
   const startAudioRecording = async () => {
+    if (isRecordingAudio) return;
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
         if (import.meta.env.DEV) {
           sendFallbackVoiceNote();
         } else {
@@ -1850,9 +2161,30 @@ export function attachChatEvents(): void {
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
       audioChunks = [];
-      mediaRecorder = new MediaRecorder(stream);
+      const preferredMimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/aac',
+        'audio/ogg;codecs=opus',
+      ];
+      const supportedMimeType =
+        typeof MediaRecorder.isTypeSupported === 'function'
+          ? preferredMimeTypes.find((mime) => MediaRecorder.isTypeSupported(mime))
+          : undefined;
+
+      mediaRecorder = supportedMimeType
+        ? new MediaRecorder(stream, { mimeType: supportedMimeType })
+        : new MediaRecorder(stream);
+      activeRecorderMimeType =
+        mediaRecorder.mimeType || supportedMimeType || 'audio/webm';
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -1878,17 +2210,35 @@ export function attachChatEvents(): void {
         }
       }, 1000);
     } catch (err) {
-      console.warn('Microphone permission denied or not available:', err);
-      if (import.meta.env.DEV) {
+      const errorName = err instanceof Error ? err.name : '';
+      console.warn('Microphone permission or recording error:', err);
+      if (import.meta.env.DEV && !errorName.includes('NotAllowed')) {
         sendFallbackVoiceNote();
+        return;
+      }
+      if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError') {
+        showMobileToast(
+          'تم رفض إذن الميكروفون. يرجى تفعيل صلاحية الميكروفون من إعدادات التطبيق.',
+          'danger',
+          3200
+        );
+      } else if (errorName === 'NotFoundError' || errorName === 'DevicesNotFoundError') {
+        showMobileToast('لم يتم العثور على ميكروفون متاح على هذا الجهاز.', 'danger', 2800);
+      } else if (errorName === 'NotReadableError') {
+        showMobileToast('الميكروفون مستخدم حالياً بواسطة تطبيق آخر.', 'danger', 2800);
       } else {
-        showMobileToast('تعذر الوصول للميكروفون. يرجى تفعيل صلاحية التسجيل الصوتي.', 'danger');
+        showMobileToast(
+          'تعذر تشغيل التسجيل الصوتي. يرجى التحقق من إذن الميكروفون في الجهاز.',
+          'danger',
+          2800
+        );
       }
     }
   };
 
   const stopRecordingUI = () => {
     if (recordingTimer) clearInterval(recordingTimer);
+    recordingTimer = null;
     isRecordingAudio = false;
     if (recordingUiBar) {
       recordingUiBar.classList.remove('flex');
@@ -1922,18 +2272,34 @@ export function attachChatEvents(): void {
     sendRecBtn.addEventListener('click', () => {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          const audioUrl = URL.createObjectURL(audioBlob);
+          const cleanMime = activeRecorderMimeType.split(';')[0] || 'audio/webm';
+          const audioBlob = new Blob(audioChunks, { type: cleanMime });
           const duration = Math.max(1, recordingSeconds);
-
-          state.sendMessage({
-            type: 'audio',
-            audioDuration: duration,
-            audioBlobUrl: audioUrl,
-          });
+          const fallbackObjectUrl = URL.createObjectURL(audioBlob);
 
           mediaRecorder?.stream.getTracks().forEach((t) => t.stop());
-          setTimeout(scrollToBottom, 100);
+
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const rawAudioUrl = typeof ev.target?.result === 'string' ? ev.target.result : '';
+            const safeAudioDataUrl = sanitizeAudioSrc(rawAudioUrl) || fallbackObjectUrl;
+            state.sendMessage({
+              type: 'audio',
+              audioDuration: duration,
+              audioBlobUrl: safeAudioDataUrl,
+              fileUrl: safeAudioDataUrl.startsWith('data:') ? safeAudioDataUrl : undefined,
+            });
+            setTimeout(scrollToBottom, 100);
+          };
+          reader.onerror = () => {
+            state.sendMessage({
+              type: 'audio',
+              audioDuration: duration,
+              audioBlobUrl: fallbackObjectUrl,
+            });
+            setTimeout(scrollToBottom, 100);
+          };
+          reader.readAsDataURL(audioBlob);
         };
         mediaRecorder.stop();
       } else if (import.meta.env.DEV) {
@@ -2022,6 +2388,18 @@ export function attachChatEvents(): void {
       const reqId = btn.getAttribute('data-reject-request-id');
       if (reqId) {
         state.rejectContactRequest(reqId);
+      }
+    });
+  });
+
+  // Withdraw outgoing request
+  const withdrawBtns = document.querySelectorAll<HTMLButtonElement>('.withdraw-request-btn');
+  withdrawBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.getAttribute('data-withdraw-request-id');
+      if (reqId) {
+        state.withdrawContactRequest(reqId);
+        showMobileToast('تم سحب الطلب', 'default', 1500);
       }
     });
   });

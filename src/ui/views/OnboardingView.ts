@@ -530,16 +530,16 @@ function renderWelcomeStep(): string {
     <div class="flex-1 flex flex-col items-center justify-between py-1 sm:py-2 animate-fade-in">
       
       <!-- Top Official Logo -->
-      <header class="w-full pt-0.5 sm:pt-2 pb-1 sm:pb-2 flex flex-col items-center text-center">
+      <header class="w-full pt-0.5 sm:pt-2 pb-1 sm:pb-2 flex flex-col items-center text-center animate-slide-up">
         <div class="relative w-28 h-28 sm:w-44 sm:h-44 flex items-center justify-center">
-          <img alt="Meow Logo" class="w-28 sm:w-44 h-auto mx-auto object-contain drop-shadow-sm" src="${WELCOME_LOGO_URL}">
+          <img alt="Meow Logo" class="w-28 sm:w-44 h-auto mx-auto object-contain drop-shadow-sm transition-transform duration-500" src="${WELCOME_LOGO_URL}">
         </div>
       </header>
 
       <!-- Center Mascot Card & Headline -->
-      <div class="flex flex-col items-center text-center space-y-3.5 sm:space-y-6 my-auto">
+      <div class="flex flex-col items-center text-center space-y-3.5 sm:space-y-6 my-auto animate-slide-up">
         <div class="relative flex items-center justify-center">
-          <div class="w-36 h-36 sm:w-48 sm:h-48 rounded-3xl overflow-hidden shadow-lg border-4 border-white/80 bg-white/40 flex items-center justify-center">
+          <div class="w-36 h-36 sm:w-48 sm:h-48 rounded-3xl overflow-hidden shadow-lg border-4 border-white/80 bg-white/40 flex items-center justify-center transition-transform duration-500">
             <img alt="Meow Mascot" class="w-full h-full object-cover" src="${MASCOT_IMG_URL}">
           </div>
         </div>
@@ -553,11 +553,11 @@ function renderWelcomeStep(): string {
       </div>
 
       <!-- Bottom Next CTA Button -->
-      <div class="w-full pt-2 sm:pt-4 flex justify-end">
+      <div class="w-full pt-2 sm:pt-4 flex justify-end animate-slide-up">
         <button
           type="button"
           id="btn-welcome-next"
-          class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl font-bold text-base sm:text-lg text-white shadow-md active:scale-95 transition-all flex flex-col items-center justify-center gap-1 sm:gap-1.5 hover:opacity-95 cursor-pointer bg-[#e67e22]"
+          class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl font-bold text-base sm:text-lg text-white shadow-md active:scale-95 transition-all duration-200 flex flex-col items-center justify-center gap-1 sm:gap-1.5 hover:opacity-95 hover:scale-[1.03] cursor-pointer bg-[#e67e22]"
         >
           <span class="text-base sm:text-lg font-baloo">التالي</span>
           <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
@@ -946,17 +946,41 @@ function renderAuthMethodStep(): string {
           ${
             !isLogin
               ? `
-                <!-- Agreements (Strictly unchecked by default on signup) -->
+                <!-- Agreements (Strictly unchecked by default on signup, custom crisp SVG check) -->
                 <div id="terms-agreement-box" class="flex items-start gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl border border-transparent transition-all">
-                  <div class="mt-0.5">
+                  <label class="relative inline-flex items-center justify-center mt-0.5 cursor-pointer select-none shrink-0" for="terms-checkbox">
                     <input
-                      class="w-4 h-4 sm:w-5 sm:h-5 rounded border-[#3E2723]/30 text-[#944a00] focus:ring-[#944a00]/20 bg-white/80 transition-colors cursor-pointer"
+                      class="sr-only peer"
                       id="terms-checkbox"
                       type="checkbox"
                       ${isTermsAccepted ? 'checked' : ''}
                     />
-                  </div>
-                  <label class="text-[#3E2723]/80 text-xs sm:text-sm leading-relaxed cursor-pointer font-baloo" for="terms-checkbox">
+                    <span
+                      id="terms-checkbox-visual"
+                      aria-hidden="true"
+                      class="w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shadow-xs ${
+                        isTermsAccepted
+                          ? 'bg-[#e67e22] border-[#e67e22]'
+                          : 'bg-white border-[#3E2723]/35 peer-focus-visible:ring-2 peer-focus-visible:ring-[#e67e22]/30'
+                      }"
+                    >
+                      <svg
+                        id="terms-checkbox-check"
+                        viewBox="0 0 24 24"
+                        class="w-3.5 h-3.5 text-white transition-all duration-150 ${
+                          isTermsAccepted ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+                        }"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    </span>
+                  </label>
+                  <label class="text-[#3E2723]/80 text-xs sm:text-sm leading-relaxed cursor-pointer font-baloo select-none" for="terms-checkbox">
                     من خلال إنشاء الحساب، أنت توافق على
                     <span class="text-[#944a00] font-bold">شروط الاستخدام</span>
                     و
@@ -1925,8 +1949,29 @@ export function attachOnboardingEvents(): void {
   }
 
   if (termsCheckbox) {
+    const syncTermsVisual = (checked: boolean) => {
+      const boxVisual = document.getElementById('terms-checkbox-visual');
+      const checkSvg = document.getElementById('terms-checkbox-check');
+      if (boxVisual) {
+        boxVisual.className = `w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shadow-xs ${
+          checked
+            ? 'bg-[#e67e22] border-[#e67e22]'
+            : 'bg-white border-[#3E2723]/35 peer-focus-visible:ring-2 peer-focus-visible:ring-[#e67e22]/30'
+        }`;
+      }
+      if (checkSvg) {
+        checkSvg.setAttribute(
+          'class',
+          `w-3.5 h-3.5 text-white transition-all duration-150 ${
+            checked ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+          }`
+        );
+      }
+    };
+
     termsCheckbox.addEventListener('change', () => {
       isTermsAccepted = Boolean(termsCheckbox.checked);
+      syncTermsVisual(isTermsAccepted);
       state.setTermsAccepted(isTermsAccepted, true);
       if (isTermsAccepted && termsBox) {
         termsBox.className =
@@ -3151,47 +3196,56 @@ function attachRemainingOnboardingEvents(): void {
         petFormError.classList.add('hidden');
       }
 
-      if (!hasSavedOnboardingPet) {
-        const currentUser = state.getUser();
-        state.savePet({
-          name,
-          breed,
-          hybridBreed: hybridBreed || undefined,
-          color,
-          species: selectedPetSpecies!,
-          gender: selectedPetGender!,
-          photos: validPhotos,
-          ageYears,
-          ageMonths,
-          area: currentUser.village || currentUser.city || currentUser.governorate || 'القاهرة',
-          city: currentUser.city || currentUser.governorate || 'القاهرة',
-          governorate: currentUser.governorate || 'القاهرة',
-          markaz: currentUser.markaz,
-          village: currentUser.village,
-          governorateId: currentUser.governorateId,
-          markazId: currentUser.markazId,
-          cityId: currentUser.cityId,
-          villageId: currentUser.villageId,
-          locationId: currentUser.locationId,
-          lat: currentUser.lat,
-          lng: currentUser.lng,
-          healthNotes: notes || '',
-          personality: Array.from(selectedTraits),
-          vaccinationStatus: selectedVaccination === 'yes' ? 'fully_vaccinated' : 'not_vaccinated',
-          status: 'mating',
-        });
-        hasSavedOnboardingPet = true;
-      }
-
       isCompletingOnboarding = true;
       const originalLabel = petSubmitBtn?.innerHTML || '';
       if (petSubmitBtn) {
         petSubmitBtn.disabled = true;
         petSubmitBtn.classList.add('opacity-70', 'cursor-wait');
-        petSubmitBtn.innerHTML = '<span>جاري إتمام التسجيل...</span>';
+        petSubmitBtn.innerHTML = '<span>جاري حفظ الأليف وإتمام التسجيل...</span>';
       }
 
       try {
+        if (!hasSavedOnboardingPet) {
+          const currentUser = state.getUser();
+          const savePetRes = await state.savePetAsync({
+            name,
+            breed,
+            hybridBreed: hybridBreed || undefined,
+            color,
+            species: selectedPetSpecies!,
+            gender: selectedPetGender!,
+            photos: validPhotos,
+            ageYears,
+            ageMonths,
+            area: currentUser.village || currentUser.city || currentUser.governorate || 'القاهرة',
+            city: currentUser.city || currentUser.governorate || 'القاهرة',
+            governorate: currentUser.governorate || 'القاهرة',
+            markaz: currentUser.markaz,
+            village: currentUser.village,
+            governorateId: currentUser.governorateId,
+            markazId: currentUser.markazId,
+            cityId: currentUser.cityId,
+            villageId: currentUser.villageId,
+            locationId: currentUser.locationId,
+            lat: currentUser.lat,
+            lng: currentUser.lng,
+            healthNotes: notes || '',
+            personality: Array.from(selectedTraits),
+            vaccinationStatus: selectedVaccination === 'yes' ? 'fully_vaccinated' : 'not_vaccinated',
+            status: 'mating',
+          });
+          if (!savePetRes.success) {
+            if (petFormError) {
+              petFormError.textContent =
+                savePetRes.errorMessage || 'تعذر حفظ بيانات الأليف. يرجى المحاولة مرة أخرى.';
+              petFormError.classList.remove('hidden');
+              petFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            return;
+          }
+          hasSavedOnboardingPet = true;
+        }
+
         const res = await state.completeOnboardingWithSupabase();
         if (!res.success && petFormError) {
           petFormError.textContent =

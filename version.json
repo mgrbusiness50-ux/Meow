@@ -1,7 +1,7 @@
 {
-  "appVersion": "1.2.0",
-  "buildNumber": 2,
+  "appVersion": "1.2.1",
+  "buildNumber": 3,
   "minNativeVersion": "1.2.0",
   "channel": "production",
-  "releaseNotes": "إصدار الإنتاج المستقر لتطبيق Meow مع التحديثات المباشرة وتحسينات الأمان والأداء."
+  "releaseNotes": "تحديث تجربة المحادثة والطلبات الذكية وتحسين الأداء والاستقرار."
 }

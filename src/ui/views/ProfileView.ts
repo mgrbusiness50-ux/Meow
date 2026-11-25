@@ -1,4 +1,3 @@
-import { APP_VERSION_INFO } from '../../config/appVersion.ts';
 import { state } from '../../state.ts';
 import { PetStatus } from '../../types.ts';
 import {
@@ -30,10 +29,12 @@ export function renderProfileView(): string {
           
           <!-- Fixed Account Avatar (from email/Google, no camera upload button) -->
           <div class="relative mb-3.5">
-            <div class="w-28 h-28 rounded-full p-1.5 bg-gradient-to-tr from-brand-orange to-brand-peachBorder shadow-soft overflow-hidden">
+            <div class="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-brand-orange to-brand-peachBorder shadow-soft overflow-hidden">
               <img
                 src="${escapeAttr(sanitizeImageSrc(user.avatar, SAFE_FALLBACK_AVATAR_SVG))}"
                 alt="${escapeAttr(user.name)}"
+                referrerpolicy="no-referrer"
+                onerror="this.onerror=null;this.src='${SAFE_FALLBACK_AVATAR_SVG}'"
                 class="w-full h-full rounded-full object-cover"
               />
             </div>
@@ -203,7 +204,7 @@ export function renderProfileView(): string {
                                 <button
                                   type="button"
                                   data-edit-pet-id="${escapeAttr(pet.id)}"
-                                  class="edit-pet-btn w-9 h-9 rounded-full bg-brand-orange/15 hover:bg-brand-orange text-brand-orange hover:text-white flex items-center justify-center text-xs transition cursor-pointer shrink-0 border border-brand-orange/35 shadow-sm active:scale-90"
+                                  class="edit-pet-btn w-7 h-7 rounded-full bg-brand-orange/15 hover:bg-brand-orange text-brand-orange hover:text-white flex items-center justify-center text-[11px] transition cursor-pointer shrink-0 border border-brand-orange/35 shadow-sm active:scale-90"
                                   title="تعديل بيانات ${escapeAttr(pet.name)}"
                                   aria-label="تعديل بيانات ${escapeAttr(pet.name)}"
                                 >
@@ -244,24 +245,24 @@ export function renderProfileView(): string {
                             </div>
                           </div>
 
-                          <!-- Action buttons (Edit & Delete - Fuller Bubble Style) -->
-                          <div class="flex flex-col gap-2 flex-shrink-0">
+                          <!-- Action buttons (Compact Edit & Delete) -->
+                          <div class="flex flex-col gap-1.5 flex-shrink-0">
                             <button
                               data-edit-pet-id="${escapeAttr(pet.id)}"
-                              class="edit-pet-btn h-11 px-3 sm:px-4 rounded-full bg-brand-orange/15 hover:bg-brand-orange text-brand-orange hover:text-white flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-black transition cursor-pointer active:scale-95 font-baloo border-2 border-brand-orange/35 shadow-sm"
+                              class="edit-pet-btn h-9 px-3 rounded-full bg-brand-orange/15 hover:bg-brand-orange text-brand-orange hover:text-white flex items-center justify-center gap-1.5 text-xs font-black transition cursor-pointer active:scale-95 font-baloo border border-brand-orange/35 shadow-sm"
                               title="تعديل بيانات الأليف"
                               type="button"
                             >
-                              <i class="fa-solid fa-pen text-xs"></i>
+                              <i class="fa-solid fa-pen text-[11px]"></i>
                               <span>تعديل</span>
                             </button>
                             <button
                               data-delete-pet-id="${escapeAttr(pet.id)}"
-                              class="delete-pet-btn h-11 px-3 sm:px-4 rounded-full bg-brand-cream/90 dark:bg-[#342A24] border-2 border-brand-peachBorder text-brand-subtleGray dark:text-[#D1C7BD] flex items-center justify-center gap-1.5 text-xs sm:text-sm font-black hover:bg-brand-peachBorder/50 hover:text-brand-dark transition cursor-pointer active:scale-95 shadow-sm"
+                              class="delete-pet-btn h-9 px-3 rounded-full bg-brand-cream/90 dark:bg-[#342A24] border border-brand-peachBorder text-brand-subtleGray dark:text-[#D1C7BD] flex items-center justify-center gap-1.5 text-xs font-black hover:bg-brand-peachBorder/50 hover:text-brand-dark transition cursor-pointer active:scale-95 shadow-sm"
                               title="حذف الأليف"
                               type="button"
                             >
-                              <i class="fa-solid fa-trash text-xs"></i>
+                              <i class="fa-solid fa-trash text-[11px]"></i>
                               <span>حذف</span>
                             </button>
                           </div>
@@ -293,15 +294,15 @@ export function renderProfileView(): string {
                             : ''
                         }
 
-                        <!-- Status Switcher for Pet (Bubble Pills) -->
-                        <div class="grid grid-cols-3 gap-1.5 sm:gap-2.5 pt-3 border-t border-brand-peachBorder/50 dark:border-warm-darkBorder text-xs sm:text-sm font-black font-baloo">
+                        <!-- Status Switcher for Pet (Compact Bubble Pills) -->
+                        <div class="grid grid-cols-3 gap-1.5 sm:gap-2 pt-2.5 border-t border-brand-peachBorder/50 dark:border-warm-darkBorder text-[11px] sm:text-xs font-black font-baloo">
                           <button
                             data-pet-id="${escapeAttr(pet.id)}"
                             data-target-status="mating"
-                            class="pet-status-toggle-btn min-w-0 h-11 py-2.5 px-1.5 sm:px-3 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
+                            class="pet-status-toggle-btn min-w-0 h-9 py-1.5 px-1.5 sm:px-2.5 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
                               pet.status === 'mating'
                                 ? 'bg-brand-orange text-white shadow-soft'
-                                : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark/85 dark:text-[#D1C7BD] hover:border-brand-orange/60 hover:bg-[#fff5ea]'
+                                : 'bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark/85 dark:text-[#D1C7BD] hover:border-brand-orange/60 hover:bg-[#fff5ea]'
                             }"
                             type="button"
                           >
@@ -310,10 +311,10 @@ export function renderProfileView(): string {
                           <button
                             data-pet-id="${escapeAttr(pet.id)}"
                             data-target-status="adoption"
-                            class="pet-status-toggle-btn min-w-0 h-11 py-2.5 px-1.5 sm:px-3 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
+                            class="pet-status-toggle-btn min-w-0 h-9 py-1.5 px-1.5 sm:px-2.5 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
                               pet.status === 'adoption'
                                 ? 'bg-emerald-600 text-white shadow-soft'
-                                : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark/85 dark:text-[#D1C7BD] hover:border-emerald-500/60 hover:bg-emerald-50/40'
+                                : 'bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark/85 dark:text-[#D1C7BD] hover:border-emerald-500/60 hover:bg-emerald-50/40'
                             }"
                             type="button"
                           >
@@ -322,10 +323,10 @@ export function renderProfileView(): string {
                           <button
                             data-pet-id="${escapeAttr(pet.id)}"
                             data-target-status="not_available"
-                            class="pet-status-toggle-btn min-w-0 h-11 py-2.5 px-1.5 sm:px-3 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
+                            class="pet-status-toggle-btn min-w-0 h-9 py-1.5 px-1.5 sm:px-2.5 rounded-full transition cursor-pointer text-center flex items-center justify-center truncate ${
                               pet.status === 'not_available'
                                 ? 'bg-brand-dark text-white shadow-sm'
-                                : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark/85 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/25'
+                                : 'bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark/85 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/25'
                             }"
                             type="button"
                           >
@@ -358,17 +359,11 @@ export function renderProfileView(): string {
   `;
 }
 
-// Side Drawer: الإعدادات (Bubble Style strictly contained inside drawer frame)
+// Side Drawer: الإعدادات (Compact Bubble Style strictly contained inside drawer frame)
 function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string {
   if (!state.isSettingsOpen()) return '';
   const notificationsEnabled = state.getNotificationsEnabled();
   const showPhone = state.getShowPhoneInProfile();
-  const updateState = state.getUpdateState();
-  const updateResult = updateState.result;
-  const activeBundleVersion =
-    updateResult.currentBundleVersion || APP_VERSION_INFO.appVersion;
-  const hasOtaBundleDiff =
-    activeBundleVersion !== APP_VERSION_INFO.appVersion;
 
   return `
     <div id="profile-drawer-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
@@ -381,18 +376,18 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
           <!-- Subtle Edge Grip Bar inside RTL left border for Swipe-to-Close -->
           <div class="w-1 h-12 rounded-full bg-brand-peachBorder/70 absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none z-20"></div>
           <!-- Drawer Header -->
-          <div class="shrink-0 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
-            <div class="flex items-center justify-between p-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/80 shadow-sm">
+          <div class="shrink-0 px-4 pt-[max(0.85rem,env(safe-area-inset-top))] pb-2.5">
+            <div class="flex items-center justify-between p-3 rounded-[24px] bg-white/95 border-2 border-brand-peachBorder/80 shadow-sm">
               <div class="flex items-center gap-2.5">
-                <div class="w-10 h-10 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
-                  <span class="material-symbols-outlined text-2xl">settings</span>
+                <div class="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-xl">settings</span>
                 </div>
-                <h2 class="text-xl font-black font-baloo text-brand-dark m-0">الإعدادات</h2>
+                <h2 class="text-lg font-black font-baloo text-brand-dark m-0">الإعدادات</h2>
               </div>
               
               <button 
                 id="close-profile-drawer-btn" 
-                class="w-10 h-10 rounded-full bg-brand-cream border-2 border-brand-peachBorder text-brand-dark flex items-center justify-center hover:bg-brand-orange hover:text-white hover:border-brand-orange transition cursor-pointer active:scale-90 shadow-sm"
+                class="w-9 h-9 rounded-full bg-brand-cream border-2 border-brand-peachBorder text-brand-dark flex items-center justify-center hover:bg-brand-orange hover:text-white hover:border-brand-orange transition cursor-pointer active:scale-90 shadow-sm"
                 aria-label="إغلاق الإعدادات"
                 type="button"
               >
@@ -401,83 +396,83 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
             </div>
           </div>
 
-          <!-- Inner Scrollable Drawer Items List (no-scrollbar avoids rectangular track protruding past corners) -->
-          <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar px-4 py-1 space-y-3">
+          <!-- Inner Scrollable Drawer Items List -->
+          <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar px-4 py-1 space-y-2">
             
             <!-- 1. المحفوظات -->
             <button 
               id="drawer-saved-pets-btn" 
-              class="w-full flex items-center justify-between px-4 py-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
+              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
               type="button"
             >
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-full bg-red-500/15 text-red-500 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform border border-red-200/70">
-                  <i class="fa-solid fa-heart text-base"></i>
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-full bg-red-500/15 text-red-500 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform border border-red-200/70">
+                  <i class="fa-solid fa-heart text-sm"></i>
                 </div>
                 <div class="min-w-0">
-                  <span class="text-sm font-black font-baloo text-brand-dark block">المحفوظات</span>
+                  <span class="text-sm font-black font-baloo text-brand-dark block leading-tight">المحفوظات</span>
                   <span class="text-[11px] font-bold text-brand-subtleGray block truncate">الحيوانات والخدمات المحفوظة</span>
                 </div>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <span class="px-3 py-1 rounded-full bg-red-500/15 text-red-500 text-xs font-black font-baloo">
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span class="px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-500 text-xs font-black font-baloo">
                   ${state.getSavedPets().length}
                 </span>
-                <i class="fa-solid fa-chevron-left text-xs text-brand-subtleGray group-hover:text-brand-orange transition"></i>
+                <i class="fa-solid fa-chevron-left text-[11px] text-brand-subtleGray group-hover:text-brand-orange transition"></i>
               </div>
             </button>
 
             <!-- 2. الحسابات المحظورة -->
             <button 
               data-drawer-action="blocked" 
-              class="drawer-item-btn w-full flex items-center justify-between px-4 py-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
+              class="drawer-item-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
               type="button"
             >
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-full bg-red-500/15 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform border border-red-200/70">
-                  <span class="material-symbols-outlined text-xl">block</span>
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-full bg-red-500/15 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform border border-red-200/70">
+                  <span class="material-symbols-outlined text-lg">block</span>
                 </div>
                 <div class="min-w-0">
-                  <span class="text-sm font-black font-baloo text-brand-dark block">الحسابات المحظورة</span>
+                  <span class="text-sm font-black font-baloo text-brand-dark block leading-tight">الحسابات المحظورة</span>
                   <span class="text-[11px] font-bold text-brand-subtleGray block truncate">إدارة الحسابات وقائمة الحظر</span>
                 </div>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
+              <div class="flex items-center gap-1.5 shrink-0">
                 ${
                   state.getBlockedUsers().length > 0
-                    ? `<span class="px-3 py-1 rounded-full bg-red-100 text-red-600 text-xs font-black font-baloo">${state.getBlockedUsers().length}</span>`
+                    ? `<span class="px-2.5 py-0.5 rounded-full bg-red-100 text-red-600 text-xs font-black font-baloo">${state.getBlockedUsers().length}</span>`
                     : ''
                 }
-                <i class="fa-solid fa-chevron-left text-xs text-brand-subtleGray group-hover:text-brand-orange transition"></i>
+                <i class="fa-solid fa-chevron-left text-[11px] text-brand-subtleGray group-hover:text-brand-orange transition"></i>
               </div>
             </button>
 
             <!-- 3. اتصل بنا -->
             <button 
               id="drawer-contact-us-btn" 
-              class="w-full flex items-center justify-between px-4 py-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
+              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
               type="button"
             >
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform border border-brand-peachBorder/80">
-                  <span class="material-symbols-outlined text-xl">call</span>
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform border border-brand-peachBorder/80">
+                  <span class="material-symbols-outlined text-lg">call</span>
                 </div>
                 <div class="min-w-0">
-                  <span class="text-sm font-black font-baloo text-brand-dark block">اتصل بنا</span>
+                  <span class="text-sm font-black font-baloo text-brand-dark block leading-tight">اتصل بنا</span>
                   <span class="text-[11px] font-bold text-brand-subtleGray block truncate">الدعم الفني واستفسارات المستخدمين</span>
                 </div>
               </div>
-              <i class="fa-solid fa-chevron-left text-xs text-brand-subtleGray group-hover:text-brand-orange transition"></i>
+              <i class="fa-solid fa-chevron-left text-[11px] text-brand-subtleGray group-hover:text-brand-orange transition"></i>
             </button>
 
             <!-- 4. الإشعارات -->
-            <div class="px-4 py-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/80 shadow-sm flex items-center justify-between gap-2.5">
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-full ${notificationsEnabled ? 'bg-emerald-500/15 text-emerald-600 border-emerald-200' : 'bg-brand-orange/15 text-brand-orange border-brand-peachBorder/80'} border flex items-center justify-center shrink-0">
-                  <span class="material-symbols-outlined text-xl">notifications</span>
+            <div class="px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/80 shadow-sm flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-full ${notificationsEnabled ? 'bg-emerald-500/15 text-emerald-600 border-emerald-200' : 'bg-brand-orange/15 text-brand-orange border-brand-peachBorder/80'} border flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-lg">notifications</span>
                 </div>
                 <div class="min-w-0">
-                  <span class="text-sm font-black font-baloo text-brand-dark block">الإشعارات</span>
+                  <span class="text-sm font-black font-baloo text-brand-dark block leading-tight">الإشعارات</span>
                   <span class="text-[11px] font-bold text-brand-subtleGray block truncate" id="notifications-status-text">
                     ${notificationsEnabled ? 'الإشعارات مفعلة' : 'الإشعارات متوقفة'}
                   </span>
@@ -490,27 +485,27 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                 role="switch"
                 aria-checked="${notificationsEnabled ? 'true' : 'false'}"
                 aria-label="تبديل الإشعارات"
-                class="w-14 h-8 rounded-full p-1 transition-colors duration-200 relative shrink-0 cursor-pointer shadow-inner overflow-hidden ${notificationsEnabled ? 'bg-emerald-500' : 'bg-gray-300'}"
+                class="w-12 h-7 rounded-full p-1 transition-colors duration-200 relative shrink-0 cursor-pointer shadow-inner overflow-hidden ${notificationsEnabled ? 'bg-emerald-500' : 'bg-gray-300'}"
               >
-                <div class="w-6 h-6 rounded-full bg-white shadow-md transform transition-transform duration-200 ${notificationsEnabled ? 'translate-x-0' : '-translate-x-6'}"></div>
+                <div class="w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${notificationsEnabled ? 'translate-x-0' : '-translate-x-5'}"></div>
               </button>
             </div>
 
             <!-- 4.1 الخصوصية: إظهار رقم الهاتف في الملف الشخصي (مغلق افتراضياً) -->
-            <div class="pt-1.5 pb-1 space-y-2.5">
-              <span class="inline-flex items-center px-3 py-1 rounded-full bg-white/90 border border-brand-peachBorder text-xs font-black text-brand-subtleGray font-baloo">
+            <div class="pt-1 pb-0.5 space-y-2">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/90 border border-brand-peachBorder text-[11px] font-black text-brand-subtleGray font-baloo">
                 الخصوصية
               </span>
-              <div class="px-4 py-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/85 flex items-center justify-between gap-2.5 shadow-sm">
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-11 h-11 rounded-full ${showPhone ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-200' : 'bg-brand-orange/15 text-brand-orange border border-brand-peachBorder/80'} flex items-center justify-center shrink-0">
-                    <span class="material-symbols-outlined text-xl">${showPhone ? 'visibility' : 'visibility_off'}</span>
+              <div class="px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/85 flex items-center justify-between gap-2 shadow-sm">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-9 h-9 rounded-full ${showPhone ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-200' : 'bg-brand-orange/15 text-brand-orange border border-brand-peachBorder/80'} flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-lg">${showPhone ? 'visibility' : 'visibility_off'}</span>
                   </div>
                   <div class="min-w-0">
-                    <span class="text-xs sm:text-sm font-black font-baloo text-brand-dark block leading-snug">
+                    <span class="text-xs font-black font-baloo text-brand-dark block leading-snug">
                       إظهار رقم الهاتف في الملف الشخصي
                     </span>
-                    <span class="text-[11px] font-bold text-brand-subtleGray block leading-snug mt-0.5" id="show-phone-privacy-status-text">
+                    <span class="text-[10px] font-bold text-brand-subtleGray block leading-snug mt-0.5" id="show-phone-privacy-status-text">
                       ${
                         showPhone
                           ? 'مفعل • رقم الهاتف ظاهر في ملفات حيواناتك والمحادثات'
@@ -525,12 +520,12 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                   role="switch"
                   aria-checked="${showPhone ? 'true' : 'false'}"
                   aria-label="إظهار رقم الهاتف في الملف الشخصي"
-                  class="w-14 h-8 rounded-full p-1 transition-colors duration-200 relative shrink-0 cursor-pointer shadow-inner overflow-hidden ${
+                  class="w-12 h-7 rounded-full p-1 transition-colors duration-200 relative shrink-0 cursor-pointer shadow-inner overflow-hidden ${
                     showPhone ? 'bg-emerald-500' : 'bg-gray-300'
                   }"
                 >
-                  <div class="w-6 h-6 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
-                    showPhone ? 'translate-x-0' : '-translate-x-6'
+                  <div class="w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                    showPhone ? 'translate-x-0' : '-translate-x-5'
                   }"></div>
                 </button>
               </div>
@@ -539,42 +534,42 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
             <!-- 5. سياسة الخصوصية -->
             <button 
               data-drawer-action="privacy" 
-              class="drawer-item-btn w-full flex items-center justify-between px-4 py-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
+              class="drawer-item-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
               type="button"
             >
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform border border-brand-peachBorder/80">
-                  <span class="material-symbols-outlined text-xl">shield</span>
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform border border-brand-peachBorder/80">
+                  <span class="material-symbols-outlined text-lg">shield</span>
                 </div>
                 <div class="min-w-0">
-                  <span class="text-sm font-black font-baloo text-brand-dark block">سياسة الخصوصية</span>
+                  <span class="text-sm font-black font-baloo text-brand-dark block leading-tight">سياسة الخصوصية</span>
                   <span class="text-[11px] font-bold text-brand-subtleGray block truncate">حماية وأمان بياناتك وبيانات أليفك</span>
                 </div>
               </div>
-              <i class="fa-solid fa-chevron-left text-xs text-brand-subtleGray group-hover:text-brand-orange transition"></i>
+              <i class="fa-solid fa-chevron-left text-[11px] text-brand-subtleGray group-hover:text-brand-orange transition"></i>
             </button>
 
             <!-- 6. الشروط والأحكام -->
             <button 
               data-drawer-action="terms" 
-              class="drawer-item-btn w-full flex items-center justify-between px-4 py-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
+              class="drawer-item-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/80 hover:border-brand-orange/70 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
               type="button"
             >
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform border border-brand-peachBorder/80">
-                  <span class="material-symbols-outlined text-xl">description</span>
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform border border-brand-peachBorder/80">
+                  <span class="material-symbols-outlined text-lg">description</span>
                 </div>
                 <div class="min-w-0">
-                  <span class="text-sm font-black font-baloo text-brand-dark block">الشروط والأحكام</span>
+                  <span class="text-sm font-black font-baloo text-brand-dark block leading-tight">الشروط والأحكام</span>
                   <span class="text-[11px] font-bold text-brand-subtleGray block truncate">ضوابط التزاوج والتبني والتعامل</span>
                 </div>
               </div>
-              <i class="fa-solid fa-chevron-left text-xs text-brand-subtleGray group-hover:text-brand-orange transition"></i>
+              <i class="fa-solid fa-chevron-left text-[11px] text-brand-subtleGray group-hover:text-brand-orange transition"></i>
             </button>
 
             <!-- Independent Section: الإنقاذ والتبرعات -->
-            <div class="pt-3 pb-2 border-t-2 border-brand-peachBorder/50 space-y-2.5">
-              <span class="inline-flex items-center px-3 py-1 rounded-full bg-white/90 border border-brand-peachBorder text-xs font-black text-brand-subtleGray font-baloo">
+            <div class="pt-2 pb-1 border-t-2 border-brand-peachBorder/50 space-y-2">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/90 border border-brand-peachBorder text-[11px] font-black text-brand-subtleGray font-baloo">
                 أقسام إضافية
               </span>
               <button
@@ -582,19 +577,19 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                 type="button"
                 disabled
                 aria-disabled="true"
-                class="w-full flex items-center justify-between px-4 py-3.5 rounded-[28px] bg-white/75 border-2 border-brand-peachBorder/75 opacity-85 cursor-not-allowed text-right select-none shadow-sm"
+                class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-[22px] bg-white/75 border-2 border-brand-peachBorder/75 opacity-85 cursor-not-allowed text-right select-none shadow-sm"
               >
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-11 h-11 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 border border-amber-200/70">
-                    <i class="fa-solid fa-hand-holding-heart text-base"></i>
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-9 h-9 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 border border-amber-200/70">
+                    <i class="fa-solid fa-hand-holding-heart text-sm"></i>
                   </div>
                   <div class="min-w-0">
-                    <span class="text-sm font-black font-baloo text-brand-dark block truncate">الإنقاذ والتبرعات</span>
+                    <span class="text-sm font-black font-baloo text-brand-dark block truncate leading-tight">الإنقاذ والتبرعات</span>
                     <span class="text-[11px] font-bold text-brand-subtleGray block truncate">مقفول حالياً • متاح قريباً</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                  <span class="px-3 py-1 rounded-full bg-brand-cream border border-brand-peachBorder text-[11px] font-black text-brand-orange font-baloo shadow-sm">
+                  <span class="px-2.5 py-0.5 rounded-full bg-brand-cream border border-brand-peachBorder text-[10px] font-black text-brand-orange font-baloo shadow-sm">
                     قريباً
                   </span>
                   <span class="text-xs text-amber-500 font-bold" aria-hidden="true">🔒</span>
@@ -602,144 +597,35 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
               </button>
             </div>
 
-            <!-- 6.5 التحديثات والإصدار -->
-            <div class="pt-3 pb-1 border-t-2 border-brand-peachBorder/50 space-y-2.5">
-              <div class="flex items-center justify-between gap-2">
-                <span class="inline-flex items-center px-3 py-1 rounded-full bg-white/90 border border-brand-peachBorder text-xs font-black text-brand-subtleGray font-baloo">
-                  التحديثات والإصدار
-                </span>
-                <span class="px-2.5 py-0.5 rounded-full bg-brand-orange/10 border border-brand-orange/30 text-[11px] font-black text-brand-orange font-baloo">
-                  ${APP_VERSION_INFO.channel === 'testing' ? 'قناة الاختبار' : 'الإصدار المستقر'}
-                </span>
-              </div>
-
-              <div class="p-3.5 rounded-[28px] bg-white/95 border-2 border-brand-peachBorder/85 space-y-2.5 shadow-sm">
-                <div class="flex items-center justify-between gap-2 text-xs">
-                  <span class="font-bold text-brand-subtleGray">إصدار التطبيق</span>
-                  <span class="font-mono font-black text-brand-dark" dir="ltr">
-                    v${escapeHtml(APP_VERSION_INFO.appVersion)} (${APP_VERSION_INFO.buildNumber})
-                  </span>
-                </div>
-                <div class="flex items-center justify-between gap-2 text-xs">
-                  <span class="font-bold text-brand-subtleGray">حزمة الواجهة</span>
-                  <span class="font-mono font-black ${hasOtaBundleDiff ? 'text-emerald-700' : 'text-brand-dark'}" dir="ltr">
-                    v${escapeHtml(activeBundleVersion)}${hasOtaBundleDiff ? ' (OTA)' : ''}
-                  </span>
-                </div>
-
-                ${
-                  updateState.feedback
-                    ? `
-                      <div
-                        id="drawer-update-feedback"
-                        class="rounded-2xl px-3 py-2 text-[11px] font-bold leading-relaxed border ${
-                          updateState.feedback.kind === 'success'
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                            : updateState.feedback.kind === 'error'
-                            ? 'bg-rose-50 border-rose-200 text-rose-700'
-                            : 'bg-[#fff5ea] border-brand-peachBorder text-brand-dark'
-                        }"
-                      >
-                        ${escapeHtml(updateState.feedback.message)}
-                      </div>
-                    `
-                    : ''
-                }
-
-                <button
-                  id="drawer-check-updates-btn"
-                  type="button"
-                  ${updateState.isChecking || updateState.isApplyingOta ? 'disabled' : ''}
-                  class="w-full h-11 px-4 rounded-full bg-[#fff5ea] hover:bg-brand-orange hover:text-white border-2 border-brand-orange/40 text-brand-orange text-xs font-black transition font-baloo flex items-center justify-center gap-2 active:scale-95 ${
-                    updateState.isChecking ? 'opacity-70 cursor-wait' : 'cursor-pointer'
-                  }"
-                >
-                  <i class="fa-solid ${updateState.isChecking ? 'fa-spinner fa-spin' : 'fa-arrows-rotate'} text-xs"></i>
-                  <span>${updateState.isChecking ? 'جاري التحقق...' : 'التحقق من التحديثات'}</span>
-                </button>
-
-                ${
-                  updateState.isOtaStagedForRestart
-                    ? `
-                      <button
-                        id="drawer-restart-ota-btn"
-                        type="button"
-                        class="w-full h-11 px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-soft transition font-baloo flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                      >
-                        <i class="fa-solid fa-rotate text-xs"></i>
-                        <span>إعادة التشغيل لتفعيل التحديث (${escapeHtml(updateState.stagedOtaVersion || '')})</span>
-                      </button>
-                    `
-                    : updateResult.otaUpdate
-                    ? `
-                      <button
-                        id="drawer-apply-ota-btn"
-                        type="button"
-                        ${updateState.isApplyingOta ? 'disabled' : ''}
-                        class="w-full h-11 px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-soft transition font-baloo flex items-center justify-center gap-2 active:scale-95 ${
-                          updateState.isApplyingOta ? 'opacity-70 cursor-wait' : 'cursor-pointer'
-                        }"
-                      >
-                        <i class="fa-solid ${updateState.isApplyingOta ? 'fa-spinner fa-spin' : 'fa-bolt'} text-xs"></i>
-                        <span>${
-                          updateState.isApplyingOta
-                            ? 'جاري تنزيل وتجهيز التحديث...'
-                            : `تنزيل وتجهيز التحديث (${escapeHtml(updateResult.otaUpdate.version)})`
-                        }</span>
-                      </button>
-                    `
-                    : ''
-                }
-
-                ${
-                  updateResult.apkUpdate
-                    ? `
-                      <button
-                        id="drawer-open-apk-modal-btn"
-                        type="button"
-                        class="w-full h-11 px-4 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white text-xs font-black shadow-soft transition font-baloo flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                      >
-                        <i class="fa-solid fa-download text-xs"></i>
-                        <span>إصدار APK جديد (${escapeHtml(updateResult.apkUpdate.latestVersion)})</span>
-                      </button>
-                    `
-                    : ''
-                }
-              </div>
-            </div>
-
             <!-- 7. تسجيل الخروج -->
-            <div class="pt-3 pb-2 border-t-2 border-brand-peachBorder/50">
+            <div class="pt-2 pb-2 border-t-2 border-brand-peachBorder/50">
               <button
                 id="drawer-sign-out-btn"
                 type="button"
-                class="w-full flex items-center justify-between px-4 py-3.5 rounded-[28px] bg-white/95 border-2 border-rose-200 hover:border-rose-400 hover:bg-rose-50/50 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
+                class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-rose-200 hover:border-rose-400 hover:bg-rose-50/50 hover:shadow-soft transition-all cursor-pointer group text-right shadow-sm active:scale-[0.98]"
               >
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-11 h-11 rounded-full bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform border border-rose-200/80">
-                    <i class="fa-solid fa-right-from-bracket text-base"></i>
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-9 h-9 rounded-full bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform border border-rose-200/80">
+                    <i class="fa-solid fa-right-from-bracket text-sm"></i>
                   </div>
                   <div class="min-w-0">
-                    <span class="text-sm font-black font-baloo text-rose-700 block">تسجيل الخروج</span>
+                    <span class="text-sm font-black font-baloo text-rose-700 block leading-tight">تسجيل الخروج</span>
                     <span class="text-[11px] font-bold text-brand-subtleGray block truncate">
                       ${user.email ? escapeHtml(user.email) : 'الخروج من حسابك الحالي'}
                     </span>
                   </div>
                 </div>
-                <i class="fa-solid fa-chevron-left text-xs text-rose-400 group-hover:text-rose-600 transition"></i>
+                <i class="fa-solid fa-chevron-left text-[11px] text-rose-400 group-hover:text-rose-600 transition"></i>
               </button>
             </div>
           </div>
 
           <!-- Footer cleanly fitted inside drawer edges -->
-          <div class="shrink-0 px-4 pt-2.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <div class="w-full py-3 px-4 rounded-[24px] bg-white/95 border-2 border-brand-peachBorder/80 text-center flex items-center justify-between shadow-sm">
+          <div class="shrink-0 px-4 pt-2 pb-[max(0.85rem,env(safe-area-inset-bottom))]">
+            <div class="w-full py-2.5 px-4 rounded-[20px] bg-white/95 border-2 border-brand-peachBorder/80 text-center flex items-center justify-center shadow-sm">
               <p class="text-xs font-black text-brand-dark m-0 font-baloo" dir="ltr">
                 @Meow2026
               </p>
-              <span class="text-[11px] font-mono font-bold text-brand-orange block" dir="ltr">
-                v${escapeHtml(APP_VERSION_INFO.appVersion)} (${APP_VERSION_INFO.buildNumber})
-              </span>
             </div>
           </div>
 
@@ -810,9 +696,9 @@ function renderActiveDrawerModal(user: ReturnType<typeof state.getUser>): string
                         <div class="flex items-center justify-between gap-2.5 p-3.5 rounded-[26px] bg-white border-2 border-brand-peachBorder/80 shadow-sm">
                           <div class="flex items-center gap-2.5 min-w-0">
                             ${
-                              b.userAvatar
-                                ? `<img src="${escapeAttr(sanitizeImageSrc(b.userAvatar, SAFE_FALLBACK_AVATAR_SVG))}" alt="${escapeAttr(b.userName)}" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shrink-0" />`
-                                : `<div class="w-11 h-11 rounded-full bg-red-500/15 text-red-600 flex items-center justify-center shrink-0"><i class="fa-solid fa-user-slash text-sm"></i></div>`
+                                b.userAvatar
+                                  ? `<img src="${escapeAttr(sanitizeImageSrc(b.userAvatar, SAFE_FALLBACK_AVATAR_SVG))}" alt="${escapeAttr(b.userName)}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${SAFE_FALLBACK_AVATAR_SVG}'" class="w-11 h-11 rounded-full object-cover border-2 border-brand-peachBorder shrink-0" />`
+                                  : `<div class="w-11 h-11 rounded-full bg-red-500/15 text-red-600 flex items-center justify-center shrink-0"><i class="fa-solid fa-user-slash text-sm"></i></div>`
                             }
                             <div class="min-w-0 text-right">
                               <p class="text-sm font-black text-brand-dark truncate m-0 font-baloo">${escapeHtml(b.userName)}</p>
@@ -1088,33 +974,6 @@ export function attachProfileEvents(): void {
     contactUsBtn.addEventListener('click', () => {
       state.setSettingsOpen(false);
       state.openContactView();
-    });
-  }
-
-  // Updates & OTA actions in Drawer
-  const checkUpdatesBtn = document.getElementById('drawer-check-updates-btn');
-  if (checkUpdatesBtn) {
-    checkUpdatesBtn.addEventListener('click', () => {
-      void state.checkForAppUpdates(true);
-    });
-  }
-  const applyOtaBtn = document.getElementById('drawer-apply-ota-btn');
-  if (applyOtaBtn) {
-    applyOtaBtn.addEventListener('click', () => {
-      void state.applyOtaUpdateNow();
-    });
-  }
-  const restartOtaBtn = document.getElementById('drawer-restart-ota-btn');
-  if (restartOtaBtn) {
-    restartOtaBtn.addEventListener('click', () => {
-      void state.restartForStagedOtaUpdate();
-    });
-  }
-  const openApkModalBtn = document.getElementById('drawer-open-apk-modal-btn');
-  if (openApkModalBtn) {
-    openApkModalBtn.addEventListener('click', () => {
-      state.setSettingsOpen(false);
-      void state.checkForAppUpdates(true);
     });
   }
 

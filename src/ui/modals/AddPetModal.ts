@@ -8,7 +8,7 @@ import {
   sanitizeImageSrc,
   validateUploadedFile,
 } from '../../utils/sanitize.ts';
-import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
+import { attachSheetDragToDismiss, showMobileToast } from '../../utils/touchGestures.ts';
 
 function getPetNameTextColorClass(gender: PetGender | null): string {
   if (gender === 'male') return 'text-[#60A5FA]';
@@ -784,8 +784,12 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
 
   // 7. Submit handler (exact Onboarding Step 6 validation + zero data loss on Edit)
   if (form) {
-    form.addEventListener('submit', (e) => {
+    let isSubmittingPet = false;
+    const submitBtn = document.getElementById('modal-btn-pet-submit') as HTMLButtonElement | null;
+
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isSubmittingPet) return;
 
       const name = (petNameInput?.value || '').trim();
       const color = (petColorInput?.value || '').trim();
@@ -869,53 +873,71 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
           : 'not_vaccinated';
 
       const currentUser = state.getUser();
+      isSubmittingPet = true;
+      const originalBtnHtml = submitBtn?.innerHTML || '';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-70', 'cursor-wait');
+        submitBtn.innerHTML = '<span>جاري حفظ البيانات...</span>';
+      }
 
-      if (petToEdit) {
-        // Edit mode: preserve untouched geo, status, adoption metadata, and healthStatus
-        state.savePet({
-          id: petToEdit.id,
-          name,
-          species: currentSpecies!,
-          breed,
-          hybridBreed: hybridBreed || undefined,
-          color,
-          gender: currentGender!,
-          ageYears,
-          ageMonths,
-          vaccinationStatus: resolvedVaccination,
-          personality: Array.from(selectedTraits),
-          healthNotes: notes,
-          photos: validPhotos,
-        });
-      } else {
-        // Add mode: inherits user's geo hierarchy and starts in 'mating' like Onboarding Step 6
-        state.savePet({
-          name,
-          species: currentSpecies!,
-          breed,
-          hybridBreed: hybridBreed || undefined,
-          color,
-          gender: currentGender!,
-          ageYears,
-          ageMonths,
-          area: currentUser.village || currentUser.city || currentUser.governorate || 'القاهرة',
-          city: currentUser.city || currentUser.governorate || 'القاهرة',
-          governorate: currentUser.governorate || 'القاهرة',
-          markaz: currentUser.markaz,
-          village: currentUser.village,
-          governorateId: currentUser.governorateId,
-          markazId: currentUser.markazId,
-          cityId: currentUser.cityId,
-          villageId: currentUser.villageId,
-          locationId: currentUser.locationId,
-          lat: currentUser.lat,
-          lng: currentUser.lng,
-          vaccinationStatus: resolvedVaccination,
-          personality: Array.from(selectedTraits),
-          healthNotes: notes,
-          photos: validPhotos,
-          status: 'mating',
-        });
+      try {
+        const res = petToEdit
+          ? await state.savePetAsync({
+              id: petToEdit.id,
+              name,
+              species: currentSpecies!,
+              breed,
+              hybridBreed: hybridBreed || undefined,
+              color,
+              gender: currentGender!,
+              ageYears,
+              ageMonths,
+              vaccinationStatus: resolvedVaccination,
+              personality: Array.from(selectedTraits),
+              healthNotes: notes,
+              photos: validPhotos,
+            })
+          : await state.savePetAsync({
+              name,
+              species: currentSpecies!,
+              breed,
+              hybridBreed: hybridBreed || undefined,
+              color,
+              gender: currentGender!,
+              ageYears,
+              ageMonths,
+              area: currentUser.village || currentUser.city || currentUser.governorate || 'القاهرة',
+              city: currentUser.city || currentUser.governorate || 'القاهرة',
+              governorate: currentUser.governorate || 'القاهرة',
+              markaz: currentUser.markaz,
+              village: currentUser.village,
+              governorateId: currentUser.governorateId,
+              markazId: currentUser.markazId,
+              cityId: currentUser.cityId,
+              villageId: currentUser.villageId,
+              locationId: currentUser.locationId,
+              lat: currentUser.lat,
+              lng: currentUser.lng,
+              vaccinationStatus: resolvedVaccination,
+              personality: Array.from(selectedTraits),
+              healthNotes: notes,
+              photos: validPhotos,
+              status: 'mating',
+            });
+
+        if (!res.success) {
+          showMobileToast(res.errorMessage || 'تعذر حفظ بيانات الأليف في قاعدة البيانات', 'danger', 2600);
+        } else {
+          showMobileToast(petToEdit ? 'تم حفظ تعديلات الأليف' : 'تم إضافة الأليف بنجاح', 'success', 1800);
+        }
+      } finally {
+        isSubmittingPet = false;
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.classList.remove('opacity-70', 'cursor-wait');
+          if (originalBtnHtml) submitBtn.innerHTML = originalBtnHtml;
+        }
       }
     });
   }
