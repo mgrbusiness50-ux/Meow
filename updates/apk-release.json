@@ -1,0 +1,10 @@
+{
+  "latestVersion": "1.2.0",
+  "latestBuildNumber": 2,
+  "minSupportedVersion": "1.2.0",
+  "apkUrl": "https://github.com/mgrbusiness50-ux/Meow/releases/download/v1.2.0-b2/meow-v1.2.0-b2-release.apk",
+  "sha256": "25e14696317a18e6aba2275606826c6fbc9c76a69bd8aa1a86b7cf76fcc740f8",
+  "releaseNotes": "إصدار الإنتاج المستقر لتطبيق Meow مع التحديثات المباشرة وتحسينات الأمان والأداء.",
+  "mandatory": false,
+  "publishedAt": "2026-11-25T00:54:00Z"
+}
