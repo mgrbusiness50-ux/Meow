@@ -218,7 +218,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                             petId: pet.id,
                             reportTargetType: 'pet',
                             buttonClass:
-                              'w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
+                              'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 opacity-95 hover:opacity-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]',
                             dropdownAlign: 'left',
                           })
                         : ''
@@ -301,7 +301,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                           petId: pet.id,
                           reportTargetType: 'pet',
                           buttonClass:
-                            'w-8 h-8 rounded-full bg-black/55 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/75 transition-all cursor-pointer active:scale-90 shadow-md',
+                            'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 opacity-95 hover:opacity-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]',
                           dropdownAlign: 'left',
                         })
                       : ''

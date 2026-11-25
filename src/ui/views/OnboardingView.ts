@@ -33,8 +33,8 @@ import {
   escapeAttr,
   escapeHtml,
   sanitizeImageSrc,
-  validateUploadedFile,
 } from '../../utils/sanitize.ts';
+import { processImageFileForUpload } from '../../utils/imageUpload.ts';
 
 const SPLASH_LOGO_URL = '/assets/meow-logo.png';
 
@@ -179,6 +179,63 @@ let draftPetAgeMonths = '';
 let draftPetNotes = '';
 const selectedTraits: Set<string> = new Set();
 const uploadedPetPhotos: (string | null)[] = [null, null, null];
+const uploadingPetPhotoSlots: [boolean, boolean, boolean] = [false, false, false];
+const petPhotoSlotErrors: [string, string, string] = ['', '', ''];
+const petPhotoRetryFiles: [File | null, File | null, File | null] = [null, null, null];
+
+export function isOnboardingPetPhotoUploading(): boolean {
+  return uploadingPetPhotoSlots.some(Boolean) || isCompletingOnboarding;
+}
+
+function renderOnboardingSlotInner(idx: number): string {
+  const isLoading = uploadingPetPhotoSlots[idx];
+  const hasError = Boolean(petPhotoSlotErrors[idx]);
+  const photo = uploadedPetPhotos[idx];
+  const isPrimary = idx === 0;
+
+  if (isLoading) {
+    return `
+      <div class="flex flex-col items-center justify-center gap-1 px-1.5 text-center">
+        <i class="fa-solid fa-circle-notch fa-spin text-lg sm:text-xl text-[#e67e22]"></i>
+        <span class="text-[10px] font-black text-[#786555] leading-tight">جاري التجهيز...</span>
+      </div>
+    `;
+  }
+  if (photo) {
+    return `<img src="${escapeAttr(sanitizeImageSrc(photo, SAFE_FALLBACK_PET_SVG))}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`;
+  }
+  return `
+    <div class="flex flex-col items-center justify-center gap-0.5">
+      <span class="text-3xl sm:text-4xl font-black ${
+        hasError ? 'text-rose-500' : isPrimary ? 'text-[#e67e22]' : 'text-[#998b7c]'
+      } group-hover:scale-110 transition-transform">+</span>
+      ${hasError ? '<span class="text-[10px] font-black text-rose-600">فشل الرفع</span>' : ''}
+    </div>
+  `;
+}
+
+function renderOnboardingPhotoErrorsHtml(): string {
+  const items = petPhotoSlotErrors
+    .map((err, idx) => ({ err, idx, canRetry: Boolean(petPhotoRetryFiles[idx]) }))
+    .filter((item) => Boolean(item.err));
+
+  if (items.length === 0) return '';
+
+  return items
+    .map(
+      ({ err, idx, canRetry }) => `
+        <div class="flex items-center justify-between gap-2 rounded-2xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">
+          <span class="leading-relaxed">الصورة ${idx + 1}: ${escapeHtml(err)}</span>
+          ${
+            canRetry
+              ? `<button type="button" data-onboarding-retry-slot="${idx}" class="onboarding-retry-photo-btn shrink-0 px-3 py-1 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-black text-[11px] cursor-pointer active:scale-95 transition">إعادة المحاولة</button>`
+              : ''
+          }
+        </div>
+      `
+    )
+    .join('');
+}
 
 function resetTransientAuthState(opts?: { preserveMessages?: boolean }): void {
   authSubView = 'main';
@@ -234,6 +291,15 @@ function resetTransientFormState(): void {
   uploadedPetPhotos[0] = null;
   uploadedPetPhotos[1] = null;
   uploadedPetPhotos[2] = null;
+  uploadingPetPhotoSlots[0] = false;
+  uploadingPetPhotoSlots[1] = false;
+  uploadingPetPhotoSlots[2] = false;
+  petPhotoSlotErrors[0] = '';
+  petPhotoSlotErrors[1] = '';
+  petPhotoSlotErrors[2] = '';
+  petPhotoRetryFiles[0] = null;
+  petPhotoRetryFiles[1] = null;
+  petPhotoRetryFiles[2] = null;
 }
 
 function syncOnboardingOwnerDraftIfEmpty(): void {
@@ -1593,27 +1659,47 @@ function renderPetDetailsStep(): string {
               ${[0, 1, 2]
                 .map((idx) => {
                   const photo = uploadedPetPhotos[idx];
+                  const isLoading = uploadingPetPhotoSlots[idx];
+                  const hasError = Boolean(petPhotoSlotErrors[idx]);
                   const isPrimary = idx === 0;
                   return `
-                    <label
-                      class="relative flex items-center justify-center aspect-square rounded-2xl sm:rounded-3xl border-2 overflow-hidden ${
-                        isPrimary
+                    <div
+                      data-onboarding-photo-card="${idx}"
+                      class="relative aspect-square rounded-2xl sm:rounded-3xl border-2 overflow-hidden ${
+                        hasError
+                          ? 'border-rose-400 bg-rose-50/70'
+                          : isPrimary
                           ? 'border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5e5]'
                           : 'border-[#d6c7b2] bg-[#fffefc] hover:bg-[#faf6ed]'
-                      } cursor-pointer transition-all shadow-sm group"
+                      } transition-all shadow-sm group"
                     >
-                      <input accept="image/*" class="hidden pet-photo-file-input" data-photo-slot="${idx}" type="file" />
+                      <label class="w-full h-full flex items-center justify-center cursor-pointer">
+                        <input accept="image/*" class="hidden pet-photo-file-input" data-photo-slot="${idx}" type="file" />
+                        <div class="onboarding-photo-slot-preview w-full h-full flex items-center justify-center">
+                          ${renderOnboardingSlotInner(idx)}
+                        </div>
+                      </label>
                       ${
-                        photo
-                          ? `<img src="${escapeAttr(sanitizeImageSrc(photo, SAFE_FALLBACK_PET_SVG))}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`
-                          : `<span class="text-3xl sm:text-4xl font-black ${
-                              isPrimary ? 'text-[#e67e22]' : 'text-[#998b7c]'
-                            } group-hover:scale-110 transition-transform">+</span>`
+                        photo && !isLoading
+                          ? `
+                            <button
+                              type="button"
+                              data-onboarding-clear-slot="${idx}"
+                              class="onboarding-clear-photo-btn absolute top-1.5 left-1.5 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/70 hover:bg-black/85 text-white text-xs sm:text-sm font-black flex items-center justify-center cursor-pointer transition shadow-sm active:scale-90"
+                              aria-label="إزالة الصورة"
+                            >×</button>
+                          `
+                          : ''
                       }
-                    </label>
+                    </div>
                   `;
                 })
                 .join('')}
+            </div>
+            <div id="onboarding-pet-photo-errors" class="space-y-1.5 ${
+              petPhotoSlotErrors.some(Boolean) ? '' : 'hidden'
+            }">
+              ${renderOnboardingPhotoErrorsHtml()}
             </div>
           </div>
 
@@ -2947,7 +3033,120 @@ function attachRemainingOnboardingEvents(): void {
     dogBtn.addEventListener('click', () => updatePetSpeciesUI('dog'));
   }
 
-  // Pet Details: Photo file upload slots
+  // Pet Details: Photo file upload slots with compression, loading, clear & retry
+  const onboardingPhotoErrorsBox = document.getElementById('onboarding-pet-photo-errors');
+
+  const syncOnboardingPhotoErrorsUI = () => {
+    if (!onboardingPhotoErrorsBox) return;
+    const html = renderOnboardingPhotoErrorsHtml();
+    onboardingPhotoErrorsBox.innerHTML = html;
+    if (html) {
+      onboardingPhotoErrorsBox.classList.remove('hidden');
+      onboardingPhotoErrorsBox
+        .querySelectorAll<HTMLButtonElement>('.onboarding-retry-photo-btn')
+        .forEach((retryBtn) => {
+          retryBtn.addEventListener('click', () => {
+            const slotStr = retryBtn.getAttribute('data-onboarding-retry-slot');
+            const slot = slotStr ? parseInt(slotStr, 10) : -1;
+            const retryFile = slot >= 0 && slot <= 2 ? petPhotoRetryFiles[slot] : null;
+            if (!retryFile) return;
+            void handleOnboardingPhotoUpload(slot, retryFile);
+          });
+        });
+    } else {
+      onboardingPhotoErrorsBox.classList.add('hidden');
+    }
+  };
+
+  const renderOnboardingSlotDOM = (slot: number) => {
+    const cardEl = document.querySelector<HTMLElement>(`[data-onboarding-photo-card="${slot}"]`);
+    if (!cardEl) return;
+
+    const isLoading = uploadingPetPhotoSlots[slot];
+    const hasError = Boolean(petPhotoSlotErrors[slot]);
+    const photo = uploadedPetPhotos[slot];
+    const isPrimary = slot === 0;
+
+    cardEl.className = `relative aspect-square rounded-2xl sm:rounded-3xl border-2 overflow-hidden ${
+      hasError
+        ? 'border-rose-400 bg-rose-50/70'
+        : isPrimary
+        ? 'border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5e5]'
+        : 'border-[#d6c7b2] bg-[#fffefc] hover:bg-[#faf6ed]'
+    } transition-all shadow-sm group`;
+
+    const previewEl = cardEl.querySelector<HTMLElement>('.onboarding-photo-slot-preview');
+    if (previewEl) {
+      previewEl.innerHTML = renderOnboardingSlotInner(slot);
+    }
+
+    const existingClear = cardEl.querySelector('.onboarding-clear-photo-btn');
+    if (photo && !isLoading && !existingClear) {
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.setAttribute('data-onboarding-clear-slot', String(slot));
+      clearBtn.className =
+        'onboarding-clear-photo-btn absolute top-1.5 left-1.5 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/70 hover:bg-black/85 text-white text-xs sm:text-sm font-black flex items-center justify-center cursor-pointer transition shadow-sm active:scale-90';
+      clearBtn.setAttribute('aria-label', 'إزالة الصورة');
+      clearBtn.textContent = '×';
+      clearBtn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        uploadedPetPhotos[slot] = null;
+        petPhotoSlotErrors[slot] = '';
+        petPhotoRetryFiles[slot] = null;
+        const inputEl = cardEl.querySelector<HTMLInputElement>('.pet-photo-file-input');
+        if (inputEl) inputEl.value = '';
+        renderOnboardingSlotDOM(slot);
+        syncOnboardingPhotoErrorsUI();
+      });
+      cardEl.appendChild(clearBtn);
+    } else if ((!photo || isLoading) && existingClear) {
+      existingClear.remove();
+    }
+  };
+
+  const handleOnboardingPhotoUpload = async (
+    slot: number,
+    file: File,
+    inputEl?: HTMLInputElement
+  ) => {
+    if (slot < 0 || slot > 2) return;
+    uploadingPetPhotoSlots[slot] = true;
+    petPhotoSlotErrors[slot] = '';
+    petPhotoRetryFiles[slot] = file;
+    renderOnboardingSlotDOM(slot);
+    syncOnboardingPhotoErrorsUI();
+
+    try {
+      const result = await processImageFileForUpload(file);
+      if (!result.success) {
+        petPhotoSlotErrors[slot] = result.errorMessage;
+        if (inputEl) inputEl.value = '';
+        if (petFormError) {
+          petFormError.textContent = result.errorMessage;
+          petFormError.classList.remove('hidden');
+          petFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return;
+      }
+
+      uploadedPetPhotos[slot] = result.dataUrl;
+      petPhotoSlotErrors[slot] = '';
+      petPhotoRetryFiles[slot] = null;
+      if (inputEl) inputEl.value = '';
+      if (petFormError) {
+        petFormError.innerHTML = '';
+        petFormError.classList.add('hidden');
+      }
+      photosGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
+    } finally {
+      uploadingPetPhotoSlots[slot] = false;
+      renderOnboardingSlotDOM(slot);
+      syncOnboardingPhotoErrorsUI();
+    }
+  };
+
   const photoInputs = document.querySelectorAll<HTMLInputElement>('.pet-photo-file-input');
   photoInputs.forEach((input) => {
     input.addEventListener('change', () => {
@@ -2955,50 +3154,28 @@ function attachRemainingOnboardingEvents(): void {
       const slot = slotStr ? parseInt(slotStr, 10) : -1;
       const file = input.files?.[0];
       if (!file || slot < 0 || slot > 2) return;
-
-      const validation = validateUploadedFile(file, 'image');
-      if (!validation.valid) {
-        input.value = '';
-        if (petFormError) {
-          petFormError.textContent =
-            validation.errorMessage || 'ملف الصورة غير مدعوم أو يتجاوز الحد المسموح.';
-          petFormError.classList.remove('hidden');
-          petFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-        return;
-      }
-
-      if (petFormError) {
-        petFormError.innerHTML = '';
-        petFormError.classList.add('hidden');
-      }
-      photosGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        const rawResult = typeof reader.result === 'string' ? reader.result : '';
-        const safeResult = sanitizeImageSrc(rawResult, '');
-        if (!safeResult) return;
-        uploadedPetPhotos[slot] = safeResult;
-        const labelEl = input.closest('label');
-        if (labelEl) {
-          const existingImg = labelEl.querySelector('img');
-          const plusSpan = labelEl.querySelector('span');
-          if (plusSpan) plusSpan.remove();
-          if (existingImg) {
-            existingImg.src = safeResult;
-          } else {
-            const img = document.createElement('img');
-            img.src = safeResult;
-            img.alt = `صورة ${slot + 1}`;
-            img.className = 'w-full h-full object-cover';
-            labelEl.appendChild(img);
-          }
-        }
-      };
-      reader.readAsDataURL(file);
+      void handleOnboardingPhotoUpload(slot, file, input);
     });
   });
+
+  document.querySelectorAll<HTMLButtonElement>('.onboarding-clear-photo-btn').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const slotStr = btn.getAttribute('data-onboarding-clear-slot');
+      const slot = slotStr ? parseInt(slotStr, 10) : -1;
+      if (slot < 0 || slot > 2) return;
+      uploadedPetPhotos[slot] = null;
+      petPhotoSlotErrors[slot] = '';
+      petPhotoRetryFiles[slot] = null;
+      const cardEl = document.querySelector<HTMLElement>(`[data-onboarding-photo-card="${slot}"]`);
+      const inputEl = cardEl?.querySelector<HTMLInputElement>('.pet-photo-file-input');
+      if (inputEl) inputEl.value = '';
+      renderOnboardingSlotDOM(slot);
+      syncOnboardingPhotoErrorsUI();
+    });
+  });
+  syncOnboardingPhotoErrorsUI();
 
   // Pet Details: Age numeric sanitization
   const ageYearsInput = document.getElementById('pet-age-years-input') as HTMLInputElement | null;
@@ -3122,6 +3299,14 @@ function attachRemainingOnboardingEvents(): void {
     petForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (isCompletingOnboarding) return;
+      if (uploadingPetPhotoSlots.some(Boolean)) {
+        if (petFormError) {
+          petFormError.textContent = 'جاري تجهيز الصور المختارة، يرجى الانتظار لحين اكتمال التحميل.';
+          petFormError.classList.remove('hidden');
+          petFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return;
+      }
       const name = (petNameInput?.value || '').trim();
       const color = (petColorInput?.value || '').trim();
       const breed = (breedSelect?.value || '').trim();

@@ -5,7 +5,7 @@ export const SAFE_FALLBACK_PET_SVG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='24' fill='%23FFF5EA'/%3E%3Ccircle cx='60' cy='62' r='26' fill='%23FFE2C5'/%3E%3Ctext x='60' y='71' text-anchor='middle' font-size='32'%3E%F0%9F%90%BE%3C/text%3E%3C/svg%3E";
 
 const SAFE_IMAGE_DATA_URL_RE =
-  /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i;
+  /^data:image\/(?:png|jpeg|jpg|webp|gif|bmp|avif|heic|heif);base64,[A-Za-z0-9+/=\s]+$/i;
 
 const SAFE_AUDIO_DATA_URL_RE =
   /^data:audio\/(?:webm|ogg|mp4|mpeg|mp3|wav|aac);base64,[A-Za-z0-9+/=\s]+$/i;
@@ -105,10 +105,20 @@ const UPLOAD_RULES: Record<
   { maxBytes: number; mimePrefixes: string[]; mimeExact: string[]; labelAr: string }
 > = {
   image: {
-    maxBytes: 8 * 1024 * 1024,
+    maxBytes: 12 * 1024 * 1024,
     mimePrefixes: [],
-    mimeExact: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'],
-    labelAr: 'الصورة (PNG / JPG / WEBP / GIF بحد أقصى 8 ميجابايت)',
+    mimeExact: [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'image/heic',
+      'image/heif',
+      'image/avif',
+      'image/bmp',
+    ],
+    labelAr: 'الصورة (JPG / PNG / WEBP / HEIC بحد أقصى 12 ميجابايت)',
   },
   audio: {
     maxBytes: 10 * 1024 * 1024,
@@ -131,6 +141,8 @@ const UPLOAD_RULES: Record<
   },
 };
 
+const SAFE_IMAGE_EXTENSIONS_RE = /\.(?:jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i;
+
 export function validateUploadedFile(
   file: Pick<File, 'type' | 'size' | 'name'> | null | undefined,
   kind: UploadFileKind
@@ -150,9 +162,13 @@ export function validateUploadedFile(
     };
   }
   const mime = (file.type || '').toLowerCase().trim();
+  const isUnknownMobileMime = mime === '' || mime === 'application/octet-stream';
+  const imageExtensionAllowed =
+    kind === 'image' && isUnknownMobileMime && SAFE_IMAGE_EXTENSIONS_RE.test((file.name || '').trim());
   const mimeAllowed =
     (mime && rules.mimeExact.includes(mime)) ||
-    (mime && rules.mimePrefixes.some((p) => mime.startsWith(p)));
+    (mime && rules.mimePrefixes.some((p) => mime.startsWith(p))) ||
+    imageExtensionAllowed;
 
   if (!mimeAllowed) {
     return {

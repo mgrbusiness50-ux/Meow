@@ -6,9 +6,167 @@ import {
   escapeAttr,
   escapeHtml,
   sanitizeImageSrc,
-  validateUploadedFile,
 } from '../../utils/sanitize.ts';
+import { processImageFileForUpload } from '../../utils/imageUpload.ts';
 import { attachSheetDragToDismiss, showMobileToast } from '../../utils/touchGestures.ts';
+
+interface AddPetModalDraft {
+  key: string | null;
+  species: PetSpecies | null;
+  photos: (string | undefined)[];
+  loadingSlots: [boolean, boolean, boolean];
+  slotErrors: [string, string, string];
+  retryFiles: [File | null, File | null, File | null];
+  name: string;
+  color: string;
+  breed: string;
+  hybridBreed: string;
+  ageYears: string;
+  ageMonths: string;
+  gender: PetGender | null;
+  vaccination: 'yes' | 'no' | 'partial' | null;
+  traits: string[];
+  healthNotes: string;
+  formSaveError: string;
+  isSaving: boolean;
+}
+
+let addPetDraft: AddPetModalDraft = {
+  key: null,
+  species: null,
+  photos: [undefined, undefined, undefined],
+  loadingSlots: [false, false, false],
+  slotErrors: ['', '', ''],
+  retryFiles: [null, null, null],
+  name: '',
+  color: '',
+  breed: '',
+  hybridBreed: '',
+  ageYears: '',
+  ageMonths: '',
+  gender: null,
+  vaccination: null,
+  traits: [],
+  healthNotes: '',
+  formSaveError: '',
+  isSaving: false,
+};
+
+export function resetAddPetModalDraft(): void {
+  addPetDraft = {
+    key: null,
+    species: null,
+    photos: [undefined, undefined, undefined],
+    loadingSlots: [false, false, false],
+    slotErrors: ['', '', ''],
+    retryFiles: [null, null, null],
+    name: '',
+    color: '',
+    breed: '',
+    hybridBreed: '',
+    ageYears: '',
+    ageMonths: '',
+    gender: null,
+    vaccination: null,
+    traits: [],
+    healthNotes: '',
+    formSaveError: '',
+    isSaving: false,
+  };
+}
+
+export function isAddPetModalBusy(): boolean {
+  return addPetDraft.isSaving || addPetDraft.loadingSlots.some(Boolean);
+}
+
+function ensureAddPetDraft(petToEdit: Pet | null): AddPetModalDraft {
+  const key = petToEdit?.id ? `edit:${petToEdit.id}` : 'new';
+  if (addPetDraft.key === key) {
+    return addPetDraft;
+  }
+
+  addPetDraft = {
+    key,
+    species: petToEdit ? petToEdit.species : null,
+    photos: [
+      petToEdit?.photos?.[0],
+      petToEdit?.photos?.[1],
+      petToEdit?.photos?.[2],
+    ],
+    loadingSlots: [false, false, false],
+    slotErrors: ['', '', ''],
+    retryFiles: [null, null, null],
+    name: petToEdit?.name || '',
+    color: petToEdit?.color || '',
+    breed: petToEdit?.breed || '',
+    hybridBreed: petToEdit?.hybridBreed || '',
+    ageYears: petToEdit
+      ? petToEdit.ageYears > 0 || petToEdit.ageMonths === 0
+        ? String(petToEdit.ageYears)
+        : ''
+      : '',
+    ageMonths: petToEdit && petToEdit.ageMonths > 0 ? String(petToEdit.ageMonths) : '',
+    gender: petToEdit ? petToEdit.gender : null,
+    vaccination: petToEdit
+      ? petToEdit.vaccinationStatus === 'fully_vaccinated'
+        ? 'yes'
+        : petToEdit.vaccinationStatus === 'not_vaccinated'
+        ? 'no'
+        : 'partial'
+      : null,
+    traits: petToEdit?.personality ? [...petToEdit.personality] : [],
+    healthNotes: petToEdit?.healthNotes || '',
+    formSaveError: '',
+    isSaving: false,
+  };
+  return addPetDraft;
+}
+
+function renderSlotInnerMarkup(idx: number, photo?: string, isLoading = false, hasError = false): string {
+  const isPrimary = idx === 0;
+  if (isLoading) {
+    return `
+      <div class="flex flex-col items-center justify-center gap-1.5 px-2 text-center">
+        <i class="fa-solid fa-circle-notch fa-spin text-xl text-[#e67e22]"></i>
+        <span class="text-[10px] font-black text-[#786555] leading-tight">جاري التجهيز...</span>
+      </div>
+    `;
+  }
+  if (photo) {
+    return `<img src="${escapeAttr(sanitizeImageSrc(photo))}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`;
+  }
+  return `
+    <div class="flex flex-col items-center justify-center gap-1">
+      <span class="text-4xl font-black ${
+        hasError ? 'text-rose-500' : isPrimary ? 'text-[#e67e22]' : 'text-[#998b7c]'
+      } group-hover:scale-110 transition-transform">+</span>
+      ${hasError ? '<span class="text-[10px] font-black text-rose-600">فشل الرفع</span>' : ''}
+    </div>
+  `;
+}
+
+function renderPhotoSlotErrorsMarkup(draft: AddPetModalDraft): string {
+  const errorItems = draft.slotErrors
+    .map((err, idx) => ({ err, idx, canRetry: Boolean(draft.retryFiles[idx]) }))
+    .filter((item) => Boolean(item.err));
+
+  if (errorItems.length === 0) return '';
+
+  return errorItems
+    .map(
+      ({ err, idx, canRetry }) => `
+        <div class="flex items-center justify-between gap-2 rounded-2xl border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-xs font-bold text-rose-800">
+          <span class="leading-relaxed">الصورة ${idx + 1}: ${escapeHtml(err)}</span>
+          ${
+            canRetry
+              ? `<button type="button" data-retry-photo-slot="${idx}" class="retry-modal-photo-btn shrink-0 px-3 py-1 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-black text-[11px] cursor-pointer active:scale-95 transition">إعادة المحاولة</button>`
+              : ''
+          }
+        </div>
+      `
+    )
+    .join('');
+}
 
 function getPetNameTextColorClass(gender: PetGender | null): string {
   if (gender === 'male') return 'text-[#60A5FA]';
@@ -53,33 +211,23 @@ function renderBreedOptionsHtml(
 
 export function renderAddPetModal(petToEdit: Pet | null): string {
   const isEdit = Boolean(petToEdit);
+  const draft = ensureAddPetDraft(petToEdit);
 
   // Strict parity with Onboarding Step 6: ZERO defaults on Add, full pre-fill on Edit
-  const selectedSpecies: PetSpecies | null = petToEdit ? petToEdit.species : null;
-  const selectedGender: PetGender | null = petToEdit ? petToEdit.gender : null;
-  const selectedVaccination: 'yes' | 'no' | 'partial' | null = petToEdit
-    ? petToEdit.vaccinationStatus === 'fully_vaccinated'
-      ? 'yes'
-      : petToEdit.vaccinationStatus === 'not_vaccinated'
-      ? 'no'
-      : 'partial'
-    : null;
+  const selectedSpecies: PetSpecies | null = draft.species;
+  const selectedGender: PetGender | null = draft.gender;
+  const selectedVaccination: 'yes' | 'no' | 'partial' | null = draft.vaccination;
 
-  const petName = petToEdit?.name || '';
-  const petColor = petToEdit?.color || '';
-  const petBreed = petToEdit?.breed || '';
-  const petHybrid = petToEdit?.hybridBreed || '';
-  const petAgeYears = petToEdit
-    ? petToEdit.ageYears > 0 || petToEdit.ageMonths === 0
-      ? String(petToEdit.ageYears)
-      : ''
-    : '';
-  const petAgeMonths =
-    petToEdit && petToEdit.ageMonths > 0 ? String(petToEdit.ageMonths) : '';
-  const petNotes = petToEdit?.healthNotes || '';
-  const existingPhotos = petToEdit?.photos || [];
+  const petName = draft.name;
+  const petColor = draft.color;
+  const petBreed = draft.breed;
+  const petHybrid = draft.hybridBreed;
+  const petAgeYears = draft.ageYears;
+  const petAgeMonths = draft.ageMonths;
+  const petNotes = draft.healthNotes;
+  const existingPhotos = draft.photos;
 
-  const petTraitsList = petToEdit?.personality || [];
+  const petTraitsList = draft.traits;
   const selectedTraitsSet = new Set<string>(petTraitsList);
   const displayTraits = [
     ...PERSONALITY_TRAITS,
@@ -159,25 +307,25 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
               ${[0, 1, 2]
                 .map((idx) => {
                   const photo = existingPhotos[idx];
+                  const isLoading = draft.loadingSlots[idx];
+                  const hasError = Boolean(draft.slotErrors[idx]);
                   const isPrimary = idx === 0;
                   return `
-                    <div class="relative aspect-square rounded-3xl border-2 overflow-hidden ${
-                      isPrimary
+                    <div data-photo-slot-card="${idx}" class="relative aspect-square rounded-3xl border-2 overflow-hidden ${
+                      hasError
+                        ? 'border-rose-400 bg-rose-50/70'
+                        : isPrimary
                         ? 'border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5e5]'
                         : 'border-[#d6c7b2] bg-[#fffefc] hover:bg-[#faf6ed]'
                     } shadow-sm group">
                       <label class="w-full h-full flex items-center justify-center cursor-pointer">
                         <input accept="image/*" class="hidden add-pet-photo-input" data-photo-slot="${idx}" type="file" />
-                        ${
-                          photo
-                            ? `<img src="${escapeAttr(sanitizeImageSrc(photo))}" alt="صورة ${idx + 1}" class="w-full h-full object-cover" />`
-                            : `<span class="text-4xl font-black ${
-                                isPrimary ? 'text-[#e67e22]' : 'text-[#998b7c]'
-                              } group-hover:scale-110 transition-transform">+</span>`
-                        }
+                        <div class="modal-photo-slot-preview w-full h-full flex items-center justify-center">
+                          ${renderSlotInnerMarkup(idx, photo, isLoading, hasError)}
+                        </div>
                       </label>
                       ${
-                        photo
+                        photo && !isLoading
                           ? `
                             <button
                               type="button"
@@ -192,6 +340,11 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                   `;
                 })
                 .join('')}
+            </div>
+            <div id="modal-pet-photo-errors" class="space-y-1.5 ${
+              draft.slotErrors.some(Boolean) ? '' : 'hidden'
+            }">
+              ${renderPhotoSlotErrorsMarkup(draft)}
             </div>
           </div>
 
@@ -427,9 +580,9 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
           <!-- Validation Alert -->
           <div
             id="modal-pet-form-error"
-            class="hidden rounded-2xl border-2 border-[#e67e22] bg-[#fff5ea] px-4 py-3 text-sm font-bold text-[#9a3412] leading-relaxed"
+            class="${draft.formSaveError ? '' : 'hidden'} rounded-2xl border-2 border-[#e67e22] bg-[#fff5ea] px-4 py-3 text-sm font-bold text-[#9a3412] leading-relaxed"
             role="alert"
-          ></div>
+          >${draft.formSaveError ? escapeHtml(draft.formSaveError) : ''}</div>
 
           <!-- CTA Button -->
           <div class="pt-4">
@@ -450,12 +603,15 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
 }
 
 export function attachAddPetModalEvents(petToEdit: Pet | null): void {
+  const draft = ensureAddPetDraft(petToEdit);
   const closeBtn = document.getElementById('close-add-pet-modal-btn');
   const backdrop = document.getElementById('add-pet-modal-backdrop');
   const sheet = document.getElementById('add-pet-modal-sheet');
   const form = document.getElementById('pet-form') as HTMLFormElement | null;
 
   const handleClose = () => {
+    if (draft.isSaving) return;
+    resetAddPetModalDraft();
     state.setAddPetModalVisible(false, null);
   };
 
@@ -474,24 +630,15 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     });
   }
 
-  let currentSpecies: PetSpecies | null = petToEdit ? petToEdit.species : null;
-  let currentGender: PetGender | null = petToEdit ? petToEdit.gender : null;
-  let currentVaccination: 'yes' | 'no' | 'partial' | null = petToEdit
-    ? petToEdit.vaccinationStatus === 'fully_vaccinated'
-      ? 'yes'
-      : petToEdit.vaccinationStatus === 'not_vaccinated'
-      ? 'no'
-      : 'partial'
-    : null;
-  const uploadedSlots: (string | undefined)[] = [
-    petToEdit?.photos?.[0],
-    petToEdit?.photos?.[1],
-    petToEdit?.photos?.[2],
-  ];
-  const selectedTraits = new Set<string>(petToEdit?.personality || []);
+  let currentSpecies: PetSpecies | null = draft.species;
+  let currentGender: PetGender | null = draft.gender;
+  let currentVaccination: 'yes' | 'no' | 'partial' | null = draft.vaccination;
+  const uploadedSlots: (string | undefined)[] = draft.photos;
+  const selectedTraits = new Set<string>(draft.traits);
 
   const speciesGroup = document.getElementById('modal-pet-species-group');
   const photosGroup = document.getElementById('modal-pet-photos-group');
+  const photoErrorsBox = document.getElementById('modal-pet-photo-errors');
   const catBtn = document.getElementById('type-cat-btn');
   const dogBtn = document.getElementById('type-dog-btn');
   const speciesInput = document.getElementById('form-pet-species') as HTMLInputElement | null;
@@ -516,21 +663,35 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   const petNotesInput = document.getElementById('form-pet-health-notes') as HTMLTextAreaElement | null;
   const formError = document.getElementById('modal-pet-form-error');
 
-  // Input clear validation highlights
+  // Live sync inputs into draft so background state updates never erase typed fields
   petNameInput?.addEventListener('input', () => {
+    draft.name = petNameInput.value;
+    draft.formSaveError = '';
     petNameInput.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
   });
   petColorInput?.addEventListener('input', () => {
+    draft.color = petColorInput.value;
+    draft.formSaveError = '';
     petColorInput.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
   });
   breedSelect?.addEventListener('change', () => {
+    draft.breed = breedSelect.value;
+    draft.formSaveError = '';
     breedSelect.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
+  });
+  hybridSelect?.addEventListener('change', () => {
+    draft.hybridBreed = hybridSelect.value;
+  });
+  petNotesInput?.addEventListener('input', () => {
+    draft.healthNotes = petNotesInput.value;
   });
 
   // 1. Species toggle + dynamic breed dropdowns
   const updateSpeciesUI = (species: PetSpecies) => {
     const speciesChanged = currentSpecies !== species;
     currentSpecies = species;
+    draft.species = species;
+    draft.formSaveError = '';
     if (speciesInput) speciesInput.value = species;
     speciesGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
 
@@ -550,6 +711,8 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
 
     const nextBreedVal = speciesChanged ? '' : breedSelect?.value || '';
     const nextHybridVal = speciesChanged ? '' : hybridSelect?.value || '';
+    draft.breed = nextBreedVal;
+    draft.hybridBreed = nextHybridVal;
 
     if (breedSelect) {
       breedSelect.disabled = false;
@@ -569,38 +732,45 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   dogBtn?.addEventListener('click', () => updateSpeciesUI('dog'));
 
   // 2. Photo slot uploads & clear buttons
-  const renderSlotState = (slotEl: HTMLElement, idx: number, photoUrl?: string) => {
-    const label = slotEl.querySelector('label');
-    if (label) {
-      const existingImg = label.querySelector('img');
-      const existingPlus = label.querySelector('span');
-      if (photoUrl) {
-        const safeUrl = sanitizeImageSrc(photoUrl, '');
-        if (!safeUrl) return;
-        if (existingPlus) existingPlus.remove();
-        if (existingImg) {
-          existingImg.src = safeUrl;
-        } else {
-          const img = document.createElement('img');
-          img.src = safeUrl;
-          img.alt = `صورة ${idx + 1}`;
-          img.className = 'w-full h-full object-cover';
-          label.appendChild(img);
-        }
-      } else {
-        if (existingImg) existingImg.remove();
-        if (!existingPlus) {
-          const span = document.createElement('span');
-          span.className = `text-4xl font-black ${
-            idx === 0 ? 'text-[#e67e22]' : 'text-[#998b7c]'
-          } group-hover:scale-110 transition-transform`;
-          span.textContent = '+';
-          label.appendChild(span);
-        }
-      }
+  const syncPhotoErrorsUI = () => {
+    if (!photoErrorsBox) return;
+    const html = renderPhotoSlotErrorsMarkup(draft);
+    photoErrorsBox.innerHTML = html;
+    if (html) {
+      photoErrorsBox.classList.remove('hidden');
+      photoErrorsBox.querySelectorAll<HTMLButtonElement>('.retry-modal-photo-btn').forEach((retryBtn) => {
+        retryBtn.addEventListener('click', () => {
+          const slotStr = retryBtn.getAttribute('data-retry-photo-slot');
+          const slot = slotStr ? parseInt(slotStr, 10) : -1;
+          const retryFile = slot >= 0 && slot <= 2 ? draft.retryFiles[slot] : null;
+          if (!retryFile) return;
+          void handleSlotFileUpload(slot, retryFile);
+        });
+      });
+    } else {
+      photoErrorsBox.classList.add('hidden');
     }
+  };
+
+  const renderSlotState = (slotEl: HTMLElement, idx: number, photoUrl?: string) => {
+    const isLoading = draft.loadingSlots[idx];
+    const hasError = Boolean(draft.slotErrors[idx]);
+    const isPrimary = idx === 0;
+    slotEl.className = `relative aspect-square rounded-3xl border-2 overflow-hidden ${
+      hasError
+        ? 'border-rose-400 bg-rose-50/70'
+        : isPrimary
+        ? 'border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5e5]'
+        : 'border-[#d6c7b2] bg-[#fffefc] hover:bg-[#faf6ed]'
+    } shadow-sm group`;
+
+    const preview = slotEl.querySelector<HTMLElement>('.modal-photo-slot-preview');
+    if (preview) {
+      preview.innerHTML = renderSlotInnerMarkup(idx, photoUrl, isLoading, hasError);
+    }
+
     const existingClear = slotEl.querySelector('.clear-pet-photo-btn');
-    if (photoUrl && !existingClear) {
+    if (photoUrl && !isLoading && !existingClear) {
       const clearBtn = document.createElement('button');
       clearBtn.type = 'button';
       clearBtn.setAttribute('data-clear-photo-slot', String(idx));
@@ -612,13 +782,62 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
         ev.preventDefault();
         ev.stopPropagation();
         uploadedSlots[idx] = undefined;
+        draft.slotErrors[idx] = '';
+        draft.retryFiles[idx] = null;
         const inputEl = slotEl.querySelector<HTMLInputElement>('.add-pet-photo-input');
         if (inputEl) inputEl.value = '';
         renderSlotState(slotEl, idx, undefined);
+        syncPhotoErrorsUI();
       });
       slotEl.appendChild(clearBtn);
-    } else if (!photoUrl && existingClear) {
+    } else if ((!photoUrl || isLoading) && existingClear) {
       existingClear.remove();
+    }
+  };
+
+  const handleSlotFileUpload = async (slot: number, file: File, inputEl?: HTMLInputElement) => {
+    if (slot < 0 || slot > 2) return;
+    const slotWrapper = document.querySelector<HTMLElement>(`[data-photo-slot-card="${slot}"]`);
+
+    draft.loadingSlots[slot] = true;
+    draft.slotErrors[slot] = '';
+    draft.retryFiles[slot] = file;
+    if (slotWrapper) {
+      renderSlotState(slotWrapper, slot, uploadedSlots[slot]);
+    }
+    syncPhotoErrorsUI();
+
+    try {
+      const result = await processImageFileForUpload(file);
+      if (!result.success) {
+        draft.slotErrors[slot] = result.errorMessage;
+        if (inputEl) inputEl.value = '';
+        if (formError) {
+          formError.textContent = result.errorMessage;
+          formError.classList.remove('hidden');
+          formError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        showMobileToast(result.errorMessage, 'danger', 2400);
+        return;
+      }
+
+      uploadedSlots[slot] = result.dataUrl;
+      draft.slotErrors[slot] = '';
+      draft.retryFiles[slot] = null;
+      draft.formSaveError = '';
+      photosGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
+      if (formError) {
+        formError.innerHTML = '';
+        formError.classList.add('hidden');
+      }
+      if (inputEl) inputEl.value = '';
+    } finally {
+      draft.loadingSlots[slot] = false;
+      const latestSlotWrapper = document.querySelector<HTMLElement>(`[data-photo-slot-card="${slot}"]`);
+      if (latestSlotWrapper) {
+        renderSlotState(latestSlotWrapper, slot, uploadedSlots[slot]);
+      }
+      syncPhotoErrorsUI();
     }
   };
 
@@ -628,36 +847,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
       const slot = slotStr ? parseInt(slotStr, 10) : -1;
       const file = input.files?.[0];
       if (!file || slot < 0 || slot > 2) return;
-
-      const check = validateUploadedFile(file, 'image');
-      if (!check.valid) {
-        input.value = '';
-        if (formError) {
-          formError.textContent = check.errorMessage || 'صيغة أو حجم الصورة غير مدعوم.';
-          formError.classList.remove('hidden');
-          formError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-        return;
-      }
-
-      photosGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
-      if (formError) {
-        formError.innerHTML = '';
-        formError.classList.add('hidden');
-      }
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        const rawResult = typeof reader.result === 'string' ? reader.result : undefined;
-        const safeResult = rawResult ? sanitizeImageSrc(rawResult, '') : '';
-        if (!safeResult) return;
-        uploadedSlots[slot] = safeResult;
-        const slotWrapper = input.closest('div');
-        if (slotWrapper) {
-          renderSlotState(slotWrapper, slot, safeResult);
-        }
-      };
-      reader.readAsDataURL(file);
+      void handleSlotFileUpload(slot, file, input);
     });
   });
 
@@ -669,22 +859,28 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
       const slot = slotStr ? parseInt(slotStr, 10) : -1;
       if (slot < 0 || slot > 2) return;
       uploadedSlots[slot] = undefined;
-      const slotWrapper = btn.closest('div');
+      draft.slotErrors[slot] = '';
+      draft.retryFiles[slot] = null;
+      const slotWrapper = btn.closest<HTMLElement>('[data-photo-slot-card]');
       if (slotWrapper) {
         const inputEl = slotWrapper.querySelector<HTMLInputElement>('.add-pet-photo-input');
         if (inputEl) inputEl.value = '';
         renderSlotState(slotWrapper, slot, undefined);
       }
+      syncPhotoErrorsUI();
     });
   });
+  syncPhotoErrorsUI();
 
-  // 3. Age numeric sanitization
+  // 3. Age numeric sanitization + live draft sync
   ageYearsInput?.addEventListener('input', () => {
     ageYearsInput.value = ageYearsInput.value.replace(/[^0-9]/g, '');
+    draft.ageYears = ageYearsInput.value;
     petAgeGroup?.classList.remove('ring-2', 'ring-[#e67e22]');
   });
   ageMonthsInput?.addEventListener('input', () => {
     ageMonthsInput.value = ageMonthsInput.value.replace(/[^0-9]/g, '');
+    draft.ageMonths = ageMonthsInput.value;
     petAgeGroup?.classList.remove('ring-2', 'ring-[#e67e22]');
   });
 
@@ -698,6 +894,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   if (maleBtn && femaleBtn) {
     maleBtn.addEventListener('click', () => {
       currentGender = 'male';
+      draft.gender = 'male';
       if (genderInput) genderInput.value = 'male';
       petGenderGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       maleBtn.className =
@@ -708,6 +905,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     });
     femaleBtn.addEventListener('click', () => {
       currentGender = 'female';
+      draft.gender = 'female';
       if (genderInput) genderInput.value = 'female';
       petGenderGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       femaleBtn.className =
@@ -722,6 +920,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   if (vaxYesBtn && vaxNoBtn) {
     vaxYesBtn.addEventListener('click', () => {
       currentVaccination = 'yes';
+      draft.vaccination = 'yes';
       document.getElementById('modal-vax-partial-note')?.classList.add('hidden');
       petVaxGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       vaxYesBtn.className =
@@ -731,6 +930,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     });
     vaxNoBtn.addEventListener('click', () => {
       currentVaccination = 'no';
+      draft.vaccination = 'no';
       document.getElementById('modal-vax-partial-note')?.classList.add('hidden');
       petVaxGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       vaxNoBtn.className =
@@ -764,6 +964,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
           'modal-trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20';
         if (limitMsg) limitMsg.classList.add('hidden');
       }
+      draft.traits = Array.from(selectedTraits);
 
       if (selectedTraits.size >= 3) {
         petTraitsGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-2');
@@ -782,14 +983,25 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     });
   });
 
-  // 7. Submit handler (exact Onboarding Step 6 validation + zero data loss on Edit)
+  // 7. Submit handler (exact Onboarding Step 6 validation + zero data loss on Edit or Error)
   if (form) {
     let isSubmittingPet = false;
     const submitBtn = document.getElementById('modal-btn-pet-submit') as HTMLButtonElement | null;
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (isSubmittingPet) return;
+      if (isSubmittingPet || draft.isSaving) return;
+
+      if (draft.loadingSlots.some(Boolean)) {
+        const msg = 'جاري تجهيز الصور المختارة، يرجى الانتظار لحين اكتمال التحميل.';
+        draft.formSaveError = msg;
+        if (formError) {
+          formError.textContent = msg;
+          formError.classList.remove('hidden');
+          formError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return;
+      }
 
       const name = (petNameInput?.value || '').trim();
       const color = (petColorInput?.value || '').trim();
@@ -874,6 +1086,8 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
 
       const currentUser = state.getUser();
       isSubmittingPet = true;
+      draft.isSaving = true;
+      draft.formSaveError = '';
       const originalBtnHtml = submitBtn?.innerHTML || '';
       if (submitBtn) {
         submitBtn.disabled = true;
@@ -927,12 +1141,21 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
             });
 
         if (!res.success) {
-          showMobileToast(res.errorMessage || 'تعذر حفظ بيانات الأليف في قاعدة البيانات', 'danger', 2600);
+          const msg = res.errorMessage || 'تعذر حفظ بيانات الأليف في قاعدة البيانات';
+          draft.formSaveError = msg;
+          if (formError) {
+            formError.textContent = msg;
+            formError.classList.remove('hidden');
+            formError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+          showMobileToast(msg, 'danger', 2600);
         } else {
+          resetAddPetModalDraft();
           showMobileToast(petToEdit ? 'تم حفظ تعديلات الأليف' : 'تم إضافة الأليف بنجاح', 'success', 1800);
         }
       } finally {
         isSubmittingPet = false;
+        draft.isSaving = false;
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.classList.remove('opacity-70', 'cursor-wait');

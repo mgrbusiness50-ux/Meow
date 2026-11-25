@@ -32,7 +32,7 @@ export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
   const alignClass = opts.dropdownAlign === 'right' ? 'right-0' : 'left-0';
   const btnClass =
     opts.buttonClass ||
-    'w-10 h-10 rounded-full bg-black/45 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/65 transition-all cursor-pointer active:scale-90';
+    'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 opacity-95 hover:opacity-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]';
   const targetType = opts.reportTargetType || (opts.conversationId ? 'chat' : 'pet');
 
   return `
@@ -43,7 +43,7 @@ export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
         title="خيارات"
         class="meow-more-btn ${btnClass}"
       >
-        <i class="fa-solid fa-ellipsis-vertical text-sm pointer-events-none"></i>
+        <i class="fa-solid fa-ellipsis-vertical text-base pointer-events-none"></i>
       </button>
 
       <div

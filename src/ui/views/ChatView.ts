@@ -434,7 +434,7 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                   showDeleteConversation: true,
                   reportTargetType: 'chat',
                   buttonClass:
-                    'w-10 h-10 rounded-full bg-brand-cream/80 hover:bg-brand-peachBorder/40 text-brand-subtleGray hover:text-brand-dark flex items-center justify-center transition cursor-pointer active:scale-90',
+                    'w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-subtleGray hover:text-brand-dark dark:hover:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
                   dropdownAlign: 'left',
                 })}
                 <i class="fa-solid fa-chevron-left text-xs text-brand-subtleGray group-hover:text-brand-orange transition"></i>
@@ -615,7 +615,7 @@ function renderRequestsList(
                           petName: previewPet?.name || req.senderPetName || req.receiverPetName,
                           reportTargetType: 'request',
                           buttonClass:
-                            'w-8 h-8 rounded-full bg-brand-cream/80 dark:bg-[#342A24] hover:bg-brand-peachBorder/40 text-brand-subtleGray hover:text-brand-dark dark:hover:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
+                            'w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-subtleGray hover:text-brand-dark dark:hover:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
                           dropdownAlign: 'left',
                         })
                       : ''
@@ -832,7 +832,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             showDeleteConversation: true,
             reportTargetType: 'chat',
             buttonClass:
-              'w-11 h-11 rounded-full bg-black/5 hover:bg-brand-peachBorder/40 text-brand-dark flex items-center justify-center transition cursor-pointer active:scale-90',
+              'w-10 h-10 min-w-[36px] min-h-[36px] rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-dark dark:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
             dropdownAlign: 'left',
           })}
         </div>

@@ -5105,7 +5105,10 @@ class AppStateManager {
   }
 
   // Actions
-  public savePet(petData: Partial<Pet>): Pet {
+  private buildPetCandidate(petData: Partial<Pet>): {
+    candidate: Pet;
+    isEdit: boolean;
+  } {
     const existing = this.editingPet
       ? this.userPets.find((p) => p.id === this.editingPet!.id) || this.editingPet
       : null;
@@ -5134,7 +5137,8 @@ class AppStateManager {
       cityId: geoInput.cityId || resolvedLineage.city?.id,
       villageId: geoInput.villageId || resolvedLineage.village?.id,
       locationId: geoInput.locationId || resolvedLineage.deepest?.id,
-      governorate: geoInput.governorate || resolvedLineage.governorate?.name || this.user.governorate || 'القاهرة',
+      governorate:
+        geoInput.governorate || resolvedLineage.governorate?.name || this.user.governorate || 'القاهرة',
       markaz: geoInput.markaz || resolvedLineage.markaz?.name,
       city: geoInput.city || resolvedLineage.city?.name || this.user.city || 'القاهرة',
       village: geoInput.village || resolvedLineage.village?.name,
@@ -5150,7 +5154,6 @@ class AppStateManager {
     };
 
     if (this.editingPet && existing) {
-      const index = this.userPets.findIndex((p) => p.id === this.editingPet!.id);
       const preservedPhotos =
         petData.photos && petData.photos.length > 0 ? [...petData.photos] : [...(existing.photos || [])];
       const preservedStatus = petData.status ?? existing.status;
@@ -5173,23 +5176,71 @@ class AppStateManager {
             ? petData.alsoListedIndividually ?? existing.alsoListedIndividually
             : false,
       };
+      return { candidate: updatedPet, isEdit: true };
+    }
 
+    const newPet: Pet = {
+      id: generateUuid(),
+      name: petData.name ?? '',
+      species: petData.species ?? 'cat',
+      breed: petData.breed ?? '',
+      hybridBreed: petData.hybridBreed?.trim() || undefined,
+      ageYears: petData.ageYears ?? 0,
+      ageMonths: petData.ageMonths ?? 0,
+      color: petData.color ?? '',
+      gender: petData.gender ?? 'male',
+      photos: petData.photos && petData.photos.length > 0 ? [...petData.photos] : [],
+      area: enrichedGeo.area || 'القاهرة',
+      city: enrichedGeo.city || 'القاهرة',
+      governorate: enrichedGeo.governorate || 'القاهرة',
+      markaz: enrichedGeo.markaz,
+      village: enrichedGeo.village,
+      governorateId: enrichedGeo.governorateId,
+      markazId: enrichedGeo.markazId,
+      cityId: enrichedGeo.cityId,
+      villageId: enrichedGeo.villageId,
+      locationId: enrichedGeo.locationId,
+      lat: enrichedGeo.lat,
+      lng: enrichedGeo.lng,
+      distanceKm: 0,
+      healthStatus: petData.healthStatus ?? 'ممتازة',
+      vaccinationStatus: petData.vaccinationStatus ?? 'not_vaccinated',
+      personality: petData.personality ? [...petData.personality] : [],
+      healthNotes: petData.healthNotes?.trim() ?? '',
+      status: petData.status ?? 'mating',
+      adoptionType: petData.status === 'adoption' ? 'individual' : undefined,
+      alsoListedIndividually: false,
+      ownerId: this.user.id,
+      ownerName: this.user.name,
+      ownerAvatar: this.user.avatar,
+      ownerPhone: this.user.phone,
+      ownerPrivacy: this.user.showPhoneInProfile ? 'public' : 'private',
+      ownerShowPhone: Boolean(this.user.showPhoneInProfile),
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    return { candidate: newPet, isEdit: false };
+  }
+
+  private commitPetLocally(pet: Pet, isEdit: boolean): Pet {
+    if (isEdit) {
+      const index = this.userPets.findIndex((p) => p.id === pet.id);
       if (index !== -1) {
-        this.userPets[index] = updatedPet;
+        this.userPets[index] = pet;
+      } else {
+        this.userPets.push(pet);
       }
       this.editingPet = null;
 
-      if (updatedPet.status !== 'adoption') {
-        this.removePetFromGroupListing(updatedPet.id);
+      if (pet.status !== 'adoption') {
+        this.removePetFromGroupListing(pet.id);
       } else if (
         this.userGroupAdoptionListing &&
-        this.userGroupAdoptionListing.groupPetIds?.includes(updatedPet.id)
+        this.userGroupAdoptionListing.groupPetIds?.includes(pet.id)
       ) {
-        // Keep active group adoption member card in sync when user edits an included pet
         const memberPhotosMap: Record<string, string[]> = {};
         (this.userGroupAdoptionListing.groupMembers || []).forEach((m) => {
           memberPhotosMap[m.petId] =
-            m.petId === updatedPet.id ? updatedPet.photos.slice(0, 3) : m.individualPhotos;
+            m.petId === pet.id ? pet.photos.slice(0, 3) : m.individualPhotos;
         });
         const hadDual = this.userGroupAdoptionListing.groupPetIds.some((id) => {
           const p = this.userPets.find((up) => up.id === id);
@@ -5204,95 +5255,59 @@ class AppStateManager {
           publishMode: hadDual ? 'both' : 'group_only',
         });
       }
-
-      this.recalculateAllCompatibilities();
-      this.isAddPetModalOpen = false;
-      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-        void upsertPetInSupabase(updatedPet, this.user.id);
-      } else if (!isSupabaseConfigured()) {
-        void syncPetToFirestore(updatedPet).catch((err) =>
-          console.warn('Firestore pet update sync skipped:', err)
-        );
-      }
-      this.notify();
-      return updatedPet;
     } else {
-      const newPet: Pet = {
-        id: generateUuid(),
-        name: petData.name ?? '',
-        species: petData.species ?? 'cat',
-        breed: petData.breed ?? '',
-        hybridBreed: petData.hybridBreed?.trim() || undefined,
-        ageYears: petData.ageYears ?? 0,
-        ageMonths: petData.ageMonths ?? 0,
-        color: petData.color ?? '',
-        gender: petData.gender ?? 'male',
-        photos: petData.photos && petData.photos.length > 0 ? [...petData.photos] : [],
-        area: enrichedGeo.area || 'القاهرة',
-        city: enrichedGeo.city || 'القاهرة',
-        governorate: enrichedGeo.governorate || 'القاهرة',
-        markaz: enrichedGeo.markaz,
-        village: enrichedGeo.village,
-        governorateId: enrichedGeo.governorateId,
-        markazId: enrichedGeo.markazId,
-        cityId: enrichedGeo.cityId,
-        villageId: enrichedGeo.villageId,
-        locationId: enrichedGeo.locationId,
-        lat: enrichedGeo.lat,
-        lng: enrichedGeo.lng,
-        distanceKm: 0,
-        healthStatus: petData.healthStatus ?? 'ممتازة',
-        vaccinationStatus: petData.vaccinationStatus ?? 'not_vaccinated',
-        personality: petData.personality ? [...petData.personality] : [],
-        healthNotes: petData.healthNotes?.trim() ?? '',
-        status: petData.status ?? 'mating',
-        adoptionType: petData.status === 'adoption' ? 'individual' : undefined,
-        alsoListedIndividually: false,
-        ownerId: this.user.id,
-        ownerName: this.user.name,
-        ownerAvatar: this.user.avatar,
-        ownerPhone: this.user.phone,
-        ownerPrivacy: this.user.showPhoneInProfile ? 'public' : 'private',
-        ownerShowPhone: Boolean(this.user.showPhoneInProfile),
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      this.userPets.push(newPet);
-      this.recalculateAllCompatibilities();
-      this.isAddPetModalOpen = false;
-      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-        void upsertPetInSupabase(newPet, this.user.id);
-      } else if (!isSupabaseConfigured()) {
-        void syncPetToFirestore(newPet).catch((err) =>
-          console.warn('Firestore new pet sync skipped:', err)
-        );
-      }
-      this.notify();
-      return newPet;
+      this.userPets.push(pet);
     }
+
+    this.recalculateAllCompatibilities();
+    this.isAddPetModalOpen = false;
+    return pet;
+  }
+
+  public savePet(petData: Partial<Pet>): Pet {
+    const { candidate, isEdit } = this.buildPetCandidate(petData);
+    this.commitPetLocally(candidate, isEdit);
+
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void upsertPetInSupabase(candidate, this.user.id);
+    } else if (!isSupabaseConfigured()) {
+      void syncPetToFirestore(candidate).catch((err) =>
+        console.warn('Firestore pet sync skipped:', err)
+      );
+    }
+
+    this.notify();
+    return candidate;
   }
 
   public async savePetAsync(
     petData: Partial<Pet>
   ): Promise<{ success: boolean; pet?: Pet; errorMessage?: string }> {
-    const saved = this.savePet(petData);
+    const { candidate, isEdit } = this.buildPetCandidate(petData);
+
     if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-      const res = await upsertPetInSupabase(saved, this.user.id);
+      const res = await upsertPetInSupabase(candidate, this.user.id);
       if (!res.success) {
+        // Keep AddPetModal open & draft untouched so user never loses entered fields/photos
         return {
           success: false,
           errorMessage: res.errorMessage || 'تعذر حفظ بيانات الأليف في قاعدة البيانات.',
         };
       }
-      if (res.data) {
-        const idx = this.userPets.findIndex((p) => p.id === saved.id);
-        if (idx !== -1) {
-          this.userPets[idx] = { ...saved, ...res.data };
-        }
-        this.notify();
-        return { success: true, pet: this.userPets[idx] || res.data };
-      }
+      const finalPet = res.data ? { ...candidate, ...res.data } : candidate;
+      this.commitPetLocally(finalPet, isEdit);
+      this.notify();
+      return { success: true, pet: finalPet };
     }
-    return { success: true, pet: saved };
+
+    this.commitPetLocally(candidate, isEdit);
+    if (!isSupabaseConfigured()) {
+      void syncPetToFirestore(candidate).catch((err) =>
+        console.warn('Firestore pet sync skipped:', err)
+      );
+    }
+    this.notify();
+    return { success: true, pet: candidate };
   }
 
   public getPendingDeletePet(): Pet | null {

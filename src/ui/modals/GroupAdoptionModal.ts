@@ -4,8 +4,8 @@ import {
   escapeAttr,
   escapeHtml,
   sanitizeImageSrc,
-  validateUploadedFile,
 } from '../../utils/sanitize.ts';
+import { processImageFileForUpload } from '../../utils/imageUpload.ts';
 import { attachSheetDragToDismiss } from '../../utils/touchGestures.ts';
 
 interface GroupDraft {
@@ -29,6 +29,13 @@ let pendingChoiceStep: {
 };
 
 let isSubmittingAction = false;
+let uploadingMemberPetId: string | null = null;
+let uploadingSharedPhoto = false;
+let pendingRetryUpload: (() => Promise<void>) | null = null;
+
+export function isGroupAdoptionModalBusy(): boolean {
+  return Boolean(isSubmittingAction || uploadingMemberPetId || uploadingSharedPhoto);
+}
 
 let draft: GroupDraft = {
   activeSessionKey: null,
@@ -44,6 +51,9 @@ let draft: GroupDraft = {
 
 function resetDraft(): void {
   isSubmittingAction = false;
+  uploadingMemberPetId = null;
+  uploadingSharedPhoto = false;
+  pendingRetryUpload = null;
   draft = {
     activeSessionKey: null,
     selectedPetIds: [],
@@ -597,18 +607,25 @@ export function renderGroupAdoptionModal(): string {
 
                       ${
                         canAddMore
-                          ? `
-                            <label class="aspect-square rounded-2xl border-2 border-dashed border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5ea] flex flex-col items-center justify-center cursor-pointer text-[#e67e22] transition">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                class="hidden add-member-photo-input"
-                                data-member-pet-id="${escapeAttr(pet.id)}"
-                              />
-                              <span class="text-xl font-black">+</span>
-                              <span class="text-[10px] font-bold">إضافة</span>
-                            </label>
-                          `
+                          ? uploadingMemberPetId === pet.id
+                            ? `
+                              <div class="aspect-square rounded-2xl border-2 border-dashed border-[#e67e22] bg-[#fffbf2] flex flex-col items-center justify-center gap-1 text-[#e67e22]">
+                                <i class="fa-solid fa-circle-notch fa-spin text-base"></i>
+                                <span class="text-[10px] font-bold">جاري الرفع...</span>
+                              </div>
+                            `
+                            : `
+                              <label class="aspect-square rounded-2xl border-2 border-dashed border-[#e67e22] bg-[#fffbf2] hover:bg-[#fff5ea] flex flex-col items-center justify-center cursor-pointer text-[#e67e22] transition">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  class="hidden add-member-photo-input"
+                                  data-member-pet-id="${escapeAttr(pet.id)}"
+                                />
+                                <span class="text-xl font-black">+</span>
+                                <span class="text-[10px] font-bold">إضافة</span>
+                              </label>
+                            `
                           : ''
                       }
                     </div>
@@ -651,13 +668,20 @@ export function renderGroupAdoptionModal(): string {
 
               ${
                 totalPhotos < 10
-                  ? `
-                    <label class="aspect-square rounded-2xl border-2 border-dashed border-brand-orange/65 bg-[#fffbf2] hover:bg-[#fff5ea] flex flex-col items-center justify-center cursor-pointer text-brand-orange transition">
-                      <input type="file" accept="image/*" class="hidden add-shared-photo-input" />
-                      <span class="text-xl font-black">+</span>
-                      <span class="text-[10px] font-bold">جماعية</span>
-                    </label>
-                  `
+                  ? uploadingSharedPhoto
+                    ? `
+                      <div class="aspect-square rounded-2xl border-2 border-dashed border-brand-orange/65 bg-[#fffbf2] flex flex-col items-center justify-center gap-1 text-brand-orange">
+                        <i class="fa-solid fa-circle-notch fa-spin text-base"></i>
+                        <span class="text-[10px] font-bold">جاري الرفع...</span>
+                      </div>
+                    `
+                    : `
+                      <label class="aspect-square rounded-2xl border-2 border-dashed border-brand-orange/65 bg-[#fffbf2] hover:bg-[#fff5ea] flex flex-col items-center justify-center cursor-pointer text-brand-orange transition">
+                        <input type="file" accept="image/*" class="hidden add-shared-photo-input" />
+                        <span class="text-xl font-black">+</span>
+                        <span class="text-[10px] font-bold">جماعية</span>
+                      </label>
+                    `
                   : ''
               }
             </div>
@@ -704,7 +728,16 @@ export function renderGroupAdoptionModal(): string {
 
           ${
             draft.validationMessage
-              ? `<div class="p-3 rounded-2xl bg-[#fff5ea] border border-[#e67e22] text-[#9a3412] text-xs font-black text-center">${escapeHtml(draft.validationMessage)}</div>`
+              ? `
+                <div class="p-3 rounded-2xl bg-[#fff5ea] border border-[#e67e22] text-[#9a3412] text-xs font-black text-center space-y-2">
+                  <p class="m-0">${escapeHtml(draft.validationMessage)}</p>
+                  ${
+                    pendingRetryUpload
+                      ? `<button type="button" id="retry-group-photo-upload-btn" class="px-3.5 py-1.5 rounded-full bg-[#e67e22] hover:bg-[#ea580c] text-white text-[11px] font-black cursor-pointer active:scale-95 transition">إعادة محاولة رفع الصورة</button>`
+                      : ''
+                  }
+                </div>
+              `
               : ''
           }
         </div>
@@ -743,6 +776,22 @@ export function renderGroupAdoptionModal(): string {
       </div>
     </div>
   `;
+}
+
+function rerenderGroupModalInPlace(): void {
+  const shell = document.getElementById('group-adoption-modal-shell');
+  if (!shell) {
+    state.setCurrentTab(state.getCurrentTab());
+    return;
+  }
+  const scrollContainer = document.getElementById('group-editor-scroll');
+  const prevScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+  shell.innerHTML = renderGroupAdoptionModal();
+  attachGroupAdoptionModalEvents();
+  const nextScrollContainer = document.getElementById('group-editor-scroll');
+  if (nextScrollContainer && prevScrollTop > 0) {
+    nextScrollContainer.scrollTop = prevScrollTop;
+  }
 }
 
 export function attachGroupAdoptionModalEvents(): void {
@@ -787,7 +836,7 @@ export function attachGroupAdoptionModalEvents(): void {
     if (indepBtn) {
       indepBtn.addEventListener('click', () => {
         pendingChoiceStep = { petId: pendingPet.id, confirmMode: 'separate' };
-        state.setCurrentTab(state.getCurrentTab());
+        rerenderGroupModalInPlace();
       });
     }
     if (bothBtn) {
@@ -800,7 +849,7 @@ export function attachGroupAdoptionModalEvents(): void {
     if (backChoiceBtn) {
       backChoiceBtn.addEventListener('click', () => {
         pendingChoiceStep = { petId: pendingPet.id, confirmMode: null };
-        state.setCurrentTab(state.getCurrentTab());
+        rerenderGroupModalInPlace();
       });
     }
     if (confirmSepBtn) {
@@ -818,7 +867,7 @@ export function attachGroupAdoptionModalEvents(): void {
   if (!state.getIsGroupAdoptionEditorOpen()) return;
 
   const rerenderEditorOnly = () => {
-    state.setCurrentTab(state.getCurrentTab());
+    rerenderGroupModalInPlace();
   };
 
   const closeBtn = document.getElementById('close-group-editor-btn');
@@ -923,39 +972,54 @@ export function attachGroupAdoptionModalEvents(): void {
     });
   });
 
+  const retryGroupUploadBtn = document.getElementById('retry-group-photo-upload-btn');
+  if (retryGroupUploadBtn && pendingRetryUpload) {
+    const retryFn = pendingRetryUpload;
+    retryGroupUploadBtn.addEventListener('click', () => {
+      void retryFn();
+    });
+  }
+
+  const processMemberPhotoFile = async (petId: string, file: File, inputEl?: HTMLInputElement) => {
+    if (getTotalDraftPhotoCount() >= 10) {
+      if (inputEl) inputEl.value = '';
+      pendingRetryUpload = null;
+      draft.validationMessage = 'الحد الأقصى للصور في المجموعة هو 10 صور.';
+      rerenderEditorOnly();
+      return;
+    }
+
+    uploadingMemberPetId = petId;
+    draft.validationMessage = '';
+    pendingRetryUpload = () => processMemberPhotoFile(petId, file);
+    rerenderEditorOnly();
+
+    try {
+      const result = await processImageFileForUpload(file);
+      if (!result.success) {
+        draft.validationMessage = result.errorMessage;
+        return;
+      }
+      pendingRetryUpload = null;
+      draft.memberPhotosByPetId[petId] = [
+        ...(draft.memberPhotosByPetId[petId] || []),
+        result.dataUrl,
+      ];
+      draft.validationMessage = '';
+    } finally {
+      uploadingMemberPetId = null;
+      if (inputEl) inputEl.value = '';
+      rerenderEditorOnly();
+    }
+  };
+
   // Add Member Separate Photo
   document.querySelectorAll<HTMLInputElement>('.add-member-photo-input').forEach((input) => {
     input.addEventListener('change', () => {
       const petId = input.getAttribute('data-member-pet-id');
       const file = input.files?.[0];
       if (!petId || !file) return;
-      const check = validateUploadedFile(file, 'image');
-      if (!check.valid) {
-        input.value = '';
-        draft.validationMessage = check.errorMessage || 'صيغة أو حجم الصورة غير مدعوم.';
-        rerenderEditorOnly();
-        return;
-      }
-      if (getTotalDraftPhotoCount() >= 10) {
-        input.value = '';
-        draft.validationMessage = 'الحد الأقصى للصور في المجموعة هو 10 صور.';
-        rerenderEditorOnly();
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          const safeUrl = sanitizeImageSrc(reader.result, '');
-          if (!safeUrl) return;
-          draft.memberPhotosByPetId[petId] = [
-            ...(draft.memberPhotosByPetId[petId] || []),
-            safeUrl,
-          ];
-          draft.validationMessage = '';
-          rerenderEditorOnly();
-        }
-      };
-      reader.readAsDataURL(file);
+      void processMemberPhotoFile(petId, file, input);
     });
   });
 
@@ -970,9 +1034,40 @@ export function attachGroupAdoptionModalEvents(): void {
       if (list.length <= 1) return;
       draft.memberPhotosByPetId[petId] = list.filter((_, i) => i !== idx);
       draft.validationMessage = '';
+      pendingRetryUpload = null;
       rerenderEditorOnly();
     });
   });
+
+  const processSharedPhotoFile = async (file: File, inputEl?: HTMLInputElement) => {
+    if (getTotalDraftPhotoCount() >= 10) {
+      if (inputEl) inputEl.value = '';
+      pendingRetryUpload = null;
+      draft.validationMessage = 'الحد الأقصى للصور في المجموعة هو 10 صور.';
+      rerenderEditorOnly();
+      return;
+    }
+
+    uploadingSharedPhoto = true;
+    draft.validationMessage = '';
+    pendingRetryUpload = () => processSharedPhotoFile(file);
+    rerenderEditorOnly();
+
+    try {
+      const result = await processImageFileForUpload(file);
+      if (!result.success) {
+        draft.validationMessage = result.errorMessage;
+        return;
+      }
+      pendingRetryUpload = null;
+      draft.sharedGroupPhotos = [...draft.sharedGroupPhotos, result.dataUrl];
+      draft.validationMessage = '';
+    } finally {
+      uploadingSharedPhoto = false;
+      if (inputEl) inputEl.value = '';
+      rerenderEditorOnly();
+    }
+  };
 
   // Add Optional Shared Collective Photo
   const sharedInput = document.querySelector<HTMLInputElement>('.add-shared-photo-input');
@@ -980,30 +1075,7 @@ export function attachGroupAdoptionModalEvents(): void {
     sharedInput.addEventListener('change', () => {
       const file = sharedInput.files?.[0];
       if (!file) return;
-      const check = validateUploadedFile(file, 'image');
-      if (!check.valid) {
-        sharedInput.value = '';
-        draft.validationMessage = check.errorMessage || 'صيغة أو حجم الصورة غير مدعوم.';
-        rerenderEditorOnly();
-        return;
-      }
-      if (getTotalDraftPhotoCount() >= 10) {
-        sharedInput.value = '';
-        draft.validationMessage = 'الحد الأقصى للصور في المجموعة هو 10 صور.';
-        rerenderEditorOnly();
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          const safeUrl = sanitizeImageSrc(reader.result, '');
-          if (!safeUrl) return;
-          draft.sharedGroupPhotos = [...draft.sharedGroupPhotos, safeUrl];
-          draft.validationMessage = '';
-          rerenderEditorOnly();
-        }
-      };
-      reader.readAsDataURL(file);
+      void processSharedPhotoFile(file, sharedInput);
     });
   }
 

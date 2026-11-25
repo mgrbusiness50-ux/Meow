@@ -162,7 +162,7 @@ export function renderMatingView(): string {
                                   petId: pet.id,
                                   reportTargetType: 'pet',
                                   buttonClass:
-                                    'w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                    'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-white flex items-center justify-center transition-all active:scale-90 cursor-pointer opacity-95 hover:opacity-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]',
                                   dropdownAlign: 'left',
                                 })
                               : ''
@@ -239,7 +239,7 @@ export function renderMatingView(): string {
                                 petId: pet.id,
                                 reportTargetType: 'pet',
                                 buttonClass:
-                                  'w-8 h-8 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-90 cursor-pointer shadow-md',
+                                  'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-white flex items-center justify-center transition-all active:scale-90 cursor-pointer opacity-95 hover:opacity-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]',
                                 dropdownAlign: 'left',
                               })
                             : ''
