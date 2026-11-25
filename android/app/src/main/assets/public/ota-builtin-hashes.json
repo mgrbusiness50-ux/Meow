@@ -4,13 +4,13 @@
       "sha256": "46e8c0d278678ea75358bc9e1199ea5aede85e2f90360b39fc9a49d9ab4b1baf",
       "size": 51382
     },
-    "assets/index-CSvbvgpE.css": {
-      "sha256": "7e24798089ce50fa12e82d51fead16fd233ac285bdf5e2e14c46980ea041e800",
-      "size": 129077
+    "assets/index-DAk-J4bw.js": {
+      "sha256": "7bb2dc8f19196933221330473313dc20289452e9d48f38aea6d24026e6b2a301",
+      "size": 1314055
     },
-    "assets/index-DBI9pXuH.js": {
-      "sha256": "e029508aeccc468e53699d59346d83ef025344881f7bba4cebbe2576b9035eb7",
-      "size": 1311470
+    "assets/index-DCZx_GT5.css": {
+      "sha256": "5ac7ddfdc7a746801ded8cb7292ac847694d032476df90dddf6a0205d25a32c3",
+      "size": 129098
     },
     "assets/meow-logo.png": {
       "sha256": "87f60500a325f1490eff13b33b3492d39ee059454c5c5743d67999576ce30461",
@@ -41,7 +41,7 @@
       "size": 0
     },
     "index.html": {
-      "sha256": "a201edc63342b1fba58645294938a12ad79511b6bfec18cd9f93971d8c485d1e",
+      "sha256": "e492af1dc170f785386ddc1ccf0dd4526dc7c1d447f3711a46084ca83afa3b09",
       "size": 6691
     },
     "sw.js": {

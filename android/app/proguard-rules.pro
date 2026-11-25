@@ -30,8 +30,15 @@
 # Keep MainActivity & app classes
 -keep class com.meow.app.** { *; }
 
-# OkHttp / Kotlin optional warnings suppression
+# OkHttp / Kotlin / CredentialManager optional warnings suppression
 -dontwarn okhttp3.**
 -dontwarn okio.**
 -dontwarn javax.annotation.**
+-dontwarn javax.naming.**
+-dontwarn javax.inject.**
 -dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
+-dontwarn org.codehaus.mojo.animal_sniffer.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn org.brotli.**
