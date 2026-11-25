@@ -51,8 +51,8 @@ describe('Supabase 6-digit OTP password recovery service', () => {
     expect(mockResetPasswordForEmail).not.toHaveBeenCalled();
   });
 
-  it('sends OTP request, enforces 90s resend cooldown per email, and maps SMTP errors clearly', async () => {
-    expect(RECOVERY_OTP_COOLDOWN_SECONDS).toBe(90);
+  it('sends OTP request, enforces 30s resend cooldown per email, and maps SMTP errors clearly', async () => {
+    expect(RECOVERY_OTP_COOLDOWN_SECONDS).toBe(30);
     mockResetPasswordForEmail.mockResolvedValueOnce({ error: null });
 
     const first = await sendPasswordRecoveryOtp('User.One@Example.com');
@@ -64,14 +64,14 @@ describe('Supabase 6-digit OTP password recovery service', () => {
     expect(second.errorCode).toBe('client_cooldown');
     expect(mockResetPasswordForEmail).toHaveBeenCalledTimes(1);
 
-    // Still locked at 89 seconds
-    await vi.advanceTimersByTimeAsync(89_000);
+    // Still locked at 29 seconds
+    await vi.advanceTimersByTimeAsync(29_000);
     const stillLocked = await sendPasswordRecoveryOtp('user.one@example.com');
     expect(stillLocked.success).toBe(false);
     expect(stillLocked.errorCode).toBe('client_cooldown');
     expect(mockResetPasswordForEmail).toHaveBeenCalledTimes(1);
 
-    // Unlocked right at 90 seconds; test SMTP delivery error mapping
+    // Unlocked right at 30 seconds; test SMTP delivery error mapping
     await vi.advanceTimersByTimeAsync(1_000);
     mockResetPasswordForEmail.mockResolvedValueOnce({
       error: { message: 'Error sending recovery email via SMTP' },

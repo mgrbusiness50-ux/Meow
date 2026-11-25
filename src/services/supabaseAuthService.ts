@@ -15,7 +15,7 @@ import type { UserProfile } from '../types.ts';
 const { Capacitor } = CapacitorCore;
 
 export const ANDROID_AUTH_CALLBACK_URL = 'com.meow.app://auth-callback';
-export const RECOVERY_OTP_COOLDOWN_SECONDS = 90;
+export const RECOVERY_OTP_COOLDOWN_SECONDS = 30;
 export const RECOVERY_OTP_COOLDOWN_MS = RECOVERY_OTP_COOLDOWN_SECONDS * 1000;
 
 interface MeowGoogleAuthNativeResult {

@@ -6,7 +6,7 @@ const flushMicrotasks = async (rounds = 6) => {
   }
 };
 
-describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
+describe('Splash screen minimum duration (2000ms) and readiness gating', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useFakeTimers();
@@ -19,7 +19,7 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     vi.doUnmock('../src/services/supabaseAuthService.ts');
   });
 
-  it('holds splash for at least 7000ms, blocks premature skips, and transitions automatically without user interaction', async () => {
+  it('holds splash for at least 2000ms, blocks premature skips, and transitions automatically without user interaction', async () => {
     vi.doMock('../src/services/supabaseClient.ts', () => ({
       isSupabaseConfigured: () => false,
     }));
@@ -28,22 +28,22 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     state.resetSplashState();
 
     expect(state.getOnboardingStep()).toBe('splash');
-    expect(state.getSplashMinDurationMs()).toBe(7000);
+    expect(state.getSplashMinDurationMs()).toBe(2000);
 
-    // Attempt early transition before 7000ms elapses
+    // Attempt early transition before 2000ms elapses
     state.setOnboardingStep('welcome');
     expect(state.getOnboardingStep()).toBe('splash');
 
-    await vi.advanceTimersByTimeAsync(6999);
+    await vi.advanceTimersByTimeAsync(1999);
     expect(state.getOnboardingStep()).toBe('splash');
 
-    // Transitions automatically right after 7000ms without needing any click
+    // Transitions automatically right after 2000ms without needing any click
     await vi.advanceTimersByTimeAsync(1);
     expect(state.getOnboardingStep()).toBe('welcome');
     expect(state.isSplashLoadingDelayed()).toBe(false);
   });
 
-  it('waits until 7000ms when initialization completes early (1500ms) and transitions without extra delay at 7000ms', async () => {
+  it('waits until 2000ms when initialization completes early (500ms) and transitions without extra delay at 2000ms', async () => {
     let resolveSession!: (val: unknown) => void;
     const sessionPromise = new Promise((resolve) => {
       resolveSession = resolve;
@@ -69,14 +69,14 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     const { state } = await import('../src/state.ts');
     expect(state.getOnboardingStep()).toBe('splash');
 
-    await vi.advanceTimersByTimeAsync(1500);
+    await vi.advanceTimersByTimeAsync(500);
     resolveSession({ configured: true, session: null, user: null, isPasswordRecovery: false });
     await flushMicrotasks();
 
-    // Still holds splash until 7000ms minimum duration passes
+    // Still holds splash until 2000ms minimum duration passes
     expect(state.getOnboardingStep()).toBe('splash');
 
-    await vi.advanceTimersByTimeAsync(5499);
+    await vi.advanceTimersByTimeAsync(1499);
     expect(state.getOnboardingStep()).toBe('splash');
 
     await vi.advanceTimersByTimeAsync(1);
@@ -84,7 +84,7 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     expect(state.isSplashLoadingDelayed()).toBe(false);
   });
 
-  it('stays on splash with loading indicator when initialization is delayed past 7000ms and transitions immediately upon readiness', async () => {
+  it('stays on splash with loading indicator when initialization is delayed past 2000ms and transitions immediately upon readiness', async () => {
     let resolveSession!: (val: unknown) => void;
     const sessionPromise = new Promise((resolve) => {
       resolveSession = resolve;
@@ -110,17 +110,17 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     const { state } = await import('../src/state.ts');
     expect(state.getOnboardingStep()).toBe('splash');
 
-    // Pass 7000ms while auth session check is still pending -> shows loading indicator
-    await vi.advanceTimersByTimeAsync(7000);
+    // Pass 2000ms while auth session check is still pending -> shows loading indicator
+    await vi.advanceTimersByTimeAsync(2000);
     expect(state.getOnboardingStep()).toBe('splash');
     expect(state.isSplashLoadingDelayed()).toBe(true);
 
-    // Even past 10500ms, still waits because initialization has not settled yet
+    // Even past 5500ms, still waits because initialization has not settled yet
     await vi.advanceTimersByTimeAsync(3500);
     expect(state.getOnboardingStep()).toBe('splash');
     expect(state.isSplashLoadingDelayed()).toBe(true);
 
-    // As soon as delayed initialization completes at 10500ms, transitions immediately
+    // As soon as delayed initialization completes at 5500ms, transitions immediately
     resolveSession({ configured: true, session: null, user: null, isPasswordRecovery: false });
     await flushMicrotasks();
 
@@ -144,7 +144,7 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     state.scheduleSplashAutoTransition();
     const beforeCount = notifications;
 
-    await vi.advanceTimersByTimeAsync(7000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(state.getOnboardingStep()).toBe('welcome');
     expect(notifications - beforeCount).toBe(1);
 
@@ -156,7 +156,7 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     unsub();
   });
 
-  it('routes a valid returning session directly to completed after >=7000ms without needing user click', async () => {
+  it('routes a valid returning session directly to completed after >=2000ms without needing user click', async () => {
     const fakeSession = { access_token: 'tok', user: { id: 'u-1', email: 'user@example.com' } };
     vi.doMock('../src/services/supabaseClient.ts', () => ({
       isSupabaseConfigured: () => true,
@@ -209,7 +209,7 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     await flushMicrotasks();
     expect(state.getOnboardingStep()).toBe('splash');
 
-    await vi.advanceTimersByTimeAsync(7000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(state.getOnboardingStep()).toBe('completed');
   });
 
@@ -245,7 +245,7 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     await flushMicrotasks();
     expect(state.getOnboardingStep()).toBe('splash');
 
-    await vi.advanceTimersByTimeAsync(7000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(state.getOnboardingStep()).toBe('auth_method');
     expect(state.getSupabaseAuthError()).toContain('مشكلة في الاتصال بالإنترنت');
   });
@@ -298,8 +298,8 @@ describe('Splash screen minimum duration (7000ms) and readiness gating', () => {
     expect(document.getElementById('splash-logo-img')).toBe(initialLogo);
     expect(initialLogo?.getAttribute('src')).toBe('/assets/meow-logo.png');
 
-    // Trigger loading indicator at 7000ms while session is still pending -> DOM container & logo MUST remain exact same nodes
-    await vi.advanceTimersByTimeAsync(7000);
+    // Trigger loading indicator at 2000ms while session is still pending -> DOM container & logo MUST remain exact same nodes
+    await vi.advanceTimersByTimeAsync(2000);
     expect(state.isSplashLoadingDelayed()).toBe(true);
     expect(document.getElementById('splash-screen-container')).toBe(initialContainer);
     expect(document.getElementById('splash-logo-img')).toBe(initialLogo);

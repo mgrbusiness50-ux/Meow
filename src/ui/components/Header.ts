@@ -100,7 +100,7 @@ export function renderHeader(): string {
           <div class="cursor-pointer flex items-center transition-transform active:scale-95 shrink-0" id="header-logo-container">
             <img
               alt="Meow Brand Logo"
-              class="h-10 min-[360px]:h-11 sm:h-12 w-auto object-contain drop-shadow-sm"
+              class="h-12 min-[360px]:h-13 sm:h-14 w-auto object-contain drop-shadow-sm"
               src="${MEOW_LOGO_URL}"
             />
           </div>

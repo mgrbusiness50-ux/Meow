@@ -109,7 +109,7 @@ import {
   updateSupabaseAccountPreferences,
 } from './services/supabaseAuthService.ts';
 
-const SPLASH_MIN_DURATION_MS = 7000;
+const SPLASH_MIN_DURATION_MS = 2000;
 const SPLASH_MAX_WAIT_MS = 15000;
 const OTA_DISMISSED_VERSION_STORAGE_KEY = 'meow_dismissed_ota_version';
 

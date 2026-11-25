@@ -137,6 +137,38 @@ body.xr-active canvas {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
+/* Prevent text selection on UI elements (app-like experience) while keeping inputs functional */
+button,
+a[role="button"],
+[role="button"],
+.tab-btn,
+.category-species-btn,
+header,
+footer,
+nav,
+.meow-card-enter,
+.brand-card,
+[data-no-select],
+img,
+svg {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Allow normal text interaction in input fields, textareas, and content areas */
+input,
+textarea,
+[contenteditable="true"],
+.searchable-select-search,
+.select-option-label {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 button,
 a[role="button"],
 [role="button"] {
@@ -304,19 +336,14 @@ a[role="button"]:not(.no-active-scale):active,
   will-change: transform, opacity;
 }
 
-/* Status bar top dark gradient scrim for Android edge-to-edge readability */
+/* Status bar top dark scrim for Android edge-to-edge readability */
 #status-bar-scrim {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: calc(env(safe-area-inset-top, 0px) + 18px);
-  background: linear-gradient(
-    to bottom,
-    rgba(20, 14, 10, 0.42) 0%,
-    rgba(20, 14, 10, 0.16) 55%,
-    rgba(20, 14, 10, 0) 100%
-  );
+  height: env(safe-area-inset-top, 0px);
+  background: transparent;
   pointer-events: none;
   z-index: 55;
 }
