@@ -86,10 +86,13 @@ public class GoogleAuthPlugin extends Plugin {
                                     ret.put("profilePictureUri", googleCred.getProfilePictureUri().toString());
                                 }
                                 call.resolve(ret);
-                            } catch (GoogleIdTokenParsingException parseError) {
+                            } catch (Exception parseError) {
+                                String errorCode = (parseError instanceof GoogleIdTokenParsingException)
+                                    ? "invalid_google_credential"
+                                    : "google_auth_failed";
                                 call.reject(
                                     "Failed to parse Google ID token credential.",
-                                    "invalid_google_credential",
+                                    errorCode,
                                     parseError
                                 );
                             }
