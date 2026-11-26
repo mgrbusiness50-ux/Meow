@@ -3,8 +3,8 @@
   "latestBuildNumber": 3,
   "minSupportedVersion": "1.2.0",
   "apkUrl": "https://github.com/mgrbusiness50-ux/Meow/releases/download/v1.2.1-b3/meow-v1.2.1-b3-release.apk",
-  "sha256": "59840c39884b84fbd742e380babe4f2dff6946c49387fa779d5060ba4c766dcb",
+  "sha256": "26533760fe1ffd963db1c9ea6b9fb54fe1aa9a3e00f6c559d8ab9e14ce78131d",
   "releaseNotes": "تحديث تجربة المحادثة والطلبات الذكية وتحسين الأداء والاستقرار.",
-  "mandatory": false,
-  "publishedAt": "2026-11-25T15:15:32Z"
+  "mandatory": true,
+  "publishedAt": "2026-11-26T15:52:05Z"
 }
