@@ -1,0 +1,11 @@
+{
+  "version": "1.2.1",
+  "buildNumber": 3,
+  "bundleUrl": "https://mgrbusiness50-ux.github.io/Meow/updates\r/updates/bundles/1.2.1-b3-production/bundle.zip",
+  "checksum": "dfa6f76b372be7c2a1e31d32d66efcc967c6857e7af4c75ead5e0ab62f73950c",
+  "minNativeVersion": "1.2.0",
+  "channel": "production",
+  "releaseNotes": "تحديث تجربة المحادثة والطلبات الذكية وتحسين الأداء والاستقرار.",
+  "mandatory": false,
+  "publishedAt": "2026-11-26T14:22:17Z"
+}
