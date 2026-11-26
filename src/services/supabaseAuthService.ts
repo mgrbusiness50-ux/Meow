@@ -11,6 +11,7 @@ import {
   mapUserProfileToDbUpsert,
 } from './supabaseMappers.ts';
 import type { UserProfile } from '../types.ts';
+export { isNetworkOrOfflineError, sanitizeOAuthDisplayName } from '../utils/authHelpers.ts';
 
 const { Capacitor } = CapacitorCore;
 

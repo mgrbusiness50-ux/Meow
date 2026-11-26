@@ -1,4 +1,8 @@
+import { state } from '../../state.ts';
+
 export function renderStoreView(): string {
+  const isRequested = state.isStoreNotifyRequested();
+
   return `
     <div class="w-full max-w-md mx-auto px-4 sm:px-5 pt-3 pb-6 flex-1 min-w-0">
       <div class="relative flex flex-col items-center justify-center text-center px-4 py-7 overflow-hidden bg-white/75 border border-brand-peachBorder rounded-3xl shadow-card" data-purpose="empty-messages-state">
@@ -42,10 +46,16 @@ export function renderStoreView(): string {
         <button
           type="button"
           id="store-notify-btn"
-          class="h-11 px-6 rounded-full bg-brand-orange text-white font-black text-sm shadow-soft hover:bg-brand-orangeHover active:scale-95 transition-all flex items-center gap-2 border border-brand-orange cursor-pointer font-baloo"
+          class="h-11 px-5 sm:px-6 rounded-full ${
+            isRequested
+              ? 'bg-emerald-600 border-emerald-600'
+              : 'bg-brand-orange border-brand-orange hover:bg-brand-orangeHover'
+          } text-white font-black text-xs sm:text-sm shadow-soft active:scale-95 transition-all inline-flex items-center justify-center gap-2 border cursor-pointer font-baloo whitespace-nowrap"
         >
-          <i class="fa-solid fa-bell text-xs"></i>
-          <span id="store-notify-text">تنبيهي عند التوفر</span>
+          <i class="fa-solid ${isRequested ? 'fa-circle-check' : 'fa-bell'} text-xs shrink-0"></i>
+          <span id="store-notify-text" class="whitespace-nowrap">${
+            isRequested ? 'تم تسجيل التنبيه! 🎉' : 'تنبيهي عند التوفر'
+          }</span>
         </button>
 
       </div>
@@ -58,9 +68,7 @@ export function attachStoreEvents(): void {
   const notifyText = document.getElementById('store-notify-text');
   if (notifyBtn && notifyText) {
     notifyBtn.addEventListener('click', () => {
-      notifyBtn.classList.remove('bg-brand-orange', 'border-brand-orange');
-      notifyBtn.classList.add('bg-emerald-600', 'border-emerald-600');
-      notifyText.innerText = 'تم تسجيل رغبتك بالتنبيه! 🎉';
+      state.requestStoreNotify();
     });
   }
 }

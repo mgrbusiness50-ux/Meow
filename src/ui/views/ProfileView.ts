@@ -1,5 +1,6 @@
 import { state } from '../../state.ts';
 import { PetStatus } from '../../types.ts';
+import { APP_VERSION_INFO } from '../../config/appVersion.ts';
 import {
   SAFE_FALLBACK_AVATAR_SVG,
   SAFE_FALLBACK_PET_SVG,
@@ -343,19 +344,19 @@ export function renderProfileView(): string {
         </div>
 
       </div>
-
-      <!-- 3-Dots Smooth Sliding Side Drawer (البند 5: قائمة جانبية أنيقة تفتح بسلاسة من جانب الشاشة) -->
-      ${renderProfileSideDrawer(user)}
-
-      <!-- Sub-modals for Drawer Items -->
-      ${renderActiveDrawerModal(user)}
-
-      <!-- Confirmation Modals (Delete Pet / Status Change / Adoption Management / Sign Out) -->
-      ${renderDeletePetConfirmModal()}
-      ${renderStatusChangeConfirmModal()}
-      ${renderAdoptionActionConfirmModal()}
-      ${renderSignOutConfirmModal(user)}
     </div>
+  `;
+}
+
+export function renderProfileOverlayModals(): string {
+  const user = state.getUser();
+  return `
+    ${renderProfileSideDrawer(user)}
+    ${renderActiveDrawerModal(user)}
+    ${renderDeletePetConfirmModal()}
+    ${renderStatusChangeConfirmModal()}
+    ${renderAdoptionActionConfirmModal()}
+    ${renderSignOutConfirmModal(user)}
   `;
 }
 
@@ -364,14 +365,17 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
   if (!state.isSettingsOpen()) return '';
   const notificationsEnabled = state.getNotificationsEnabled();
   const showPhone = state.getShowPhoneInProfile();
+  const updateState = state.getUpdateState();
+  const ota = updateState.result.otaUpdate;
+  const currentVersionLabel = `v${APP_VERSION_INFO.appVersion} (${APP_VERSION_INFO.buildNumber})`;
 
   return `
-    <div id="profile-drawer-backdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
+    <div id="profile-drawer-backdrop" class="fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
       <div class="w-full max-w-md mx-auto h-full relative flex justify-start pointer-events-none">
         <!-- Drawer Panel clipped cleanly to rounded bounds (no protruding bar) -->
         <div 
           id="profile-drawer-panel" 
-          class="pointer-events-auto relative w-[84%] max-w-[330px] h-full max-h-[100dvh] bg-[#FFF9E9] text-[#2d221b] shadow-2xl border-l-2 border-brand-peachBorder/90 rounded-l-[32px] overflow-hidden flex flex-col transform transition-transform duration-300 translate-x-0 text-right z-50"
+          class="pointer-events-auto relative w-[84%] max-w-[330px] h-full max-h-[100dvh] bg-[#FFF9E9] text-[#2d221b] shadow-2xl border-l-2 border-brand-peachBorder/90 rounded-l-[32px] overflow-hidden flex flex-col meow-drawer-enter-rtl text-right z-[86]"
         >
           <!-- Subtle Edge Grip Bar inside RTL left border for Swipe-to-Close -->
           <div class="w-1 h-12 rounded-full bg-brand-peachBorder/70 absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none z-20"></div>
@@ -597,6 +601,61 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
               </button>
             </div>
 
+            <!-- OTA Version & Updates Card -->
+            <div class="pt-2 pb-1 border-t-2 border-brand-peachBorder/50 space-y-2">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/90 border border-brand-peachBorder text-[11px] font-black text-brand-subtleGray font-baloo">
+                الإصدار والتحديثات
+              </span>
+              <div class="px-3.5 py-3 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/85 space-y-2.5 shadow-sm">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <div class="w-8 h-8 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
+                      <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <span class="text-xs font-black font-baloo text-brand-dark block leading-tight">إصدار التطبيق</span>
+                      <span class="text-[11px] font-mono font-bold text-brand-subtleGray block truncate" dir="ltr">${escapeHtml(currentVersionLabel)}</span>
+                    </div>
+                  </div>
+                  <button
+                    id="drawer-check-updates-btn"
+                    type="button"
+                    ${updateState.isChecking || updateState.isApplyingOta ? 'disabled' : ''}
+                    class="h-8 px-3 rounded-full bg-brand-cream hover:bg-brand-orange hover:text-white border border-brand-peachBorder text-brand-orange text-[11px] font-black transition cursor-pointer active:scale-95 shrink-0 font-baloo ${
+                      updateState.isChecking ? 'opacity-65 cursor-wait' : ''
+                    }"
+                  >
+                    ${updateState.isChecking ? 'جاري الفحص...' : 'فحص التحديثات'}
+                  </button>
+                </div>
+                ${
+                  updateState.feedback
+                    ? `<p class="text-[11px] font-bold ${
+                        updateState.feedback.kind === 'error'
+                          ? 'text-rose-600'
+                          : updateState.feedback.kind === 'success'
+                          ? 'text-emerald-700'
+                          : 'text-brand-subtleGray'
+                      } m-0 leading-snug">${escapeHtml(updateState.feedback.message)}</p>`
+                    : ''
+                }
+                ${
+                  ota
+                    ? `
+                    <button
+                      id="drawer-apply-ota-btn"
+                      type="button"
+                      ${updateState.isApplyingOta ? 'disabled' : ''}
+                      class="w-full h-9 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white text-xs font-black shadow-soft transition cursor-pointer active:scale-95 font-baloo"
+                    >
+                      ${updateState.isApplyingOta ? 'جاري التثبيت...' : `تثبيت التحديث السريع (${escapeHtml(ota.version)})`}
+                    </button>
+                    `
+                    : ''
+                }
+              </div>
+            </div>
+
             <!-- 7. تسجيل الخروج -->
             <div class="pt-2 pb-2 border-t-2 border-brand-peachBorder/50">
               <button
@@ -640,7 +699,7 @@ function renderActiveDrawerModal(user: ReturnType<typeof state.getUser>): string
   if (!activeModalType) return '';
 
   return `
-    <div id="drawer-submodal-backdrop" class="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+    <div id="drawer-submodal-backdrop" class="fixed inset-0 z-[90] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
       <div id="drawer-submodal-sheet" class="bg-[#FFF9E9] dark:bg-[#27201B] w-full max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[36px] px-5 sm:px-6 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:py-6 shadow-2xl border-2 border-b-0 sm:border-b-2 border-brand-peachBorder dark:border-warm-darkBorder text-right space-y-4 animate-slide-up max-h-[88dvh] overflow-y-auto overscroll-contain">
         <div id="drawer-submodal-drag-handle" class="sm:hidden flex justify-center pb-1 touch-none cursor-grab">
           <div class="w-11 h-1.5 rounded-full bg-brand-peachBorder"></div>
@@ -794,6 +853,24 @@ export function attachProfileEvents(): void {
     });
   });
 
+  // Settings Drawer Opening (button sits inside Header)
+  const profileMenuBtn = document.getElementById('profile-menu-dots-btn');
+  if (profileMenuBtn) {
+    profileMenuBtn.addEventListener('click', () => {
+      state.setSettingsOpen(true);
+    });
+  }
+
+  // Edit Owner Details Button (Opens full original Owner Details edit page)
+  const editUserBtn = document.getElementById('edit-user-info-btn');
+  if (editUserBtn) {
+    editUserBtn.addEventListener('click', () => {
+      state.setEditOwnerModalVisible(true);
+    });
+  }
+}
+
+export function attachProfileOverlayEvents(): void {
   // Delete Pet Confirmation Modal Events
   const confirmDeletePetBtn = document.getElementById('confirm-delete-pet-btn');
   const cancelDeletePetBtn = document.getElementById('cancel-delete-pet-btn');
@@ -809,18 +886,6 @@ export function attachProfileEvents(): void {
       if (e.target === deletePetBackdrop) state.cancelDeletePet();
     });
   }
-
-  // Pet Status Toggle (Always shows confirmation modal before applying transition)
-  const statusToggleBtns = document.querySelectorAll<HTMLButtonElement>('.pet-status-toggle-btn');
-  statusToggleBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const petId = btn.getAttribute('data-pet-id');
-      const targetStatus = btn.getAttribute('data-target-status') as PetStatus;
-      if (petId && targetStatus) {
-        state.requestPetStatusChange(petId, targetStatus);
-      }
-    });
-  });
 
   // Status Change Confirmation Modal Events
   const confirmStatusChangeBtn = document.getElementById('confirm-status-change-btn');
@@ -838,32 +903,6 @@ export function attachProfileEvents(): void {
     });
   }
 
-  // Group / Dual Adoption Management Actions inside Profile
-  const openGroupEditorBtn = document.getElementById('open-group-adoption-editor-btn');
-  if (openGroupEditorBtn) {
-    openGroupEditorBtn.addEventListener('click', () => {
-      state.openGroupAdoptionEditor();
-    });
-  }
-  const dissolveGroupBtn = document.getElementById('dissolve-group-adoption-btn-profile');
-  if (dissolveGroupBtn) {
-    dissolveGroupBtn.addEventListener('click', () => {
-      state.requestAdoptionActionConfirm('dissolve_group');
-    });
-  }
-  document.querySelectorAll<HTMLButtonElement>('.toggle-individual-dual-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const petId = btn.getAttribute('data-toggle-individual-pet-id');
-      const action = btn.getAttribute('data-individual-action') as
-        | 'stop_individual'
-        | 'enable_individual'
-        | null;
-      if (petId && action) {
-        state.requestAdoptionActionConfirm(action, petId);
-      }
-    });
-  });
-
   const confirmAdoptionActionBtn = document.getElementById('confirm-adoption-action-btn');
   const cancelAdoptionActionBtn = document.getElementById('cancel-adoption-action-btn');
   const adoptionActionBackdrop = document.getElementById('adoption-action-confirm-backdrop');
@@ -879,58 +918,32 @@ export function attachProfileEvents(): void {
     });
   }
 
-  const previewGroupBtn = document.getElementById('preview-group-listing-btn');
-  if (previewGroupBtn) {
-    previewGroupBtn.addEventListener('click', () => {
-      const group = state.getUserGroupAdoptionListing();
-      if (group) state.setSelectedPetForDetail(group);
-    });
-  }
-
-  // View Own Pet Detail (always preview individual card clearly)
-  const viewOwnDetailBtns = document.querySelectorAll<HTMLElement>('.view-own-pet-detail-btn');
-  viewOwnDetailBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const petId = btn.getAttribute('data-pet-detail-id');
-      const pet = state.getUserPets().find((p) => p.id === petId);
-      if (pet) {
-        state.setSelectedPetForDetail(
-          pet.status === 'adoption'
-            ? {
-                ...pet,
-                adoptionType: 'individual',
-                alsoListedIndividually: undefined,
-                groupCount: undefined,
-                mustAdoptTogether: undefined,
-                groupPetIds: undefined,
-                groupMembers: undefined,
-                sharedGroupPhotos: undefined,
-                photoEntries: undefined,
-              }
-            : pet
-        );
-      }
-    });
-  });
-
-  // Settings Drawer Opening/Closing
-  const profileMenuBtn = document.getElementById('profile-menu-dots-btn');
+  // Settings Drawer Closing (with smooth slide-out)
   const closeDrawerBtn = document.getElementById('close-profile-drawer-btn');
   const drawerBackdrop = document.getElementById('profile-drawer-backdrop');
-
-  if (profileMenuBtn) {
-    profileMenuBtn.addEventListener('click', () => {
-      state.setSettingsOpen(true);
-    });
-  }
+  const drawerPanel = document.getElementById('profile-drawer-panel');
+  let isClosingDrawer = false;
 
   const closeDrawer = () => {
-    state.setSettingsOpen(false);
+    if (isClosingDrawer) return;
+    isClosingDrawer = true;
+    if (drawerPanel) {
+      drawerPanel.classList.remove('meow-drawer-enter-rtl');
+      drawerPanel.classList.add('meow-drawer-exit-rtl');
+      if (drawerBackdrop) {
+        drawerBackdrop.style.transition = 'opacity 180ms ease-out';
+        drawerBackdrop.style.opacity = '0';
+      }
+      window.setTimeout(() => {
+        state.setSettingsOpen(false);
+      }, 200);
+    } else {
+      state.setSettingsOpen(false);
+    }
   };
 
-  const drawerPanel = document.getElementById('profile-drawer-panel');
   if (drawerPanel) {
-    attachSwipeToCloseDrawer(drawerPanel, drawerBackdrop, closeDrawer, 'right');
+    attachSwipeToCloseDrawer(drawerPanel, drawerBackdrop, () => state.setSettingsOpen(false), 'right');
   }
 
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', closeDrawer);
@@ -943,7 +956,21 @@ export function attachProfileEvents(): void {
     });
   }
 
-  // Notifications Toggle in Drawer (Synced to state, localStorage, browser permissions & Firestore)
+  // Check / Apply OTA updates inside Drawer
+  const checkUpdatesBtn = document.getElementById('drawer-check-updates-btn');
+  if (checkUpdatesBtn) {
+    checkUpdatesBtn.addEventListener('click', () => {
+      void state.checkForAppUpdates(true);
+    });
+  }
+  const applyOtaDrawerBtn = document.getElementById('drawer-apply-ota-btn');
+  if (applyOtaDrawerBtn) {
+    applyOtaDrawerBtn.addEventListener('click', () => {
+      void state.applyOtaUpdateNow();
+    });
+  }
+
+  // Notifications Toggle in Drawer
   const notificationsToggle = document.getElementById('drawer-notifications-toggle');
   if (notificationsToggle) {
     notificationsToggle.addEventListener('click', () => {
@@ -968,7 +995,7 @@ export function attachProfileEvents(): void {
     });
   }
 
-  // Contact Us Button in Drawer (Opens Standalone View matching اتصل بنا.jpeg)
+  // Contact Us Button in Drawer
   const contactUsBtn = document.getElementById('drawer-contact-us-btn');
   if (contactUsBtn) {
     contactUsBtn.addEventListener('click', () => {
@@ -1027,7 +1054,7 @@ export function attachProfileEvents(): void {
     });
   });
 
-  // Sign Out Button in Drawer (Opens confirmation modal before signing out)
+  // Sign Out Button in Drawer
   const signOutBtn = document.getElementById('drawer-sign-out-btn');
   if (signOutBtn) {
     signOutBtn.addEventListener('click', () => {
@@ -1077,21 +1104,13 @@ export function attachProfileEvents(): void {
       }
     });
   }
-
-  // Edit Owner Details Button (Opens full original Owner Details edit page)
-  const editUserBtn = document.getElementById('edit-user-info-btn');
-  if (editUserBtn) {
-    editUserBtn.addEventListener('click', () => {
-      state.setEditOwnerModalVisible(true);
-    });
-  }
 }
 
 function renderSignOutConfirmModal(user: ReturnType<typeof state.getUser>): string {
   if (!isSignOutConfirmOpen) return '';
 
   return `
-    <div id="sign-out-confirm-backdrop" class="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+    <div id="sign-out-confirm-backdrop" class="fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
       <div class="bg-[#FFF9E9] w-full max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[32px] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl space-y-4 text-right animate-slide-up font-baloo text-[#2d221b]">
         <div class="flex items-center gap-3 pb-3 border-b border-[#d6c7b2]/60">
           <div class="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-600 flex items-center justify-center text-xl shrink-0 border border-rose-200">
@@ -1153,7 +1172,7 @@ function renderDeletePetConfirmModal(): string {
   const isInGroup = Boolean(groupListing?.groupPetIds?.includes(pet.id));
 
   return `
-    <div id="delete-pet-confirm-backdrop" class="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+    <div id="delete-pet-confirm-backdrop" class="fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
       <div class="bg-[#FFF9E9] w-full max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[32px] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl space-y-4 text-right animate-slide-up font-baloo text-[#2d221b]">
         <div class="flex items-center gap-3 pb-3 border-b border-[#d6c7b2]/60">
           ${
@@ -1236,7 +1255,7 @@ function renderStatusChangeConfirmModal(): string {
   }
 
   return `
-    <div id="status-change-confirm-backdrop" class="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+    <div id="status-change-confirm-backdrop" class="fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
       <div class="bg-[#FFF9E9] w-full max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[32px] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl space-y-4 text-right animate-slide-up font-baloo text-[#2d221b]">
         <div class="flex items-center gap-3 pb-3 border-b border-[#d6c7b2]/60">
           <div class="w-11 h-11 rounded-2xl bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center text-xl shrink-0">
@@ -1311,7 +1330,7 @@ function renderAdoptionActionConfirmModal(): string {
   }
 
   return `
-    <div id="adoption-action-confirm-backdrop" class="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+    <div id="adoption-action-confirm-backdrop" class="fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
       <div class="bg-[#FFF9E9] w-full max-w-sm rounded-t-[32px] rounded-b-none sm:rounded-[32px] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 border-2 border-b-0 sm:border-b-2 border-[#d6c7b2] shadow-2xl space-y-4 text-right animate-slide-up font-baloo text-[#2d221b]">
         <div class="flex items-center gap-3 pb-3 border-b border-[#d6c7b2]/60">
           <div class="w-11 h-11 rounded-2xl bg-[#e67e22]/15 text-[#e67e22] flex items-center justify-center text-xl shrink-0">

@@ -167,6 +167,9 @@ const editOwnerFormState: OwnerDetailsFormValues = {
 };
 let isEditOwnerDraftActive = false;
 
+const OWNER_DRAFT_STORAGE_KEY = 'meow_onboarding_owner_draft_v1';
+const PET_DRAFT_STORAGE_KEY = 'meow_onboarding_pet_draft_v1';
+
 let selectedPetSpecies: 'cat' | 'dog' | null = null;
 let selectedPetGender: 'male' | 'female' | null = null;
 let selectedVaccination: 'yes' | 'no' | null = null;
@@ -182,6 +185,168 @@ const uploadedPetPhotos: (string | null)[] = [null, null, null];
 const uploadingPetPhotoSlots: [boolean, boolean, boolean] = [false, false, false];
 const petPhotoSlotErrors: [string, string, string] = ['', '', ''];
 const petPhotoRetryFiles: [File | null, File | null, File | null] = [null, null, null];
+
+function getSafeSessionStorage(): Storage | null {
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      return window.sessionStorage;
+    }
+  } catch {
+    // ignore storage access errors
+  }
+  return null;
+}
+
+function persistOnboardingOwnerDraft(): void {
+  const storage = getSafeSessionStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(OWNER_DRAFT_STORAGE_KEY, JSON.stringify(onboardingOwnerFormState));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+function restoreOnboardingOwnerDraft(): void {
+  const storage = getSafeSessionStorage();
+  if (!storage) return;
+  if (
+    onboardingOwnerFormState.name ||
+    onboardingOwnerFormState.phone ||
+    onboardingOwnerFormState.gender ||
+    onboardingOwnerFormState.govId
+  ) {
+    return;
+  }
+  try {
+    const raw = storage.getItem(OWNER_DRAFT_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Partial<OwnerDetailsFormValues>;
+    if (!parsed || typeof parsed !== 'object') return;
+    if (typeof parsed.name === 'string') onboardingOwnerFormState.name = parsed.name;
+    if (typeof parsed.phone === 'string') onboardingOwnerFormState.phone = parsed.phone;
+    if (parsed.gender === 'male' || parsed.gender === 'female') {
+      onboardingOwnerFormState.gender = parsed.gender;
+    }
+    if (typeof parsed.govId === 'string') onboardingOwnerFormState.govId = parsed.govId;
+    if (typeof parsed.markazId === 'string') onboardingOwnerFormState.markazId = parsed.markazId;
+    if (typeof parsed.cityId === 'string') onboardingOwnerFormState.cityId = parsed.cityId;
+    if (typeof parsed.villageId === 'string') onboardingOwnerFormState.villageId = parsed.villageId;
+  } catch {
+    // ignore malformed draft
+  }
+}
+
+function persistOnboardingPetDraft(): void {
+  const storage = getSafeSessionStorage();
+  if (!storage) return;
+  const payload = {
+    selectedPetSpecies,
+    selectedPetGender,
+    selectedVaccination,
+    draftPetName,
+    draftPetColor,
+    draftPetBreed,
+    draftPetHybrid,
+    draftPetAgeYears,
+    draftPetAgeMonths,
+    draftPetNotes,
+    selectedTraits: Array.from(selectedTraits),
+    uploadedPetPhotos,
+  };
+  try {
+    storage.setItem(PET_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Fallback without photo data URLs if sessionStorage quota is exceeded
+    try {
+      storage.setItem(
+        PET_DRAFT_STORAGE_KEY,
+        JSON.stringify({ ...payload, uploadedPetPhotos: [null, null, null] })
+      );
+    } catch {
+      // ignore storage quota errors
+    }
+  }
+}
+
+function restoreOnboardingPetDraft(): void {
+  const storage = getSafeSessionStorage();
+  if (!storage) return;
+  const hasActiveDraft =
+    Boolean(selectedPetSpecies) ||
+    Boolean(selectedPetGender) ||
+    Boolean(selectedVaccination) ||
+    Boolean(draftPetName) ||
+    Boolean(draftPetColor) ||
+    Boolean(draftPetBreed) ||
+    Boolean(draftPetAgeYears) ||
+    Boolean(draftPetAgeMonths) ||
+    Boolean(draftPetNotes) ||
+    selectedTraits.size > 0 ||
+    uploadedPetPhotos.some(Boolean);
+  if (hasActiveDraft) return;
+
+  try {
+    const raw = storage.getItem(PET_DRAFT_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as {
+      selectedPetSpecies?: unknown;
+      selectedPetGender?: unknown;
+      selectedVaccination?: unknown;
+      draftPetName?: unknown;
+      draftPetColor?: unknown;
+      draftPetBreed?: unknown;
+      draftPetHybrid?: unknown;
+      draftPetAgeYears?: unknown;
+      draftPetAgeMonths?: unknown;
+      draftPetNotes?: unknown;
+      selectedTraits?: unknown;
+      uploadedPetPhotos?: unknown;
+    };
+    if (!parsed || typeof parsed !== 'object') return;
+    if (parsed.selectedPetSpecies === 'cat' || parsed.selectedPetSpecies === 'dog') {
+      selectedPetSpecies = parsed.selectedPetSpecies;
+    }
+    if (parsed.selectedPetGender === 'male' || parsed.selectedPetGender === 'female') {
+      selectedPetGender = parsed.selectedPetGender;
+    }
+    if (parsed.selectedVaccination === 'yes' || parsed.selectedVaccination === 'no') {
+      selectedVaccination = parsed.selectedVaccination;
+    }
+    if (typeof parsed.draftPetName === 'string') draftPetName = parsed.draftPetName;
+    if (typeof parsed.draftPetColor === 'string') draftPetColor = parsed.draftPetColor;
+    if (typeof parsed.draftPetBreed === 'string') draftPetBreed = parsed.draftPetBreed;
+    if (typeof parsed.draftPetHybrid === 'string') draftPetHybrid = parsed.draftPetHybrid;
+    if (typeof parsed.draftPetAgeYears === 'string') draftPetAgeYears = parsed.draftPetAgeYears;
+    if (typeof parsed.draftPetAgeMonths === 'string') draftPetAgeMonths = parsed.draftPetAgeMonths;
+    if (typeof parsed.draftPetNotes === 'string') draftPetNotes = parsed.draftPetNotes;
+    if (Array.isArray(parsed.selectedTraits)) {
+      selectedTraits.clear();
+      parsed.selectedTraits.slice(0, 6).forEach((t) => {
+        if (typeof t === 'string' && t) selectedTraits.add(t);
+      });
+    }
+    if (Array.isArray(parsed.uploadedPetPhotos)) {
+      for (let i = 0; i < 3; i += 1) {
+        const photo = parsed.uploadedPetPhotos[i];
+        uploadedPetPhotos[i] = typeof photo === 'string' && photo ? photo : null;
+      }
+    }
+  } catch {
+    // ignore malformed draft
+  }
+}
+
+function clearOnboardingDraftStorage(): void {
+  const storage = getSafeSessionStorage();
+  if (!storage) return;
+  try {
+    storage.removeItem(OWNER_DRAFT_STORAGE_KEY);
+    storage.removeItem(PET_DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
 
 export function isOnboardingPetPhotoUploading(): boolean {
   return uploadingPetPhotoSlots.some(Boolean) || isCompletingOnboarding;
@@ -300,6 +465,7 @@ function resetTransientFormState(): void {
   petPhotoRetryFiles[0] = null;
   petPhotoRetryFiles[1] = null;
   petPhotoRetryFiles[2] = null;
+  clearOnboardingDraftStorage();
 }
 
 function syncOnboardingOwnerDraftIfEmpty(): void {
@@ -370,7 +536,10 @@ export function renderOnboardingView(): string {
         resetTransientFormState();
       } else if (step === 'owner_details') {
         isGoogleSubmitting = false;
+        restoreOnboardingOwnerDraft();
         syncOnboardingOwnerDraftIfEmpty();
+      } else if (step === 'pet_details') {
+        restoreOnboardingPetDraft();
       }
     }
     if (step !== 'pet_details') {
@@ -396,19 +565,19 @@ export function renderOnboardingView(): string {
       ${renderPawBackdrop()}
 
       <!-- Minimal Step Dots Navigation (no skip button) -->
-      <div class="w-full max-w-md flex items-center justify-center pt-1 pb-1 sm:pb-2 z-20">
+      <div class="w-full max-w-md flex items-center justify-center pt-1 pb-1 sm:pb-2 relative z-10">
         <div class="flex items-center gap-1.5">
           ${renderStepDots(step)}
         </div>
       </div>
 
       <!-- Main Step Container -->
-      <div class="w-full max-w-md flex-1 flex flex-col justify-between z-10">
+      <div class="w-full max-w-md flex-1 flex flex-col justify-between relative z-20">
         ${renderStepContent(step)}
       </div>
 
       <!-- Footer Handle Only (@Meow2026) -->
-      <footer class="w-full max-w-md pt-2 sm:pt-4 pb-1 sm:pb-4 text-center z-20">
+      <footer class="w-full max-w-md pt-2 sm:pt-4 pb-1 sm:pb-4 text-center relative z-0">
         <span dir="ltr" class="inline-block text-[11px] sm:text-xs font-bold text-[#8C827A] tracking-wide font-baloo">@Meow2026</span>
       </footer>
 
@@ -1951,7 +2120,7 @@ function renderPetDetailsStep(): string {
 // Attach Events
 // -------------------------------------------------------------
 export function attachOnboardingEvents(): void {
-  // Splash Screen automatically transitions after >=7000ms and auth readiness
+  // Splash Screen automatically transitions after >=2000ms and auth readiness
   if (state.getOnboardingStep() === 'splash') {
     state.scheduleSplashAutoTransition();
   }
@@ -2620,9 +2789,12 @@ function attachOwnerDetailsFormEvents(
   const ownerFemaleBtn = document.getElementById('owner-gender-female-btn');
   const ownerFormError = document.getElementById('owner-form-error');
 
+  const shouldPersistOnboardingDraft = formState === onboardingOwnerFormState;
+
   if (ownerNameInput) {
     ownerNameInput.addEventListener('input', () => {
       formState.name = ownerNameInput.value;
+      if (shouldPersistOnboardingDraft) persistOnboardingOwnerDraft();
       ownerNameInput.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200');
     });
   }
@@ -2630,6 +2802,7 @@ function attachOwnerDetailsFormEvents(
   if (ownerPhoneInput) {
     ownerPhoneInput.addEventListener('input', () => {
       formState.phone = ownerPhoneInput.value;
+      if (shouldPersistOnboardingDraft) persistOnboardingOwnerDraft();
       ownerPhoneWrapper?.classList.remove('ring-2', 'ring-rose-400');
       if (ownerPhoneHint) {
         const trimmed = ownerPhoneInput.value.trim();
@@ -2653,6 +2826,7 @@ function attachOwnerDetailsFormEvents(
   if (ownerMaleBtn && ownerFemaleBtn) {
     ownerMaleBtn.addEventListener('click', () => {
       formState.gender = 'male';
+      if (shouldPersistOnboardingDraft) persistOnboardingOwnerDraft();
       ownerGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       ownerMaleBtn.className =
         'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#3b82f6] bg-[#e8f1fc] text-[#2563eb] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
@@ -2661,6 +2835,7 @@ function attachOwnerDetailsFormEvents(
     });
     ownerFemaleBtn.addEventListener('click', () => {
       formState.gender = 'female';
+      if (shouldPersistOnboardingDraft) persistOnboardingOwnerDraft();
       ownerGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       ownerFemaleBtn.className =
         'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
@@ -2680,6 +2855,7 @@ function attachOwnerDetailsFormEvents(
     disabled: initVillageMeta.disabled,
     onChange: (newVillageId) => {
       formState.villageId = newVillageId;
+      if (shouldPersistOnboardingDraft) persistOnboardingOwnerDraft();
     },
   });
 
@@ -2693,6 +2869,7 @@ function attachOwnerDetailsFormEvents(
     onChange: (newCityId) => {
       formState.cityId = newCityId;
       formState.villageId = '';
+      if (shouldPersistOnboardingDraft) persistOnboardingOwnerDraft();
       document
         .getElementById('owner-city-select-trigger')
         ?.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200');
@@ -2717,6 +2894,7 @@ function attachOwnerDetailsFormEvents(
       formState.markazId = newMarkazId;
       formState.cityId = '';
       formState.villageId = '';
+      if (shouldPersistOnboardingDraft) persistOnboardingOwnerDraft();
       document
         .getElementById('owner-markaz-select-trigger')
         ?.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200');
@@ -2748,6 +2926,7 @@ function attachOwnerDetailsFormEvents(
       formState.markazId = '';
       formState.cityId = '';
       formState.villageId = '';
+      if (shouldPersistOnboardingDraft) persistOnboardingOwnerDraft();
       document
         .getElementById('owner-governorate-select-trigger')
         ?.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200');
@@ -2939,7 +3118,9 @@ function attachRemainingOnboardingEvents(): void {
 
       const res = await state.completeOnboardingWithSupabase();
       isCompletingOnboarding = false;
-      if (!res.success) {
+      if (res.success) {
+        clearOnboardingDraftStorage();
+      } else {
         hasPetErrorMessage =
           res.errorMessage || 'تعذر إتمام التسجيل حاليًا. يرجى المحاولة مرة أخرى.';
         state.setOnboardingStep('has_pet');
@@ -2966,29 +3147,34 @@ function attachRemainingOnboardingEvents(): void {
   if (petNameInput) {
     petNameInput.addEventListener('input', () => {
       draftPetName = petNameInput.value;
+      persistOnboardingPetDraft();
       petNameInput.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200');
     });
   }
   if (petColorInput) {
     petColorInput.addEventListener('input', () => {
       draftPetColor = petColorInput.value;
+      persistOnboardingPetDraft();
       petColorInput.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200');
     });
   }
   if (breedSelect) {
     breedSelect.addEventListener('change', () => {
       draftPetBreed = breedSelect.value;
+      persistOnboardingPetDraft();
       breedSelect.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200');
     });
   }
   if (hybridSelect) {
     hybridSelect.addEventListener('change', () => {
       draftPetHybrid = hybridSelect.value;
+      persistOnboardingPetDraft();
     });
   }
   if (petNotesInput) {
     petNotesInput.addEventListener('input', () => {
       draftPetNotes = petNotesInput.value;
+      persistOnboardingPetDraft();
     });
   }
 
@@ -2999,19 +3185,20 @@ function attachRemainingOnboardingEvents(): void {
       draftPetBreed = '';
       draftPetHybrid = '';
     }
+    persistOnboardingPetDraft();
     speciesGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
 
     if (catBtn && dogBtn) {
       if (species === 'cat') {
         catBtn.className =
-          'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[22px] sm:rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
         dogBtn.className =
-          'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[22px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       } else {
         dogBtn.className =
-          'h-16 relative flex items-center justify-center gap-2 px-4 rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 px-3 sm:px-4 rounded-[22px] sm:rounded-[28px] border-2 border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
         catBtn.className =
-          'h-16 relative flex items-center justify-center gap-2.5 px-4 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+          'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 sm:gap-2.5 px-3 sm:px-4 rounded-[22px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       }
     }
     if (breedSelect) {
@@ -3095,6 +3282,7 @@ function attachRemainingOnboardingEvents(): void {
         uploadedPetPhotos[slot] = null;
         petPhotoSlotErrors[slot] = '';
         petPhotoRetryFiles[slot] = null;
+        persistOnboardingPetDraft();
         const inputEl = cardEl.querySelector<HTMLInputElement>('.pet-photo-file-input');
         if (inputEl) inputEl.value = '';
         renderOnboardingSlotDOM(slot);
@@ -3134,6 +3322,7 @@ function attachRemainingOnboardingEvents(): void {
       uploadedPetPhotos[slot] = result.dataUrl;
       petPhotoSlotErrors[slot] = '';
       petPhotoRetryFiles[slot] = null;
+      persistOnboardingPetDraft();
       if (inputEl) inputEl.value = '';
       if (petFormError) {
         petFormError.innerHTML = '';
@@ -3168,6 +3357,7 @@ function attachRemainingOnboardingEvents(): void {
       uploadedPetPhotos[slot] = null;
       petPhotoSlotErrors[slot] = '';
       petPhotoRetryFiles[slot] = null;
+      persistOnboardingPetDraft();
       const cardEl = document.querySelector<HTMLElement>(`[data-onboarding-photo-card="${slot}"]`);
       const inputEl = cardEl?.querySelector<HTMLInputElement>('.pet-photo-file-input');
       if (inputEl) inputEl.value = '';
@@ -3184,6 +3374,7 @@ function attachRemainingOnboardingEvents(): void {
     ageYearsInput.addEventListener('input', () => {
       ageYearsInput.value = ageYearsInput.value.replace(/[^0-9]/g, '');
       draftPetAgeYears = ageYearsInput.value;
+      persistOnboardingPetDraft();
       petAgeGroup?.classList.remove('ring-2', 'ring-rose-400');
     });
   }
@@ -3191,6 +3382,7 @@ function attachRemainingOnboardingEvents(): void {
     ageMonthsInput.addEventListener('input', () => {
       ageMonthsInput.value = ageMonthsInput.value.replace(/[^0-9]/g, '');
       draftPetAgeMonths = ageMonthsInput.value;
+      persistOnboardingPetDraft();
       petAgeGroup?.classList.remove('ring-2', 'ring-rose-400');
     });
   }
@@ -3207,20 +3399,22 @@ function attachRemainingOnboardingEvents(): void {
   if (petMaleBtn && petFemaleBtn) {
     petMaleBtn.addEventListener('click', () => {
       selectedPetGender = 'male';
+      persistOnboardingPetDraft();
       petGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       petMaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#3b82f6] bg-[#eff6ff] text-[#2563eb] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5';
+        'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 rounded-[22px] sm:rounded-[28px] border-2 border-[#3b82f6] bg-[#eff6ff] text-[#2563eb] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-lg sm:text-xl px-4 sm:px-5';
       petFemaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[22px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       applyPetNameGenderColor('male');
     });
     petFemaleBtn.addEventListener('click', () => {
       selectedPetGender = 'female';
+      persistOnboardingPetDraft();
       petGenderGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       petFemaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 px-5 rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 px-4 sm:px-5 rounded-[22px] sm:rounded-[28px] border-2 border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold text-lg sm:text-xl cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       petMaleBtn.className =
-        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xl px-5';
+        'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 rounded-[22px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-lg sm:text-xl px-4 sm:px-5';
       applyPetNameGenderColor('female');
     });
   }
@@ -3231,19 +3425,21 @@ function attachRemainingOnboardingEvents(): void {
   if (vaxYes && vaxNo) {
     vaxYes.addEventListener('click', () => {
       selectedVaccination = 'yes';
+      persistOnboardingPetDraft();
       petVaxGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       vaxYes.className =
-        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#10b981] bg-[#ecfdf5] text-[#059669] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2';
+        'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 rounded-[22px] sm:rounded-[28px] border-2 border-[#10b981] bg-[#ecfdf5] text-[#059669] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-2';
       vaxNo.className =
-        'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-[52px] sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[22px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
     });
     vaxNo.addEventListener('click', () => {
       selectedVaccination = 'no';
+      persistOnboardingPetDraft();
       petVaxGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
       vaxNo.className =
-        'h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
+        'h-[52px] sm:h-16 relative flex items-center justify-center gap-1.5 px-2 rounded-[22px] sm:rounded-[28px] border-2 border-[#ea580c] bg-[#fff7ed] text-[#c2410c] font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]';
       vaxYes.className =
-        'h-16 relative flex items-center justify-center gap-2 rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-base px-2';
+        'h-[52px] sm:h-16 relative flex items-center justify-center gap-2 rounded-[22px] sm:rounded-[28px] border-2 border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-2';
     });
   }
 
@@ -3259,7 +3455,7 @@ function attachRemainingOnboardingEvents(): void {
       if (selectedTraits.has(trait)) {
         selectedTraits.delete(trait);
         btn.className =
-          'trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50';
+          'trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#d6c7b2] bg-[#fffefc] text-[#6d5b4c] font-black hover:border-[#e67e22]/50';
         if (limitMsg) limitMsg.classList.add('hidden');
       } else {
         if (selectedTraits.size >= 6) {
@@ -3271,9 +3467,10 @@ function attachRemainingOnboardingEvents(): void {
         }
         selectedTraits.add(trait);
         btn.className =
-          'trait-chip-btn rounded-full border-2 px-5 py-2.5 text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20';
+          'trait-chip-btn rounded-full border-2 px-3.5 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base transition-all cursor-pointer select-none active:scale-95 shadow-sm flex items-center justify-center border-[#e67300] bg-[#fff2e2] text-[#c25807] font-black ring-2 ring-[#e67300]/20';
         if (limitMsg) limitMsg.classList.add('hidden');
       }
+      persistOnboardingPetDraft();
 
       if (selectedTraits.size >= 3) {
         petTraitsGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-2');
@@ -3283,10 +3480,10 @@ function attachRemainingOnboardingEvents(): void {
         countBadge.textContent = `المحدد: ${selectedTraits.size} من 6`;
         if (selectedTraits.size >= 3) {
           countBadge.className =
-            'text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm bg-[#ecfdf5] text-[#059669] border-[#10b981]/30';
+            'text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-1 rounded-full border transition-all shadow-sm bg-[#ecfdf5] text-[#059669] border-[#10b981]/30';
         } else {
           countBadge.className =
-            'text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all shadow-sm bg-[#faecd8] text-[#c25807] border-[#e67e22]/20';
+            'text-[11px] sm:text-sm font-black px-2.5 sm:px-3 py-1 rounded-full border transition-all shadow-sm bg-[#faecd8] text-[#c25807] border-[#e67e22]/20';
         }
       }
     });
@@ -3432,7 +3629,9 @@ function attachRemainingOnboardingEvents(): void {
         }
 
         const res = await state.completeOnboardingWithSupabase();
-        if (!res.success && petFormError) {
+        if (res.success) {
+          clearOnboardingDraftStorage();
+        } else if (petFormError) {
           petFormError.textContent =
             res.errorMessage || 'تعذر تأكيد إتمام التسجيل حاليًا. يرجى المحاولة مرة أخرى.';
           petFormError.classList.remove('hidden');

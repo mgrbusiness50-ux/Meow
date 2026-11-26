@@ -36,6 +36,27 @@ function setupAndroidDeepLinkHandler(): void {
   }
 }
 
+function setupLifecycleAndConnectivityHandlers(): void {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      void CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          state.resumeFromBackground();
+        }
+      });
+    } else if (
+      typeof window !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      (window.location.protocol === 'https:' || window.location.protocol === 'http:')
+    ) {
+      void navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  } catch (err) {
+    console.warn('Lifecycle / service worker setup skipped:', err);
+  }
+}
+
 function maybeInitDevXrOverlay(): void {
   if (!import.meta.env.DEV || Capacitor.isNativePlatform()) {
     return;
@@ -70,9 +91,10 @@ function bootMeowApp(): void {
     app.init();
   }
 
-  // 2. Register Android Hardware Back Button & Deep Link Handlers
+  // 2. Register Android Hardware Back Button, Deep Link, Resume & Web Service Worker Handlers
   setupAndroidBackHandler();
   setupAndroidDeepLinkHandler();
+  setupLifecycleAndConnectivityHandlers();
 
   // 3. Background check for OTA / APK updates without blocking startup
   if (typeof window !== 'undefined') {

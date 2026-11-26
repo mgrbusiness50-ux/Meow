@@ -1,5 +1,5 @@
 import { state } from '../../state.ts';
-import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
+import { attachThreeDotsMenuEvents, renderThreeDotsMenu } from '../components/BlockMenu.ts';
 import {
   formatPetAgeFull,
   formatPetSpeciesShort,
@@ -112,6 +112,169 @@ let recordingTimer: ReturnType<typeof setInterval> | null = null;
 let currentlyPlayingAudio: HTMLAudioElement | null = null;
 let currentPlayingMsgId: string | null = null;
 
+function getFilteredChatConversations(): ReturnType<typeof state.getConversations> {
+  const conversations = state.getConversations();
+  return conversations.filter((c) => {
+    if (chatCategoryFilter === 'mating') return c.petType === 'mating';
+    if (chatCategoryFilter === 'adoption') return c.petType === 'adoption';
+    return true;
+  });
+}
+
+function renderChatCategoryPillsHtml(conversationsCount: number): string {
+  const isClinics = chatCategoryFilter === 'clinics';
+  return `
+    <div id="chat-category-pills-container" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1" data-no-ptr="true">
+      <!-- 1. الكل -->
+      <button
+        data-chat-filter="all"
+        type="button"
+        class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
+          chatCategoryFilter === 'all'
+            ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
+            : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+        }"
+      >
+        الكل (${conversationsCount})
+      </button>
+
+      <!-- 2. التزاوج -->
+      <button
+        data-chat-filter="mating"
+        type="button"
+        class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
+          chatCategoryFilter === 'mating'
+            ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
+            : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+        }"
+      >
+        التزاوج
+      </button>
+
+      <!-- 3. التبني -->
+      <button
+        data-chat-filter="adoption"
+        type="button"
+        class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
+          chatCategoryFilter === 'adoption'
+            ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
+            : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+        }"
+      >
+        التبني
+      </button>
+
+      <!-- 4. العيادات (متاح قريباً) -->
+      <div class="relative shrink-0">
+        <button
+          data-chat-filter="clinics"
+          type="button"
+          class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo flex items-center gap-1.5 shadow-sm border-2 ${
+            isClinics
+              ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30 border-brand-orange'
+              : 'bg-white dark:bg-[#27201B] border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] opacity-85 hover:opacity-100'
+          }"
+        >
+          <i class="fa-solid fa-house-medical text-xs ${isClinics ? 'text-white' : 'text-brand-orange'}"></i>
+          <span>العيادات</span>
+          <span class="text-[10px] font-black px-1.5 py-0.5 rounded-full border ${
+            isClinics
+              ? 'bg-white/20 text-white border-white/30'
+              : 'bg-brand-cream dark:bg-[#342A24] text-brand-orange border-brand-peachBorder/80 dark:border-warm-darkBorder'
+          }">
+            قريباً
+          </span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderChatSubTabSwitcherHtml(
+  activeSubTab: 'chats' | 'requests',
+  filteredConversationsCount: number,
+  incomingPendingCount: number,
+  totalRequestsCount: number
+): string {
+  return `
+    <div id="chat-subtab-switcher" class="relative grid grid-cols-2 items-center bg-white/90 dark:bg-[#27201B] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-full p-1 shadow-sm">
+      <div
+        id="chat-subtab-pill"
+        aria-hidden="true"
+        class="pointer-events-none absolute top-1 bottom-1 w-[calc(50%-0.25rem)] rounded-full bg-brand-orange shadow-soft transition-all duration-200 ease-out"
+        style="right: ${activeSubTab === 'chats' ? '0.25rem' : 'calc(50%)'};"
+      ></div>
+
+      <button
+        id="subtab-chats-btn"
+        type="button"
+        class="relative z-10 h-10 px-3.5 rounded-full text-xs sm:text-sm font-black transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer font-baloo ${
+          activeSubTab === 'chats'
+            ? 'text-white'
+            : 'text-brand-dark/70 dark:text-[#D1C7BD] hover:text-brand-orange'
+        }"
+      >
+        <span>المحادثات</span>
+        <span id="subtab-chats-badge" class="px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+          activeSubTab === 'chats'
+            ? 'bg-white text-brand-orange font-black'
+            : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
+        }">${filteredConversationsCount}</span>
+      </button>
+
+      <button
+        id="subtab-requests-btn"
+        type="button"
+        class="relative z-10 h-10 px-3.5 rounded-full text-xs sm:text-sm font-black transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer font-baloo ${
+          activeSubTab === 'requests'
+            ? 'text-white'
+            : 'text-brand-dark/70 dark:text-[#D1C7BD] hover:text-brand-orange'
+        }"
+      >
+        <span>طلبات التواصل</span>
+        <span id="subtab-requests-badge" class="px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+          incomingPendingCount > 0
+            ? 'bg-red-500 text-white font-black animate-pulse'
+            : activeSubTab === 'requests'
+              ? 'bg-white text-brand-orange font-black'
+              : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
+        }">${incomingPendingCount > 0 ? incomingPendingCount : totalRequestsCount}</span>
+      </button>
+    </div>
+  `;
+}
+
+function renderChatListBodyHtml(
+  filteredConversations: ReturnType<typeof state.getConversations>,
+  incomingRequests: ReturnType<typeof state.getIncomingContactRequests>,
+  outgoingRequests: ReturnType<typeof state.getOutgoingContactRequests>,
+  activeSubTab: 'chats' | 'requests'
+): string {
+  if (chatCategoryFilter === 'clinics') {
+    return `
+      <div class="bg-white/80 dark:bg-[#27201B]/80 border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-6 text-center space-y-3 shadow-card meow-card-enter" dir="rtl">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-orange/20 to-brand-peachBorder/40 dark:from-brand-orange/30 dark:to-warm-darkBorder text-brand-orange flex items-center justify-center mx-auto text-2xl border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder shadow-soft relative">
+          <i class="fa-solid fa-house-medical text-2xl text-brand-orange drop-shadow-sm"></i>
+          <span class="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder rounded-full flex items-center justify-center text-brand-orange text-[11px] shadow-sm">
+            <i class="fa-solid fa-stethoscope"></i>
+          </span>
+        </div>
+        <h3 class="text-lg font-black font-baloo text-warm-text dark:text-white">محادثات العيادات البيطرية</h3>
+        <p class="text-xs sm:text-sm font-bold text-warm-textSec dark:text-[#D1C7BD] max-w-xs mx-auto leading-relaxed">
+          هذا القسم سيكون متاحاً قريباً للتواصل المباشر مع الأطباء البيطريين وحجز الاستشارات والمواعيد.
+        </p>
+        <span class="inline-block text-xs font-black px-3.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/60">
+          قريباً في التحديث القادم
+        </span>
+      </div>
+    `;
+  }
+
+  return activeSubTab === 'chats'
+    ? renderConversationsList(filteredConversations)
+    : renderRequestsList(incomingRequests, outgoingRequests);
+}
+
 export function renderChatView(): string {
   const incomingRequests = state.getIncomingContactRequests();
   const outgoingRequests = state.getOutgoingContactRequests();
@@ -126,137 +289,28 @@ export function renderChatView(): string {
     return renderChatRoom(activeConversation);
   }
 
-  // Filter conversations by category if selected
-  const filteredConversations = conversations.filter((c) => {
-    if (chatCategoryFilter === 'mating') return c.petType === 'mating';
-    if (chatCategoryFilter === 'adoption') return c.petType === 'adoption';
-    return true;
-  });
+  const filteredConversations = getFilteredChatConversations();
 
   return `
     <div id="chat-list-view-root" class="w-full max-w-md mx-auto px-3.5 sm:px-4 pt-3 pb-6 flex-1 min-w-0">
 
       <!-- Categories & Filters Order (1. الكل, 2. التزاوج, 3. التبني, 4. العيادات) -->
       <div class="mb-3.5 flex flex-col gap-2.5">
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1" data-no-ptr="true">
-          <!-- 1. الكل -->
-          <button
-            data-chat-filter="all"
-            type="button"
-            class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
-              chatCategoryFilter === 'all'
-                ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
-                : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
-            }"
-          >
-            الكل (${conversations.length})
-          </button>
-
-          <!-- 2. التزاوج -->
-          <button
-            data-chat-filter="mating"
-            type="button"
-            class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
-              chatCategoryFilter === 'mating'
-                ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
-                : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
-            }"
-          >
-            التزاوج
-          </button>
-
-          <!-- 3. التبني -->
-          <button
-            data-chat-filter="adoption"
-            type="button"
-            class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
-              chatCategoryFilter === 'adoption'
-                ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
-                : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
-            }"
-          >
-            التبني
-          </button>
-
-          <!-- 4. العيادات (متاح قريباً) -->
-          <div class="relative shrink-0">
-            <button
-              data-chat-filter="clinics"
-              type="button"
-              class="chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] opacity-85 hover:opacity-100 flex items-center gap-1.5 shadow-sm ${
-                chatCategoryFilter === 'clinics' ? 'border-brand-orange bg-brand-orange/10' : ''
-              }"
-            >
-              <i class="fa-solid fa-house-medical text-xs text-brand-orange"></i>
-              <span>العيادات</span>
-              <span class="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-brand-cream dark:bg-[#342A24] text-brand-orange border border-brand-peachBorder/80 dark:border-warm-darkBorder">
-                قريباً
-              </span>
-            </button>
-          </div>
-        </div>
+        ${renderChatCategoryPillsHtml(conversations.length)}
 
         <!-- Switcher Between Active Chats & Contact Requests -->
-        <div class="bg-white/90 dark:bg-[#27201B] border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-full p-1 flex items-center gap-1 shadow-sm">
-          <button
-            id="subtab-chats-btn"
-            type="button"
-            class="flex-1 h-10 px-3.5 rounded-full text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo ${
-              activeSubTab === 'chats'
-                ? 'bg-brand-orange text-white shadow-soft'
-                : 'text-brand-dark/70 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
-            }"
-          >
-            <span>المحادثات</span>
-            <span class="px-2 py-0.5 rounded-full text-[11px] ${
-              activeSubTab === 'chats' ? 'bg-white text-brand-orange font-black' : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
-            }">${filteredConversations.length}</span>
-          </button>
-
-          <button
-            id="subtab-requests-btn"
-            type="button"
-            class="flex-1 h-10 px-3.5 rounded-full text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo ${
-              activeSubTab === 'requests'
-                ? 'bg-brand-orange text-white shadow-soft'
-                : 'text-brand-dark/70 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
-            }"
-          >
-            <span>طلبات التواصل</span>
-            ${
-              incomingPendingCount > 0
-                ? `<span class="px-2 py-0.5 rounded-full text-[11px] bg-red-500 text-white font-black animate-pulse">${incomingPendingCount}</span>`
-                : `<span class="px-2 py-0.5 rounded-full text-[11px] bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white">${totalRequestsCount}</span>`
-            }
-          </button>
-        </div>
-
+        ${renderChatSubTabSwitcherHtml(
+          activeSubTab,
+          filteredConversations.length,
+          incomingPendingCount,
+          totalRequestsCount
+        )}
       </div>
 
       <!-- Content -->
-      ${
-        chatCategoryFilter === 'clinics'
-          ? `
-          <div class="bg-white/80 dark:bg-[#27201B]/80 border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-6 text-center space-y-3 shadow-card meow-card-enter" dir="rtl">
-            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-orange/20 to-brand-peachBorder/40 dark:from-brand-orange/30 dark:to-warm-darkBorder text-brand-orange flex items-center justify-center mx-auto text-2xl border-2 border-brand-peachBorder/80 dark:border-warm-darkBorder shadow-soft relative">
-              <i class="fa-solid fa-house-medical text-2xl text-brand-orange drop-shadow-sm"></i>
-              <span class="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-[#342A24] border border-brand-peachBorder dark:border-warm-darkBorder rounded-full flex items-center justify-center text-brand-orange text-[11px] shadow-sm">
-                <i class="fa-solid fa-stethoscope"></i>
-              </span>
-            </div>
-            <h3 class="text-lg font-black font-baloo text-warm-text dark:text-white">محادثات العيادات البيطرية</h3>
-            <p class="text-xs sm:text-sm font-bold text-warm-textSec dark:text-[#D1C7BD] max-w-xs mx-auto leading-relaxed">
-              هذا القسم سيكون متاحاً قريباً للتواصل المباشر مع الأطباء البيطريين وحجز الاستشارات والمواعيد.
-            </p>
-            <span class="inline-block text-xs font-black px-3.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/60">
-              قريباً في التحديث القادم
-            </span>
-          </div>
-          `
-          : activeSubTab === 'chats'
-          ? renderConversationsList(filteredConversations)
-          : renderRequestsList(incomingRequests, outgoingRequests)
-      }
+      <div id="chat-tab-content">
+        ${renderChatListBodyHtml(filteredConversations, incomingRequests, outgoingRequests, activeSubTab)}
+      </div>
 
     </div>
   `;
@@ -1568,48 +1622,26 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
   `;
 }
 
-export function attachChatEvents(): void {
-  // Sub-tabs
-  const chatsSubTabBtn = document.getElementById('subtab-chats-btn');
-  const requestsSubTabBtn = document.getElementById('subtab-requests-btn');
+function bindChatCategoryButtons(): void {
   const chatFilterBtns = document.querySelectorAll<HTMLButtonElement>('.chat-category-btn');
-
   chatFilterBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
-      const filter = btn.getAttribute('data-chat-filter') as any;
-      if (filter) {
-        chatCategoryFilter = filter;
-        state.setCurrentTab('chat');
-      }
+      const filter = btn.getAttribute('data-chat-filter') as
+        | 'all'
+        | 'mating'
+        | 'adoption'
+        | 'clinics'
+        | null;
+      if (!filter || filter === chatCategoryFilter) return;
+      chatCategoryFilter = filter;
+      refreshChatListInPlace();
     });
   });
+}
 
-  if (chatsSubTabBtn) {
-    chatsSubTabBtn.addEventListener('click', () => {
-      state.setChatSubTab('chats');
-      state.setActiveConversationId(null);
-    });
-  }
-  if (requestsSubTabBtn) {
-    requestsSubTabBtn.addEventListener('click', () => {
-      state.setChatSubTab('requests');
-      state.setActiveConversationId(null);
-    });
-  }
-
-  // Trigger one-time confetti celebration on approved mating chat open
-  const currentActiveConv = state.getActiveConversation();
-  if (
-    currentActiveConv &&
-    state.isMatingConversationApproved(currentActiveConv) &&
-    state.getActiveConfettiBurstKey() === state.getCelebrationKeyForConversation(currentActiveConv)
-  ) {
-    state.consumeActiveConfettiBurstKey();
-    launchOneTimeMatingConfetti();
-  }
-
+function attachChatListBodyEvents(scope: ParentNode = document): void {
   // Explore button in empty state
-  const exploreBtn = document.getElementById('explore-pets-btn');
+  const exploreBtn = scope.querySelector('#explore-pets-btn');
   if (exploreBtn) {
     exploreBtn.addEventListener('click', () => {
       state.setCurrentTab('mating');
@@ -1617,38 +1649,20 @@ export function attachChatEvents(): void {
   }
 
   // Incoming / Outgoing requests direction tabs
-  document.querySelectorAll<HTMLButtonElement>('.req-direction-btn').forEach((btn) => {
+  scope.querySelectorAll<HTMLButtonElement>('.req-direction-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const dir = btn.getAttribute('data-req-direction');
       if (dir === 'incoming' || dir === 'outgoing') {
+        if (requestsDirectionFilter === dir && state.getChatSubTab() === 'requests') return;
         requestsDirectionFilter = dir;
-        state.setChatSubTab('requests');
+        state.setChatSubTab('requests', { silent: true });
+        refreshChatListInPlace();
       }
     });
   });
 
-  // Pull-to-refresh on chat list (when outside active chat room and no modal open)
-  const chatListRoot = document.getElementById('chat-list-view-root');
-  if (chatListRoot && !currentActiveConv) {
-    attachPullToRefresh(chatListRoot, {
-      isBlocked: () =>
-        Boolean(
-          state.getActiveConversation() ||
-            state.getIsFilterModalOpen() ||
-            state.isNotificationsOpen() ||
-            state.isSettingsOpen() ||
-            state.getPendingDeleteConversation() ||
-            document.querySelector('.meow-more-dropdown:not(.hidden)')
-        ),
-      onRefresh: async () => {
-        await state.refreshFeed('chat');
-        showMobileToast('تم التحديث', 'success', 1500);
-      },
-    });
-  }
-
   // Conversation card click + Long-press to open quick options menu
-  const conversationCards = document.querySelectorAll<HTMLElement>('.conversation-item-card');
+  const conversationCards = scope.querySelectorAll<HTMLElement>('.conversation-item-card');
   conversationCards.forEach((card) => {
     card.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('.meow-more-menu-container')) {
@@ -1675,6 +1689,211 @@ export function attachChatEvents(): void {
       }
     });
   });
+
+  // Preview sender's pet profile before accepting or rejecting request (no status change)
+  const previewPetTriggers = scope.querySelectorAll<HTMLElement>(
+    '.preview-request-pet-btn, .preview-request-pet-card'
+  );
+  previewPetTriggers.forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const reqId = el.getAttribute('data-preview-request-id');
+      if (!reqId) return;
+      const req = state.getContactRequests().find((r) => r.id === reqId);
+      if (!req) return;
+      state.markRequestNotificationsRead(req.id);
+      const pet = state.getPetForRequestPreview(req);
+      if (pet) {
+        state.setSelectedPetForDetail(pet);
+      }
+    });
+  });
+
+  // Approve request
+  const approveBtns = scope.querySelectorAll<HTMLButtonElement>('.approve-request-btn');
+  approveBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.getAttribute('data-approve-request-id');
+      if (reqId) {
+        state.approveContactRequest(reqId);
+      }
+    });
+  });
+
+  // Reject request
+  const rejectBtns = scope.querySelectorAll<HTMLButtonElement>('.reject-request-btn');
+  rejectBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.getAttribute('data-reject-request-id');
+      if (reqId) {
+        state.rejectContactRequest(reqId);
+      }
+    });
+  });
+
+  // Withdraw outgoing request
+  const withdrawBtns = scope.querySelectorAll<HTMLButtonElement>('.withdraw-request-btn');
+  withdrawBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.getAttribute('data-withdraw-request-id');
+      if (reqId) {
+        state.withdrawContactRequest(reqId);
+        showMobileToast('تم سحب الطلب', 'default', 1500);
+      }
+    });
+  });
+
+  // Direct to exact matching conversation for an accepted request
+  const directBtns = scope.querySelectorAll<HTMLButtonElement>('.view-conversation-direct-btn');
+  directBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.getAttribute('data-request-id') || '';
+      const otherId = btn.getAttribute('data-other-user-id') || '';
+      const convs = state.getConversations();
+      const matched =
+        convs.find((c) => c.requestId === reqId) ||
+        (otherId ? convs.find((c) => c.otherUserId === otherId) : undefined) ||
+        convs[0];
+      state.setChatSubTab('chats', { silent: true });
+      state.setActiveConversationId(matched?.id || null);
+    });
+  });
+}
+
+function refreshChatListInPlace(): void {
+  const activeSubTab = state.getChatSubTab();
+  const incomingRequests = state.getIncomingContactRequests();
+  const outgoingRequests = state.getOutgoingContactRequests();
+  const incomingPendingCount = state.getPendingRequestsCount();
+  const totalRequestsCount = incomingRequests.length + outgoingRequests.length;
+  const allConversationsCount = state.getConversations().length;
+  const filteredConversations = getFilteredChatConversations();
+
+  const pillsContainer = document.getElementById('chat-category-pills-container');
+  if (pillsContainer) {
+    pillsContainer.outerHTML = renderChatCategoryPillsHtml(allConversationsCount);
+    bindChatCategoryButtons();
+  }
+
+  const pillEl = document.getElementById('chat-subtab-pill');
+  if (pillEl) {
+    pillEl.style.right = activeSubTab === 'chats' ? '0.25rem' : 'calc(50%)';
+  }
+
+  const chatsBtn = document.getElementById('subtab-chats-btn');
+  const requestsBtn = document.getElementById('subtab-requests-btn');
+  const chatsBadge = document.getElementById('subtab-chats-badge');
+  const requestsBadge = document.getElementById('subtab-requests-badge');
+
+  if (chatsBtn) {
+    chatsBtn.className = `relative z-10 h-10 px-3.5 rounded-full text-xs sm:text-sm font-black transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer font-baloo ${
+      activeSubTab === 'chats'
+        ? 'text-white'
+        : 'text-brand-dark/70 dark:text-[#D1C7BD] hover:text-brand-orange'
+    }`;
+  }
+  if (requestsBtn) {
+    requestsBtn.className = `relative z-10 h-10 px-3.5 rounded-full text-xs sm:text-sm font-black transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer font-baloo ${
+      activeSubTab === 'requests'
+        ? 'text-white'
+        : 'text-brand-dark/70 dark:text-[#D1C7BD] hover:text-brand-orange'
+    }`;
+  }
+  if (chatsBadge) {
+    chatsBadge.textContent = String(filteredConversations.length);
+    chatsBadge.className = `px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+      activeSubTab === 'chats'
+        ? 'bg-white text-brand-orange font-black'
+        : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
+    }`;
+  }
+  if (requestsBadge) {
+    requestsBadge.textContent = String(
+      incomingPendingCount > 0 ? incomingPendingCount : totalRequestsCount
+    );
+    requestsBadge.className = `px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+      incomingPendingCount > 0
+        ? 'bg-red-500 text-white font-black animate-pulse'
+        : activeSubTab === 'requests'
+          ? 'bg-white text-brand-orange font-black'
+          : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
+    }`;
+  }
+
+  const contentEl = document.getElementById('chat-tab-content');
+  if (contentEl) {
+    contentEl.classList.remove('meow-fade-in');
+    contentEl.innerHTML = renderChatListBodyHtml(
+      filteredConversations,
+      incomingRequests,
+      outgoingRequests,
+      activeSubTab
+    );
+    void contentEl.offsetWidth;
+    contentEl.classList.add('meow-fade-in');
+    attachChatListBodyEvents(contentEl);
+    attachThreeDotsMenuEvents(contentEl);
+  }
+}
+
+export function attachChatEvents(): void {
+  // Sub-tabs & category pills
+  const chatsSubTabBtn = document.getElementById('subtab-chats-btn');
+  const requestsSubTabBtn = document.getElementById('subtab-requests-btn');
+
+  bindChatCategoryButtons();
+
+  if (chatsSubTabBtn) {
+    chatsSubTabBtn.addEventListener('click', () => {
+      const wasClinics = chatCategoryFilter === 'clinics';
+      if (state.getChatSubTab() === 'chats' && !wasClinics) return;
+      if (wasClinics) chatCategoryFilter = 'all';
+      state.setChatSubTab('chats', { silent: true });
+      refreshChatListInPlace();
+    });
+  }
+  if (requestsSubTabBtn) {
+    requestsSubTabBtn.addEventListener('click', () => {
+      const wasClinics = chatCategoryFilter === 'clinics';
+      if (state.getChatSubTab() === 'requests' && !wasClinics) return;
+      if (wasClinics) chatCategoryFilter = 'all';
+      state.setChatSubTab('requests', { silent: true });
+      refreshChatListInPlace();
+    });
+  }
+
+  // Trigger one-time confetti celebration on approved mating chat open
+  const currentActiveConv = state.getActiveConversation();
+  if (
+    currentActiveConv &&
+    state.isMatingConversationApproved(currentActiveConv) &&
+    state.getActiveConfettiBurstKey() === state.getCelebrationKeyForConversation(currentActiveConv)
+  ) {
+    state.consumeActiveConfettiBurstKey();
+    launchOneTimeMatingConfetti();
+  }
+
+  // Pull-to-refresh on chat list (when outside active chat room and no modal open)
+  const chatListRoot = document.getElementById('chat-list-view-root');
+  if (chatListRoot && !currentActiveConv) {
+    attachPullToRefresh(chatListRoot, {
+      isBlocked: () =>
+        Boolean(
+          state.getActiveConversation() ||
+            state.getIsFilterModalOpen() ||
+            state.isNotificationsOpen() ||
+            state.isSettingsOpen() ||
+            state.getPendingDeleteConversation() ||
+            document.querySelector('.meow-more-dropdown:not(.hidden)')
+        ),
+      onRefresh: async () => {
+        await state.refreshFeed('chat');
+        showMobileToast('تم التحديث', 'success', 1500);
+      },
+    });
+  }
+
+  attachChatListBodyEvents(document);
 
   // Long-press on text message bubble copies text
   const messageRows = document.querySelectorAll<HTMLElement>('#chat-messages-container > [data-msg-id]');
@@ -2351,74 +2570,6 @@ export function attachChatEvents(): void {
     });
   });
 
-  // Preview sender's pet profile before accepting or rejecting request (no status change)
-  const previewPetTriggers = document.querySelectorAll<HTMLElement>(
-    '.preview-request-pet-btn, .preview-request-pet-card'
-  );
-  previewPetTriggers.forEach((el) => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const reqId = el.getAttribute('data-preview-request-id');
-      if (!reqId) return;
-      const req = state.getContactRequests().find((r) => r.id === reqId);
-      if (!req) return;
-      state.markRequestNotificationsRead(req.id);
-      const pet = state.getPetForRequestPreview(req);
-      if (pet) {
-        state.setSelectedPetForDetail(pet);
-      }
-    });
-  });
-
-  // Approve request
-  const approveBtns = document.querySelectorAll<HTMLButtonElement>('.approve-request-btn');
-  approveBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const reqId = btn.getAttribute('data-approve-request-id');
-      if (reqId) {
-        state.approveContactRequest(reqId);
-      }
-    });
-  });
-
-  // Reject request
-  const rejectBtns = document.querySelectorAll<HTMLButtonElement>('.reject-request-btn');
-  rejectBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const reqId = btn.getAttribute('data-reject-request-id');
-      if (reqId) {
-        state.rejectContactRequest(reqId);
-      }
-    });
-  });
-
-  // Withdraw outgoing request
-  const withdrawBtns = document.querySelectorAll<HTMLButtonElement>('.withdraw-request-btn');
-  withdrawBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const reqId = btn.getAttribute('data-withdraw-request-id');
-      if (reqId) {
-        state.withdrawContactRequest(reqId);
-        showMobileToast('تم سحب الطلب', 'default', 1500);
-      }
-    });
-  });
-
-  // Direct to exact matching conversation for an accepted request
-  const directBtns = document.querySelectorAll<HTMLButtonElement>('.view-conversation-direct-btn');
-  directBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const reqId = btn.getAttribute('data-request-id') || '';
-      const otherId = btn.getAttribute('data-other-user-id') || '';
-      const convs = state.getConversations();
-      const matched =
-        convs.find((c) => c.requestId === reqId) ||
-        (otherId ? convs.find((c) => c.otherUserId === otherId) : undefined) ||
-        convs[0];
-      state.setChatSubTab('chats');
-      state.setActiveConversationId(matched?.id || null);
-    });
-  });
 }
 
 function launchOneTimeMatingConfetti(): void {

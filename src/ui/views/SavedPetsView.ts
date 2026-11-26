@@ -103,44 +103,55 @@ export function renderSavedPetsView(): string {
 
         </div>
 
-        <!-- Tab Body Content -->
-        ${
-          activeSubTab === 'mating'
-            ? renderSavedPetsList(matingSaved, 'mating')
-            : activeSubTab === 'adoption'
-            ? renderSavedPetsList(adoptionSaved, 'adoption')
-            : activeSubTab === 'clinics'
-            ? `
-            <div class="bg-white/80 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-6 text-center space-y-3 shadow-card">
-              <div class="w-14 h-14 rounded-2xl bg-amber-500/15 border-2 border-amber-500/30 text-amber-500 flex items-center justify-center mx-auto text-xl shadow-soft">
-                <i class="fa-solid fa-lock"></i>
-              </div>
-              <h3 class="text-lg font-black text-brand-dark dark:text-white">قسم عيادات المحفوظات مقفول حالياً</h3>
-              <p class="text-xs sm:text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
-                هذا القسم مخصص لحفظ العيادات البيطرية والمستشفيات المفضلة لديك وسيتوفر فور تدشين شبكة العيادات في التحديث القادم.
-              </p>
-              <span class="inline-block px-3.5 py-1 rounded-full bg-amber-500/15 text-amber-500 text-xs font-black">
-                مقفول • قريباً
-              </span>
-            </div>
-            `
-            : `
-            <div class="bg-white/80 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-6 text-center space-y-3 shadow-card">
-              <div class="w-14 h-14 rounded-2xl bg-amber-500/15 border-2 border-amber-500/30 text-amber-500 flex items-center justify-center mx-auto text-xl shadow-soft">
-                <i class="fa-solid fa-lock"></i>
-              </div>
-              <h3 class="text-lg font-black text-brand-dark dark:text-white">قسم متجر المحفوظات مقفول حالياً</h3>
-              <p class="text-xs sm:text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
-                هذا القسم مخصص لحفظ المنتجات ومستلزمات الحيوانات الأليفة المفضلة لديك وسيتوفر فور إطلاق متجر Meow الرسمي.
-              </p>
-              <span class="inline-block px-3.5 py-1 rounded-full bg-amber-500/15 text-amber-500 text-xs font-black">
-                مقفول • قريباً
-              </span>
-            </div>
-            `
-        }
+        <!-- Tab Body Content (updated in place without flashing modal) -->
+        <div id="saved-pets-body">
+          ${renderSavedPetsBody(activeSubTab, matingSaved, adoptionSaved)}
+        </div>
 
       </div>
+    </div>
+  `;
+}
+
+function renderSavedPetsBody(
+  activeSubTab: 'mating' | 'adoption' | 'clinics' | 'store',
+  matingSaved: Pet[],
+  adoptionSaved: Pet[]
+): string {
+  if (activeSubTab === 'mating') {
+    return renderSavedPetsList(matingSaved, 'mating');
+  }
+  if (activeSubTab === 'adoption') {
+    return renderSavedPetsList(adoptionSaved, 'adoption');
+  }
+  if (activeSubTab === 'clinics') {
+    return `
+      <div class="bg-white/80 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-6 text-center space-y-3 shadow-card">
+        <div class="w-14 h-14 rounded-2xl bg-amber-500/15 border-2 border-amber-500/30 text-amber-500 flex items-center justify-center mx-auto text-xl shadow-soft">
+          <i class="fa-solid fa-lock"></i>
+        </div>
+        <h3 class="text-lg font-black text-brand-dark dark:text-white">قسم عيادات المحفوظات مقفول حالياً</h3>
+        <p class="text-xs sm:text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
+          هذا القسم مخصص لحفظ العيادات البيطرية والمستشفيات المفضلة لديك وسيتوفر فور تدشين شبكة العيادات في التحديث القادم.
+        </p>
+        <span class="inline-block px-3.5 py-1 rounded-full bg-amber-500/15 text-amber-500 text-xs font-black">
+          مقفول • قريباً
+        </span>
+      </div>
+    `;
+  }
+  return `
+    <div class="bg-white/80 dark:bg-[#1F1A16] border-2 border-brand-peachBorder dark:border-[#3A3027] rounded-3xl p-6 text-center space-y-3 shadow-card">
+      <div class="w-14 h-14 rounded-2xl bg-amber-500/15 border-2 border-amber-500/30 text-amber-500 flex items-center justify-center mx-auto text-xl shadow-soft">
+        <i class="fa-solid fa-lock"></i>
+      </div>
+      <h3 class="text-lg font-black text-brand-dark dark:text-white">قسم متجر المحفوظات مقفول حالياً</h3>
+      <p class="text-xs sm:text-sm font-semibold text-brand-subtleGray dark:text-[#A89F91] max-w-xs mx-auto leading-relaxed">
+        هذا القسم مخصص لحفظ المنتجات ومستلزمات الحيوانات الأليفة المفضلة لديك وسيتوفر فور إطلاق متجر Meow الرسمي.
+      </p>
+      <span class="inline-block px-3.5 py-1 rounded-full bg-amber-500/15 text-amber-500 text-xs font-black">
+        مقفول • قريباً
+      </span>
     </div>
   `;
 }
@@ -336,25 +347,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
   `;
 }
 
-export function attachSavedPetsEvents(): void {
-  const closeBtn = document.getElementById('close-saved-pets-btn');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
-      state.closeSavedPetsView();
-    });
-  }
-
-  // Sub-tabs switcher
-  const tabBtns = document.querySelectorAll<HTMLButtonElement>('.saved-tab-btn');
-  tabBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const tab = btn.getAttribute('data-saved-tab') as any;
-      if (tab) {
-        state.setSavedPetsSubTab(tab);
-      }
-    });
-  });
-
+function attachSavedPetsBodyEvents(): void {
   // Remove pet from saved button
   const removeBtns = document.querySelectorAll<HTMLButtonElement>('.remove-saved-pet-btn');
   removeBtns.forEach((btn) => {
@@ -394,4 +387,58 @@ export function attachSavedPetsEvents(): void {
       state.setCurrentTab(currentSubTab === 'adoption' ? 'adoption' : 'mating');
     });
   }
+}
+
+function updateSavedPetsTabInPlace(tab: 'mating' | 'adoption' | 'clinics' | 'store'): void {
+  state.setSavedPetsSubTab(tab, { silent: true });
+
+  const tabBtns = document.querySelectorAll<HTMLButtonElement>('.saved-tab-btn');
+  tabBtns.forEach((btn) => {
+    const btnTab = btn.getAttribute('data-saved-tab');
+    const isActive = btnTab === tab;
+    const isLocked = btnTab === 'clinics' || btnTab === 'store';
+    btn.className = `saved-tab-btn py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo ${
+      isLocked ? 'opacity-85 ' : ''
+    }${
+      isActive
+        ? 'bg-brand-orange text-white shadow-soft'
+        : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+    }`;
+  });
+
+  const bodyEl = document.getElementById('saved-pets-body');
+  if (bodyEl) {
+    const savedPets = state.getSavedPets();
+    const matingSaved = savedPets.filter((p) => p.status === 'mating');
+    const adoptionSaved = savedPets.filter((p) => p.status === 'adoption');
+    bodyEl.innerHTML = renderSavedPetsBody(tab, matingSaved, adoptionSaved);
+    attachSavedPetsBodyEvents();
+  }
+}
+
+export function attachSavedPetsEvents(): void {
+  const closeBtn = document.getElementById('close-saved-pets-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      state.closeSavedPetsView();
+    });
+  }
+
+  // Sub-tabs switcher (in-place update without re-animating whole modal)
+  const tabBtns = document.querySelectorAll<HTMLButtonElement>('.saved-tab-btn');
+  tabBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-saved-tab') as
+        | 'mating'
+        | 'adoption'
+        | 'clinics'
+        | 'store'
+        | null;
+      if (tab) {
+        updateSavedPetsTabInPlace(tab);
+      }
+    });
+  });
+
+  attachSavedPetsBodyEvents();
 }

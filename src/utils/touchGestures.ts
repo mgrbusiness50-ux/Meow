@@ -839,3 +839,133 @@ export function attachHorizontalCarouselSwipe(options: {
     deltaX = 0;
   });
 }
+
+export function attachHorizontalTabSwipe(
+  container: HTMLElement | null,
+  options: {
+    isBlocked?: () => boolean;
+    onSwipeNext: () => void;
+    onSwipePrev: () => void;
+    canSwipeNext?: () => boolean;
+    canSwipePrev?: () => boolean;
+  }
+): () => void {
+  if (!container) return () => {};
+  const { isBlocked, onSwipeNext, onSwipePrev, canSwipeNext, canSwipePrev } = options;
+
+  let startX = 0;
+  let startY = 0;
+  let deltaX = 0;
+  let mode: 'idle' | 'pending' | 'horizontal' | 'vertical' = 'idle';
+
+  const isInteractiveTarget = (target: EventTarget | null): boolean => {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    return Boolean(
+      el.closest(
+        'input, textarea, select, [contenteditable="true"], [data-no-tab-swipe="true"], [data-no-ptr="true"], #pet-gallery-viewport, [data-member-gallery], .ss-panel, .overflow-x-auto'
+      )
+    );
+  };
+
+  const resetVisual = () => {
+    container.style.transition = 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
+    container.style.transform = '';
+    window.setTimeout(() => {
+      if (mode === 'idle') {
+        container.style.transition = '';
+      }
+    }, 190);
+  };
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    if (isBlocked?.() || isInteractiveTarget(e.target)) {
+      mode = 'idle';
+      return;
+    }
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    deltaX = 0;
+    mode = 'pending';
+  };
+
+  const onTouchMove = (e: TouchEvent) => {
+    if (mode === 'idle' || mode === 'vertical' || e.touches.length !== 1) return;
+    if (isBlocked?.()) {
+      mode = 'idle';
+      container.style.transform = '';
+      container.style.transition = '';
+      return;
+    }
+
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    if (mode === 'pending') {
+      if (absDy > 14 && absDy >= absDx) {
+        mode = 'vertical';
+        return;
+      }
+      if (absDx > 24 && absDx > absDy * 1.45) {
+        mode = 'horizontal';
+        container.style.transition = 'none';
+      } else {
+        return;
+      }
+    }
+
+    if (mode === 'horizontal') {
+      deltaX = dx;
+      // In RTL: swiping right (dx > 0) moves to next tab; swiping left (dx < 0) moves to previous tab
+      const allowed = dx > 0 ? canSwipeNext?.() ?? true : canSwipePrev?.() ?? true;
+      const dampened = allowed ? Math.max(-44, Math.min(44, dx * 0.24)) : Math.max(-14, Math.min(14, dx * 0.08));
+      container.style.transform = `translate3d(${dampened}px, 0, 0)`;
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (mode !== 'horizontal') {
+      mode = 'idle';
+      deltaX = 0;
+      return;
+    }
+    const finalDx = deltaX;
+    mode = 'idle';
+    deltaX = 0;
+    container.style.transition = '';
+    container.style.transform = '';
+
+    const threshold = 54;
+    if (finalDx > threshold && (canSwipeNext?.() ?? true)) {
+      onSwipeNext();
+    } else if (finalDx < -threshold && (canSwipePrev?.() ?? true)) {
+      onSwipePrev();
+    } else {
+      resetVisual();
+    }
+  };
+
+  const onTouchCancel = () => {
+    if (mode === 'horizontal') {
+      resetVisual();
+    }
+    mode = 'idle';
+    deltaX = 0;
+  };
+
+  container.addEventListener('touchstart', onTouchStart, { passive: true });
+  container.addEventListener('touchmove', onTouchMove, { passive: true });
+  container.addEventListener('touchend', onTouchEnd, { passive: true });
+  container.addEventListener('touchcancel', onTouchCancel, { passive: true });
+
+  return () => {
+    container.removeEventListener('touchstart', onTouchStart);
+    container.removeEventListener('touchmove', onTouchMove);
+    container.removeEventListener('touchend', onTouchEnd);
+    container.removeEventListener('touchcancel', onTouchCancel);
+  };
+}
+

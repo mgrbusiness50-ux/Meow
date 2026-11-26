@@ -43,7 +43,7 @@ describe('Splash screen minimum duration (2000ms) and readiness gating', () => {
     expect(state.isSplashLoadingDelayed()).toBe(false);
   });
 
-  it('waits until 2000ms when initialization completes early (500ms) and transitions without extra delay at 2000ms', async () => {
+  it('waits until 2000ms when initialization completes early (1500ms) and transitions without extra delay at 2000ms', async () => {
     let resolveSession!: (val: unknown) => void;
     const sessionPromise = new Promise((resolve) => {
       resolveSession = resolve;
@@ -69,14 +69,14 @@ describe('Splash screen minimum duration (2000ms) and readiness gating', () => {
     const { state } = await import('../src/state.ts');
     expect(state.getOnboardingStep()).toBe('splash');
 
-    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(1500);
     resolveSession({ configured: true, session: null, user: null, isPasswordRecovery: false });
     await flushMicrotasks();
 
     // Still holds splash until 2000ms minimum duration passes
     expect(state.getOnboardingStep()).toBe('splash');
 
-    await vi.advanceTimersByTimeAsync(1499);
+    await vi.advanceTimersByTimeAsync(499);
     expect(state.getOnboardingStep()).toBe('splash');
 
     await vi.advanceTimersByTimeAsync(1);
@@ -115,12 +115,12 @@ describe('Splash screen minimum duration (2000ms) and readiness gating', () => {
     expect(state.getOnboardingStep()).toBe('splash');
     expect(state.isSplashLoadingDelayed()).toBe(true);
 
-    // Even past 5500ms, still waits because initialization has not settled yet
-    await vi.advanceTimersByTimeAsync(3500);
+    // Even past 3500ms, still waits because initialization has not settled yet
+    await vi.advanceTimersByTimeAsync(1500);
     expect(state.getOnboardingStep()).toBe('splash');
     expect(state.isSplashLoadingDelayed()).toBe(true);
 
-    // As soon as delayed initialization completes at 5500ms, transitions immediately
+    // As soon as delayed initialization completes at 3500ms, transitions immediately
     resolveSession({ configured: true, session: null, user: null, isPasswordRecovery: false });
     await flushMicrotasks();
 

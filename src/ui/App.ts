@@ -1,4 +1,5 @@
-import { state } from '../state.ts';
+import { MAIN_TAB_ORDER, OnboardingStep, state } from '../state.ts';
+import { MainTab } from '../types.ts';
 import { renderHeader, attachHeaderEvents } from './components/Header.ts';
 import { renderTabBar, attachTabBarEvents } from './components/TabBar.ts';
 import { renderMatingView, attachMatingEvents } from './views/MatingView.ts';
@@ -6,7 +7,13 @@ import { renderAdoptionView, attachAdoptionEvents } from './views/AdoptionView.t
 import { renderChatView, attachChatEvents } from './views/ChatView.ts';
 import { renderClinicView, attachClinicEvents } from './views/ClinicView.ts';
 import { renderStoreView, attachStoreEvents } from './views/StoreView.ts';
-import { renderProfileView, attachProfileEvents } from './views/ProfileView.ts';
+import {
+  renderProfileView,
+  attachProfileEvents,
+  renderProfileOverlayModals,
+  attachProfileOverlayEvents,
+} from './views/ProfileView.ts';
+import { attachHorizontalTabSwipe } from '../utils/touchGestures.ts';
 import { renderPetDetailModal, attachPetDetailModalEvents } from './modals/PetDetailModal.ts';
 import { renderContactRequestModal, attachContactRequestModalEvents } from './modals/ContactRequestModal.ts';
 import { renderAddPetModal, attachAddPetModalEvents } from './modals/AddPetModal.ts';
@@ -44,6 +51,11 @@ export class MeowApp {
   private lastScrollY = 0;
   private isHeaderHidden = false;
   private scrollTicking = false;
+  private currentRenderedStep: OnboardingStep | null = null;
+  private lastRenderedTab: MainTab | null = null;
+  private lastRenderedInsideChatRoom = false;
+  private tabScrollPositions = new Map<MainTab, number>();
+  private activeTabSwipeCleanup: (() => void) | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -129,6 +141,114 @@ export class MeowApp {
     header.classList.toggle('pointer-events-none', hidden);
   }
 
+  private triggerSplashExitFade(): void {
+    if (typeof document === 'undefined' || !document.body) return;
+    const splashEl = this.container.querySelector('#splash-screen-container') as HTMLElement | null;
+    if (!splashEl) return;
+    const clone = splashEl.cloneNode(true) as HTMLElement;
+    clone.removeAttribute('id');
+    clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+    clone.className = 'fixed inset-0 z-[120] bg-[#FFF9E9] meow-splash-exit flex flex-col justify-center';
+    document.body.appendChild(clone);
+    window.setTimeout(() => {
+      clone.remove();
+    }, 260);
+  }
+
+  private renderOfflineStatusBanner(): string {
+    const { isOffline, isUsingCache } = state.getOfflineStatus();
+    if (!isOffline && !isUsingCache) return '';
+
+    return `
+      <div
+        id="app-offline-status-banner"
+        role="status"
+        aria-live="polite"
+        dir="rtl"
+        class="w-full max-w-md mx-auto px-3.5 pt-1.5"
+      >
+        <div class="rounded-2xl px-3.5 py-2 border ${
+          isOffline
+            ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-300/80 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+            : 'bg-[#fff5ea] dark:bg-[#2a211b] border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-[#F7EFE8]'
+        } flex items-center justify-center gap-2 text-[11px] font-bold shadow-xs font-baloo">
+          <i class="fa-solid ${isOffline ? 'fa-wifi text-amber-600' : 'fa-cloud-arrow-down text-brand-orange'} text-xs shrink-0"></i>
+          <span class="truncate">
+            ${
+              isOffline
+                ? 'وضع عدم الاتصال • بياناتك محفوظة وستتم المزامنة عند عودة الإنترنت'
+                : 'عرض سريع من البيانات المحفوظة • جاري التحديث...'
+            }
+          </span>
+        </div>
+      </div>
+    `;
+  }
+
+  private isMainSwipeBlocked(): boolean {
+    if (state.getOnboardingStep() !== 'completed') return true;
+    const currentTab = state.getCurrentTab();
+    if (currentTab === 'chat' && Boolean(state.getActiveConversation())) return true;
+    if (
+      state.isSettingsOpen() ||
+      state.getIsFilterModalOpen() ||
+      state.isNotificationsOpen() ||
+      Boolean(state.getSelectedPetForDetail()) ||
+      Boolean(state.getSelectedPetForRequest()) ||
+      state.isAddPetModalVisible() ||
+      state.isEditOwnerModalVisible() ||
+      state.isSavedPetsVisible() ||
+      state.isContactOpen() ||
+      state.getIsGroupAdoptionEditorOpen() ||
+      Boolean(state.getPendingGroupChoicePet()) ||
+      Boolean(state.getPendingBlockTarget()) ||
+      Boolean(state.getPendingReportTarget()) ||
+      Boolean(state.getPendingDeleteConversation()) ||
+      Boolean(state.getPendingDeletePet()) ||
+      Boolean(state.getPendingStatusChange()) ||
+      Boolean(state.getPendingAdoptionActionConfirm()) ||
+      state.getUpdateState().isApkModalOpen
+    ) {
+      return true;
+    }
+    if (typeof document !== 'undefined') {
+      if (document.querySelector('.ss-panel:not(.hidden), .meow-more-dropdown:not(.hidden)')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private ensureTabSwipeAttached(mainSlot: HTMLElement | null): void {
+    this.activeTabSwipeCleanup?.();
+    this.activeTabSwipeCleanup = null;
+    if (!mainSlot) return;
+
+    this.activeTabSwipeCleanup = attachHorizontalTabSwipe(mainSlot, {
+      isBlocked: () => this.isMainSwipeBlocked(),
+      canSwipeNext: () => {
+        const idx = MAIN_TAB_ORDER.indexOf(state.getCurrentTab());
+        return idx >= 0 && idx < MAIN_TAB_ORDER.length - 1;
+      },
+      canSwipePrev: () => {
+        const idx = MAIN_TAB_ORDER.indexOf(state.getCurrentTab());
+        return idx > 0;
+      },
+      onSwipeNext: () => {
+        const idx = MAIN_TAB_ORDER.indexOf(state.getCurrentTab());
+        if (idx >= 0 && idx < MAIN_TAB_ORDER.length - 1) {
+          state.setCurrentTab(MAIN_TAB_ORDER[idx + 1]);
+        }
+      },
+      onSwipePrev: () => {
+        const idx = MAIN_TAB_ORDER.indexOf(state.getCurrentTab());
+        if (idx > 0) {
+          state.setCurrentTab(MAIN_TAB_ORDER[idx - 1]);
+        }
+      },
+    });
+  }
+
   public init(): void {
     this.render();
   }
@@ -138,8 +258,14 @@ export class MeowApp {
 
     // 1. If user is in the onboarding / registration flow, show the exact sequential registration screens
     if (onboardingStep !== 'completed') {
+      this.activeTabSwipeCleanup?.();
+      this.activeTabSwipeCleanup = null;
+      this.lastRenderedTab = null;
+      this.lastRenderedInsideChatRoom = false;
+
       if (onboardingStep === 'splash') {
         state.markSplashViewMounted();
+        this.currentRenderedStep = 'splash';
         const existingSplash = this.container.querySelector('#splash-screen-container');
         const existingLoadingSlot = this.container.querySelector('#splash-loading-slot');
         if (existingSplash && existingLoadingSlot) {
@@ -152,8 +278,11 @@ export class MeowApp {
           attachOnboardingEvents();
           return;
         }
+      } else if (this.currentRenderedStep === 'splash') {
+        this.triggerSplashExitFade();
       }
 
+      this.currentRenderedStep = onboardingStep;
       this.container.innerHTML = `
         <div class="min-h-[100dvh] flex flex-col justify-center bg-[#FFF9E9] text-[#3E2723]">
           ${renderOnboardingView()}
@@ -163,7 +292,12 @@ export class MeowApp {
       return;
     }
 
-    // 2. Main App Shell
+    if (this.currentRenderedStep === 'splash') {
+      this.triggerSplashExitFade();
+    }
+    this.currentRenderedStep = 'completed';
+
+    // 2. Main App Shell (Persistent slots to prevent whole-screen flashing)
     const currentTab = state.getCurrentTab();
     const activeConversation = state.getActiveConversation();
     const isInsideChatRoom = currentTab === 'chat' && Boolean(activeConversation);
@@ -173,6 +307,13 @@ export class MeowApp {
     const selectedPetRequest = state.getSelectedPetForRequest();
     const isAddPetOpen = state.isAddPetModalVisible();
     const editingPet = state.getEditingPet();
+
+    const tabChanged = this.lastRenderedTab !== null && this.lastRenderedTab !== currentTab;
+    const insideChatRoomChanged = this.lastRenderedInsideChatRoom !== isInsideChatRoom;
+
+    if (tabChanged && this.lastRenderedTab && !this.lastRenderedInsideChatRoom && typeof window !== 'undefined') {
+      this.tabScrollPositions.set(this.lastRenderedTab, Math.max(0, window.scrollY || window.pageYOffset || 0));
+    }
 
     let tabHtml = '';
     switch (currentTab) {
@@ -198,26 +339,73 @@ export class MeowApp {
         tabHtml = renderMatingView();
     }
 
-    this.isHeaderHidden = false;
-    this.lastScrollY = typeof window !== 'undefined' ? Math.max(0, window.scrollY || 0) : 0;
+    const shellAlreadyMounted = Boolean(this.container.querySelector('#app-shell-root'));
+    if (!shellAlreadyMounted) {
+      this.container.innerHTML = `
+        <div id="app-shell-root" class="min-h-full flex flex-col justify-between bg-warm-bg dark:bg-warm-darkBg text-warm-text dark:text-white transition-colors duration-200">
+          <div id="app-header-slot"></div>
+          <div id="app-offline-banner-slot"></div>
+          <main id="app-main-slot" class="flex-1 flex flex-col"></main>
+          <div id="app-tabbar-slot"></div>
+          <div id="app-overlays-slot"></div>
+        </div>
+      `;
+    }
 
-    this.container.innerHTML = `
-      <div class="min-h-full flex flex-col justify-between bg-warm-bg dark:bg-warm-darkBg text-warm-text dark:text-white transition-colors duration-200">
-        <!-- Dark Top Gradient Scrim under Android Status Bar -->
-        <div id="status-bar-scrim" aria-hidden="true"></div>
+    const headerSlot = this.container.querySelector<HTMLElement>('#app-header-slot');
+    const offlineBannerSlot = this.container.querySelector<HTMLElement>('#app-offline-banner-slot');
+    const mainSlot = this.container.querySelector<HTMLElement>('#app-main-slot');
+    const tabbarSlot = this.container.querySelector<HTMLElement>('#app-tabbar-slot');
+    const overlaysSlot = this.container.querySelector<HTMLElement>('#app-overlays-slot');
 
-        <!-- App Header (Hidden when inside chat room so chat has dedicated header) -->
-        ${isInsideChatRoom ? '' : renderHeader()}
+    if (headerSlot) {
+      if (isInsideChatRoom) {
+        headerSlot.innerHTML = '';
+      } else {
+        headerSlot.innerHTML = renderHeader();
+        attachHeaderEvents();
+      }
+    }
 
-        <!-- Main Tab Content -->
-        <main class="flex-1 flex flex-col meow-view-enter ${isInsideChatRoom ? 'p-0 m-0 pb-0' : ''}" style="${isInsideChatRoom ? '' : 'padding-bottom: calc(6rem + env(safe-area-inset-bottom));'}">
-          ${tabHtml}
-        </main>
+    if (offlineBannerSlot) {
+      offlineBannerSlot.innerHTML = isInsideChatRoom ? '' : this.renderOfflineStatusBanner();
+    }
 
-        <!-- Bottom Tab Bar (Taskbar: hidden when inside conversation or settings drawer, reappears on exit) -->
-        ${hideBottomBar ? '' : renderTabBar()}
+    if (mainSlot) {
+      mainSlot.className = `flex-1 flex flex-col ${isInsideChatRoom ? 'p-0 m-0 pb-0' : ''}`;
+      mainSlot.style.paddingBottom = isInsideChatRoom
+        ? ''
+        : 'calc(6rem + env(safe-area-inset-bottom))';
 
-        <!-- Modals & Sub-views -->
+      if (tabChanged) {
+        const direction = state.consumeTabTransitionDirection();
+        mainSlot.classList.remove('meow-tab-enter-next', 'meow-tab-enter-prev', 'meow-view-enter');
+        if (direction === 'next' || direction === 'prev') {
+          void mainSlot.offsetWidth;
+          mainSlot.classList.add(
+            direction === 'next' ? 'meow-tab-enter-next' : 'meow-tab-enter-prev'
+          );
+        }
+      } else {
+        state.consumeTabTransitionDirection();
+        mainSlot.classList.remove('meow-tab-enter-next', 'meow-tab-enter-prev', 'meow-view-enter');
+      }
+
+      mainSlot.innerHTML = tabHtml;
+    }
+
+    if (tabbarSlot) {
+      if (hideBottomBar) {
+        tabbarSlot.innerHTML = '';
+      } else {
+        tabbarSlot.innerHTML = renderTabBar();
+        attachTabBarEvents();
+      }
+    }
+
+    if (overlaysSlot) {
+      overlaysSlot.innerHTML = `
+        ${renderProfileOverlayModals()}
         ${renderContactRequestModal(selectedPetRequest)}
         ${isAddPetOpen ? renderAddPetModal(editingPet) : ''}
         ${state.isEditOwnerModalVisible() ? renderOwnerEditView() : ''}
@@ -233,16 +421,21 @@ export class MeowApp {
         ${renderReportSubmittedToast()}
         ${this.renderOtaUpdateNotice()}
         ${this.renderApkUpdateModal()}
-      </div>
-    `;
+      `;
+    }
 
-    // Attach events after innerHTML update
-    if (!isInsideChatRoom) {
-      attachHeaderEvents();
+    if (tabChanged || insideChatRoomChanged) {
+      this.isHeaderHidden = false;
+      this.setHeaderHidden(false);
+      if (typeof window !== 'undefined' && !isInsideChatRoom) {
+        const savedScroll = this.tabScrollPositions.get(currentTab) ?? 0;
+        window.scrollTo({ top: savedScroll, behavior: 'auto' });
+        this.lastScrollY = savedScroll;
+      }
     }
-    if (!hideBottomBar) {
-      attachTabBarEvents();
-    }
+
+    this.lastRenderedTab = currentTab;
+    this.lastRenderedInsideChatRoom = isInsideChatRoom;
 
     switch (currentTab) {
       case 'mating':
@@ -265,7 +458,10 @@ export class MeowApp {
         break;
     }
 
-    // Modal events
+    this.ensureTabSwipeAttached(mainSlot);
+
+    // Overlay & Modal events
+    attachProfileOverlayEvents();
     if (selectedPetDetail) attachPetDetailModalEvents(selectedPetDetail);
     if (selectedPetRequest) attachContactRequestModalEvents(selectedPetRequest);
     if (isAddPetOpen) attachAddPetModalEvents(editingPet);

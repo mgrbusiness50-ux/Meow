@@ -71,7 +71,7 @@ export function renderSearchableSelect(config: {
       <!-- Anchored Searchable Popover -->
       <div
         id="${escapeAttr(id)}-panel"
-        class="ss-panel hidden absolute top-full mt-2 right-0 min-w-[min(220px,calc(100vw-24px))] w-full max-w-[calc(100vw-24px)] z-50 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] shadow-xl p-2.5 text-right"
+        class="ss-panel hidden absolute top-full mt-2 right-0 min-w-[min(220px,calc(100vw-24px))] w-full max-w-[calc(100vw-24px)] z-[60] bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] shadow-xl p-2.5 text-right"
       >
         <div class="relative mb-2">
           <input
@@ -131,11 +131,32 @@ function resetPanelPositionStyles(panel: HTMLElement): void {
   panel.style.left = '';
   panel.style.right = '';
   panel.style.transform = '';
+  panel.classList.remove('bottom-full', 'mb-2');
+  panel.classList.add('top-full', 'mt-2');
+  const root = panel.closest('.searchable-select-root');
+  root?.classList.remove('z-50');
 }
 
-function clampPanelWithinViewport(panel: HTMLElement): void {
+function positionAndClampPanel(
+  root: HTMLElement,
+  trigger: HTMLButtonElement | null,
+  panel: HTMLElement
+): void {
   if (typeof window === 'undefined') return;
   resetPanelPositionStyles(panel);
+  root.classList.add('z-50');
+
+  if (trigger) {
+    const triggerRect = trigger.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight || 640;
+    const spaceBelow = vh - triggerRect.bottom;
+    const spaceAbove = triggerRect.top;
+    if (spaceBelow < 240 && spaceAbove > spaceBelow) {
+      panel.classList.remove('top-full', 'mt-2');
+      panel.classList.add('bottom-full', 'mb-2');
+    }
+  }
+
   const margin = 12;
   const vw = window.innerWidth || document.documentElement.clientWidth || 360;
   const rect = panel.getBoundingClientRect();
@@ -269,7 +290,7 @@ export function attachSearchableSelect(
         if (searchInput) searchInput.value = '';
         renderFilteredList('');
         panel.classList.remove('hidden');
-        clampPanelWithinViewport(panel);
+        positionAndClampPanel(root, trigger, panel);
         trigger.setAttribute('aria-expanded', 'true');
         panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         if (searchInput) {

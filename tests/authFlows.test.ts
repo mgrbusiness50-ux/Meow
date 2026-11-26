@@ -198,7 +198,7 @@ describe('Supabase Auth flows: Google OAuth deep link, Email signup (Confirm Ema
       import('../src/state.ts'),
     ]);
 
-    await vi.advanceTimersByTimeAsync(7000);
+    await vi.advanceTimersByTimeAsync(2000);
     state.setOnboardingStep('auth_method');
     state.setTermsAccepted(true);
 
@@ -288,7 +288,7 @@ describe('Supabase Auth flows: Google OAuth deep link, Email signup (Confirm Ema
       import('../src/state.ts'),
     ]);
 
-    await vi.advanceTimersByTimeAsync(7000);
+    await vi.advanceTimersByTimeAsync(2000);
     state.setOnboardingStep('auth_method');
     state.setTermsAccepted(true);
 
@@ -350,10 +350,10 @@ describe('Supabase Auth flows: Google OAuth deep link, Email signup (Confirm Ema
     }));
 
     const { state } = await import('../src/state.ts');
-    // Allow initial offline-like profile load to fail and route to auth_method after 7000ms
+    // Allow initial offline-like profile load to fail and route to auth_method after 2000ms
     await Promise.resolve();
     await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(7000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(state.getOnboardingStep()).toBe('auth_method');
     expect(state.isSupabaseAuthenticated()).toBe(true);
 

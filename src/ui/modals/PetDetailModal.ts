@@ -638,7 +638,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                   petId: pet.id,
                   reportTargetType: 'pet',
                   buttonClass:
-                    'w-10 h-10 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/70 transition-all active:scale-95 cursor-pointer shadow-md',
+                    'w-10 h-10 bg-transparent border-0 text-white inline-flex items-center justify-center leading-none transition-all active:scale-95 cursor-pointer opacity-95 hover:opacity-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]',
                   dropdownAlign: 'left',
                 })
               : ''

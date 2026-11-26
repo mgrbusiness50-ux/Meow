@@ -108,10 +108,67 @@ import {
   subscribeToSupabaseAuthChanges,
   updateSupabaseAccountPreferences,
 } from './services/supabaseAuthService.ts';
+import {
+  isNetworkOrOfflineError,
+  sanitizeOAuthDisplayName,
+} from './utils/authHelpers.ts';
 
 const SPLASH_MIN_DURATION_MS = 2000;
 const SPLASH_MAX_WAIT_MS = 15000;
 const OTA_DISMISSED_VERSION_STORAGE_KEY = 'meow_dismissed_ota_version';
+const OFFLINE_CACHE_KEY_PREFIX = 'meow_offline_cache_v1:';
+const OFFLINE_LAST_USER_ID_KEY = 'meow_last_user_id_v1';
+const CLINIC_NOTIFY_STORAGE_KEY = 'meow_clinic_notify_v1';
+const STORE_NOTIFY_STORAGE_KEY = 'meow_store_notify_v1';
+export const MAIN_TAB_ORDER: MainTab[] = [
+  'mating',
+  'adoption',
+  'chat',
+  'clinic',
+  'store',
+  'profile',
+];
+
+interface OfflineAccountCacheSnapshot {
+  version: 1;
+  savedAt: number;
+  userId: string;
+  bundle: SupabaseUserAccountBundle;
+  user: UserProfile;
+  userPets: Pet[];
+  userGroupAdoptionListing: Pet | null;
+  matingPets: Pet[];
+  adoptionPets: Pet[];
+  savedPetIds: string[];
+  contactRequests: ContactRequest[];
+  conversations: Conversation[];
+  notifications: AppNotification[];
+  healthRecords: HealthRecordItem[];
+  blockedUsers: BlockedUser[];
+  customStickers: CustomStickerModel[];
+}
+
+function readStoredBooleanFlag(key: string): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem(key) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredBooleanFlag(key: string, value: boolean): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (value) {
+      localStorage.setItem(key, 'true');
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 function readStoredDismissedOtaVersion(): string | null {
   try {
@@ -187,7 +244,14 @@ class AppStateManager {
   private customStickers: CustomStickerModel[] = [];
 
   private currentTab: MainTab = 'mating';
+  private lastTabTransitionDirection: 'next' | 'prev' | 'none' = 'none';
   private chatSubTab: 'chats' | 'requests' = 'chats';
+  private clinicNotifyRequested: boolean = readStoredBooleanFlag(CLINIC_NOTIFY_STORAGE_KEY);
+  private storeNotifyRequested: boolean = readStoredBooleanFlag(STORE_NOTIFY_STORAGE_KEY);
+  private isOfflineState: boolean =
+    typeof navigator !== 'undefined' ? navigator.onLine === false : false;
+  private isUsingOfflineCacheState: boolean = false;
+  private offlineCacheSavedAt: number | null = null;
   private selectedPetForDetail: Pet | null = null;
   private selectedGroupMemberFocusId: string | null = null;
   private selectedPetForRequest: Pet | null = null;
@@ -510,6 +574,16 @@ class AppStateManager {
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('meow_dark_mode');
       }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('offline', () => {
+        this.isOfflineState = true;
+        this.notify();
+      });
+      window.addEventListener('online', () => {
+        this.isOfflineState = false;
+        void this.syncAfterNetworkReconnect();
+      });
     }
     this.initRealtimeSync();
     if (this.onboardingStep === 'splash' && !this.isOnboardingPreviewSession) {
@@ -934,12 +1008,23 @@ class AppStateManager {
     }
 
     if (result.errorMessage && !result.session) {
+      if (isNetworkOrOfflineError(result.errorMessage) && this.tryRestoreLastCompletedOfflineSession()) {
+        this.tryFinalizeSplashTransition();
+        this.notify();
+        return;
+      }
       this.activeSupabaseAuthVersion += 1;
       this.clearLocalSupabaseSessionState({
         errorMessage: result.errorMessage,
         markReady: true,
         preserveOnboardingSubstep: true,
       });
+      this.tryFinalizeSplashTransition();
+      this.notify();
+      return;
+    }
+
+    if (!result.session && isNetworkOrOfflineError() && this.tryRestoreLastCompletedOfflineSession()) {
       this.tryFinalizeSplashTransition();
       this.notify();
       return;
@@ -970,6 +1055,21 @@ class AppStateManager {
           !this.deepLinkInitChecked &&
           Capacitor.isNativePlatform())
       ) {
+        return;
+      }
+      if (
+        event !== 'SIGNED_OUT' &&
+        !this.isSigningOutSupabase &&
+        isNetworkOrOfflineError() &&
+        ((this.loadedSupabaseUserId && this.supabaseAccountBundle?.onboardingDone) ||
+          this.tryRestoreLastCompletedOfflineSession())
+      ) {
+        this.isOfflineState = true;
+        this.isUsingOfflineCacheState = true;
+        this.isSupabaseAuthReady = true;
+        this.isSupabaseProfileLoading = false;
+        this.tryFinalizeSplashTransition();
+        this.notify();
         return;
       }
       this.activeSupabaseAuthVersion += 1;
@@ -1060,19 +1160,37 @@ class AppStateManager {
       this.isSupabaseAuthReady = true;
 
       if (!res.success || !res.bundle) {
+        if (isNetworkOrOfflineError(res.errorMessage)) {
+          if (this.loadedSupabaseUserId === userId && this.supabaseAccountBundle?.onboardingDone) {
+            this.isUsingOfflineCacheState = true;
+            this.supabaseAuthError = null;
+            this.deferOrSetOnboardingStep('completed');
+            this.tryFinalizeSplashTransition();
+            this.notify();
+            return { success: true, bundle: this.supabaseAccountBundle };
+          }
+          if (this.tryRestoreOfflineSnapshotForUser(userId)) {
+            this.tryFinalizeSplashTransition();
+            this.notify();
+            return { success: true, bundle: this.supabaseAccountBundle };
+          }
+        }
         this.loadedSupabaseUserId = null;
         this.supabaseAccountBundle = res.bundle ?? null;
         this.supabaseAuthError =
           res.errorMessage || 'تعذر تحميل بيانات الحساب من قاعدة البيانات.';
         const sessionUser = opts?.session?.user ?? this.supabaseSession?.user ?? null;
+        const resolvedName = sanitizeOAuthDisplayName(
+          (sessionUser?.user_metadata?.full_name as string | undefined) ||
+            (sessionUser?.user_metadata?.name as string | undefined),
+          sessionUser?.email,
+          sessionUser
+        );
         this.user = {
           ...createUnauthenticatedUserProfile(this.notificationsEnabled),
           id: userId,
           email: sessionUser?.email || '',
-          name:
-            (sessionUser?.user_metadata?.full_name as string | undefined) ||
-            (sessionUser?.user_metadata?.name as string | undefined) ||
-            '',
+          name: resolvedName,
         };
         const inRecovery = Boolean(opts?.isPasswordRecovery || this.isSupabasePasswordRecoveryState);
         if (!this.isOnboardingPreviewSession) {
@@ -1090,20 +1208,24 @@ class AppStateManager {
         // Brand-new Auth user whose profiles row hasn't been created yet: let them complete owner_details (upsert creates the row)
         const sessionUser = opts?.session?.user ?? this.supabaseSession?.user ?? null;
         const metaAvatar = this.extractGoogleAvatarFromSessionUser(sessionUser);
+        const resolvedName = sanitizeOAuthDisplayName(
+          (sessionUser?.user_metadata?.full_name as string | undefined) ||
+            (sessionUser?.user_metadata?.name as string | undefined),
+          sessionUser?.email,
+          sessionUser
+        );
         this.rawSupabaseAvatarUrl = metaAvatar;
         this.loadedSupabaseUserId = userId;
         this.supabaseAccountBundle = res.bundle;
         this.supabaseAuthError = null;
+        this.isUsingOfflineCacheState = false;
         this.termsAcceptedInOnboarding = true;
         this.ownerDetailsCompleted = false;
         this.user = {
           ...createUnauthenticatedUserProfile(this.notificationsEnabled),
           id: userId,
           email: sessionUser?.email || '',
-          name:
-            (sessionUser?.user_metadata?.full_name as string | undefined) ||
-            (sessionUser?.user_metadata?.name as string | undefined) ||
-            '',
+          name: resolvedName,
           avatar: metaAvatar || DEFAULT_USER_AVATAR_FALLBACK,
         };
         const inRecovery = Boolean(opts?.isPasswordRecovery || this.isSupabasePasswordRecoveryState);
@@ -1129,10 +1251,12 @@ class AppStateManager {
       this.loadedSupabaseUserId = userId;
       this.supabaseAccountBundle = res.bundle;
       this.supabaseAuthError = null;
+      this.isUsingOfflineCacheState = false;
       this.applySupabaseAccountBundle(res.bundle, {
         isPasswordRecovery: Boolean(opts?.isPasswordRecovery),
         sessionUser: opts?.session?.user ?? this.supabaseSession?.user ?? null,
       });
+      this.persistOfflineSnapshotForCurrentUser();
       void this.hydrateSupabaseWorkspaceForUser(userId);
       this.ensureWorkspaceRealtime(userId);
       this.cleanupWebAuthCallbackParams();
@@ -1184,18 +1308,21 @@ class AppStateManager {
     const profile = bundle.profile;
     if (!profile) return;
 
+    const sessionUser = opts?.sessionUser ?? this.supabaseSession?.user ?? null;
     const existingRawAvatar = (bundle.rawProfile?.avatar_url || profile.avatar || '').trim();
-    const sessionGoogleAvatar = this.extractGoogleAvatarFromSessionUser(
-      opts?.sessionUser ?? this.supabaseSession?.user ?? null
-    );
+    const sessionGoogleAvatar = this.extractGoogleAvatarFromSessionUser(sessionUser);
     const resolvedRawAvatar = existingRawAvatar || sessionGoogleAvatar;
     this.rawSupabaseAvatarUrl = resolvedRawAvatar;
     const runtimeAvatar = resolvedRawAvatar || DEFAULT_USER_AVATAR_FALLBACK;
     const showPhone = Boolean(profile.showPhoneInProfile);
     const notifEnabled = profile.notificationsEnabled !== false;
+    const resolvedProfileName = bundle.onboardingDone
+      ? (profile.name || '').trim()
+      : sanitizeOAuthDisplayName(profile.name, profile.email || sessionUser?.email, sessionUser);
 
     this.user = {
       ...profile,
+      name: resolvedProfileName,
       avatar: runtimeAvatar,
       showPhoneInProfile: showPhone,
       privacyMode: showPhone ? 'public' : 'private',
@@ -1338,6 +1465,8 @@ class AppStateManager {
         this.syncOwnedPetsMetadataWithUser(userId);
         this.recalculateAllCompatibilities();
         this.reconcileNotificationsWithState(true);
+        this.isUsingOfflineCacheState = false;
+        this.persistOfflineSnapshotForCurrentUser();
         this.notify();
       } catch (err) {
         console.warn('Workspace hydration skipped:', err);
@@ -1416,6 +1545,8 @@ class AppStateManager {
       this.activeConversationId = null;
       this.selectedPetForDetail = null;
       this.selectedPetForRequest = null;
+      this.isUsingOfflineCacheState = false;
+      this.offlineCacheSavedAt = null;
       this.syncOwnedPetsMetadataWithUser('');
 
       if (typeof localStorage !== 'undefined') {
@@ -1427,6 +1558,169 @@ class AppStateManager {
       if (!opts?.preserveOnboardingSubstep || !preAuthSteps.includes(this.onboardingStep)) {
         this.onboardingStep = 'splash';
       }
+    }
+  }
+
+  private clearStoredOfflineCache(userId?: string | null): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (userId) {
+        localStorage.removeItem(`${OFFLINE_CACHE_KEY_PREFIX}${userId}`);
+      }
+      localStorage.removeItem(OFFLINE_LAST_USER_ID_KEY);
+    } catch {
+      // Ignore storage cleanup errors
+    }
+  }
+
+  private persistOfflineSnapshotForCurrentUser(): void {
+    if (
+      this.isOnboardingPreviewSession ||
+      typeof localStorage === 'undefined' ||
+      !this.supabaseAuthUserId ||
+      !this.supabaseAccountBundle?.onboardingDone
+    ) {
+      return;
+    }
+    try {
+      const userId = this.supabaseAuthUserId;
+      const savedAt = Date.now();
+      const snapshot: OfflineAccountCacheSnapshot = {
+        version: 1,
+        savedAt,
+        userId,
+        bundle: this.supabaseAccountBundle,
+        user: this.user,
+        userPets: this.userPets,
+        userGroupAdoptionListing: this.userGroupAdoptionListing,
+        matingPets: this.matingPets,
+        adoptionPets: this.adoptionPets,
+        savedPetIds: Array.from(this.savedPetIds),
+        contactRequests: this.contactRequests,
+        conversations: this.conversations,
+        notifications: this.notifications,
+        healthRecords: this.healthRecords,
+        blockedUsers: this.blockedUsers,
+        customStickers: this.customStickers,
+      };
+      localStorage.setItem(`${OFFLINE_CACHE_KEY_PREFIX}${userId}`, JSON.stringify(snapshot));
+      localStorage.setItem(OFFLINE_LAST_USER_ID_KEY, userId);
+      this.offlineCacheSavedAt = savedAt;
+    } catch {
+      // Ignore quota / serialization errors
+    }
+  }
+
+  private readOfflineSnapshot(userId: string): OfflineAccountCacheSnapshot | null {
+    if (!userId || typeof localStorage === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(`${OFFLINE_CACHE_KEY_PREFIX}${userId}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as OfflineAccountCacheSnapshot;
+      if (
+        !parsed ||
+        parsed.version !== 1 ||
+        parsed.userId !== userId ||
+        !parsed.bundle?.onboardingDone ||
+        !parsed.user?.id
+      ) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private tryRestoreOfflineSnapshotForUser(userId: string): boolean {
+    const snapshot = this.readOfflineSnapshot(userId);
+    if (!snapshot) return false;
+    this.loadedSupabaseUserId = userId;
+    this.supabaseAuthUserId = userId;
+    this.supabaseAccountBundle = snapshot.bundle;
+    this.user = { ...snapshot.user };
+    this.userPets = Array.isArray(snapshot.userPets) ? snapshot.userPets : [];
+    this.userGroupAdoptionListing = snapshot.userGroupAdoptionListing ?? null;
+    this.matingPets = Array.isArray(snapshot.matingPets) ? snapshot.matingPets : [];
+    this.adoptionPets = Array.isArray(snapshot.adoptionPets) ? snapshot.adoptionPets : [];
+    this.savedPetIds = new Set(Array.isArray(snapshot.savedPetIds) ? snapshot.savedPetIds : []);
+    this.contactRequests = Array.isArray(snapshot.contactRequests) ? snapshot.contactRequests : [];
+    this.conversations = Array.isArray(snapshot.conversations) ? snapshot.conversations : [];
+    this.notifications = Array.isArray(snapshot.notifications) ? snapshot.notifications : [];
+    this.healthRecords = Array.isArray(snapshot.healthRecords) ? snapshot.healthRecords : [];
+    this.blockedUsers = Array.isArray(snapshot.blockedUsers) ? snapshot.blockedUsers : [];
+    this.customStickers = Array.isArray(snapshot.customStickers) ? snapshot.customStickers : [];
+    this.ownerDetailsCompleted = true;
+    this.termsAcceptedInOnboarding = true;
+    this.isSupabaseAuthReady = true;
+    this.isSupabaseProfileLoading = false;
+    this.supabaseAuthError = null;
+    this.isUsingOfflineCacheState = true;
+    this.offlineCacheSavedAt = snapshot.savedAt || null;
+    this.recalculateAllCompatibilities();
+    this.reconcileNotificationsWithState(true);
+    this.deferOrSetOnboardingStep('completed');
+    return true;
+  }
+
+  private tryRestoreLastCompletedOfflineSession(): boolean {
+    if (this.isOnboardingPreviewSession || typeof localStorage === 'undefined') return false;
+    try {
+      const lastUserId = localStorage.getItem(OFFLINE_LAST_USER_ID_KEY);
+      if (!lastUserId) return false;
+      return this.tryRestoreOfflineSnapshotForUser(lastUserId);
+    } catch {
+      return false;
+    }
+  }
+
+  public getOfflineStatus(): {
+    isOffline: boolean;
+    isUsingCache: boolean;
+    lastSyncedAt: number | null;
+  } {
+    return {
+      isOffline: this.isOfflineState,
+      isUsingCache: this.isUsingOfflineCacheState,
+      lastSyncedAt: this.offlineCacheSavedAt,
+    };
+  }
+
+  public async syncAfterNetworkReconnect(): Promise<void> {
+    if (this.isOnboardingPreviewSession) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.isOfflineState = true;
+      this.notify();
+      return;
+    }
+    this.isOfflineState = false;
+    if (!isSupabaseConfigured()) {
+      this.notify();
+      return;
+    }
+    const targetUserId = this.supabaseAuthUserId || this.loadedSupabaseUserId;
+    if (targetUserId && isValidUuid(targetUserId)) {
+      await this.loadSupabaseAccountForUser(targetUserId, {
+        session: this.supabaseSession,
+        isPasswordRecovery: this.isSupabasePasswordRecoveryState,
+        forceReload: true,
+      });
+    } else if (this.onboardingStep === 'completed' || this.onboardingStep === 'auth_method') {
+      await this.retrySupabaseAccountLoad();
+    }
+    this.notify();
+  }
+
+  public resumeFromBackground(): void {
+    const offlineNow = typeof navigator !== 'undefined' ? navigator.onLine === false : false;
+    const prevOffline = this.isOfflineState;
+    this.isOfflineState = offlineNow;
+    if (!offlineNow && (prevOffline || this.isUsingOfflineCacheState)) {
+      void this.syncAfterNetworkReconnect();
+    } else if (!offlineNow && this.onboardingStep === 'completed' && this.supabaseAuthUserId) {
+      void this.hydrateSupabaseWorkspaceForUser(this.supabaseAuthUserId);
+    } else if (prevOffline !== offlineNow) {
+      this.notify();
     }
   }
 
@@ -1543,6 +1837,10 @@ class AppStateManager {
     if (!isSupabaseConfigured()) return false;
     const sessionRes = await getCurrentSupabaseSession();
     if (!sessionRes.session || !sessionRes.user?.id) {
+      if (isNetworkOrOfflineError(sessionRes.errorMessage) && this.tryRestoreLastCompletedOfflineSession()) {
+        this.notify();
+        return true;
+      }
       this.clearLocalSupabaseSessionState({
         errorMessage: sessionRes.errorMessage ?? null,
         markReady: true,
@@ -1898,9 +2196,11 @@ class AppStateManager {
         return result;
       }
 
+      const signedOutUserId = this.supabaseAuthUserId || this.loadedSupabaseUserId;
       this.activeSupabaseAuthVersion += 1;
       this.inFlightSupabaseProfileFetch = null;
       this.handledDeepLinkUrls.clear();
+      this.clearStoredOfflineCache(signedOutUserId);
       this.clearLocalSupabaseSessionState({
         errorMessage: null,
         markReady: true,
@@ -2163,7 +2463,7 @@ class AppStateManager {
     return this.chatSubTab;
   }
 
-  public setChatSubTab(subTab: 'chats' | 'requests'): void {
+  public setChatSubTab(subTab: 'chats' | 'requests', opts?: { silent?: boolean }): void {
     this.chatSubTab = subTab;
     if (subTab === 'requests') {
       this.markNotificationsReadWhere(
@@ -2171,7 +2471,9 @@ class AppStateManager {
         true
       );
     }
-    this.notify();
+    if (!opts?.silent) {
+      this.notify();
+    }
   }
 
   public getUnreadChatMessagesCount(): number {
@@ -2552,9 +2854,16 @@ class AppStateManager {
     }
 
     this.onboardingStep = 'completed';
+    if (this.supabaseAccountBundle) {
+      this.supabaseAccountBundle = {
+        ...this.supabaseAccountBundle,
+        onboardingDone: true,
+      };
+    }
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('meow_onboarding_done', 'true');
     }
+    this.persistOfflineSnapshotForCurrentUser();
     if (this.supabaseAuthUserId) {
       void this.hydrateSupabaseWorkspaceForUser(this.supabaseAuthUserId);
       this.ensureWorkspaceRealtime(this.supabaseAuthUserId);
@@ -3012,7 +3321,42 @@ class AppStateManager {
     return this.currentTab;
   }
 
+  public getLastTabTransitionDirection(): 'next' | 'prev' | 'none' {
+    return this.lastTabTransitionDirection;
+  }
+
+  public consumeTabTransitionDirection(): 'next' | 'prev' | 'none' {
+    const dir = this.lastTabTransitionDirection;
+    this.lastTabTransitionDirection = 'none';
+    return dir;
+  }
+
+  public isClinicNotifyRequested(): boolean {
+    return this.clinicNotifyRequested;
+  }
+
+  public requestClinicNotify(): void {
+    this.clinicNotifyRequested = true;
+    writeStoredBooleanFlag(CLINIC_NOTIFY_STORAGE_KEY, true);
+  }
+
+  public isStoreNotifyRequested(): boolean {
+    return this.storeNotifyRequested;
+  }
+
+  public requestStoreNotify(): void {
+    this.storeNotifyRequested = true;
+    writeStoredBooleanFlag(STORE_NOTIFY_STORAGE_KEY, true);
+  }
+
   public setCurrentTab(tab: MainTab): void {
+    const prevIdx = MAIN_TAB_ORDER.indexOf(this.currentTab);
+    const nextIdx = MAIN_TAB_ORDER.indexOf(tab);
+    if (prevIdx !== -1 && nextIdx !== -1 && prevIdx !== nextIdx) {
+      this.lastTabTransitionDirection = nextIdx > prevIdx ? 'next' : 'prev';
+    } else {
+      this.lastTabTransitionDirection = 'none';
+    }
     this.currentTab = tab;
     if (tab === 'chat' && this.chatSubTab === 'requests') {
       this.markNotificationsReadWhere(
@@ -6185,9 +6529,14 @@ class AppStateManager {
     return this.savedPetsSubTab;
   }
 
-  public setSavedPetsSubTab(tab: 'mating' | 'adoption' | 'clinics' | 'store'): void {
+  public setSavedPetsSubTab(
+    tab: 'mating' | 'adoption' | 'clinics' | 'store',
+    opts?: { silent?: boolean }
+  ): void {
     this.savedPetsSubTab = tab;
-    this.notify();
+    if (!opts?.silent) {
+      this.notify();
+    }
   }
 
   // Contact View
