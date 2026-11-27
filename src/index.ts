@@ -42,6 +42,8 @@ function setupLifecycleAndConnectivityHandlers(): void {
       void CapApp.addListener('appStateChange', ({ isActive }) => {
         if (isActive) {
           state.resumeFromBackground();
+        } else {
+          state.handleAppBackgrounded();
         }
       });
     } else if (

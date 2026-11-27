@@ -11,7 +11,9 @@ describe('updateService version & manifest gating', () => {
   afterEach(() => {
     vi.resetModules();
     vi.doUnmock('@capacitor/core');
+    vi.doUnmock('@capacitor/app');
     vi.doUnmock('@capgo/capacitor-updater');
+    vi.unstubAllGlobals();
   });
 
   it('compares semantic versions and prereleases accurately', () => {
@@ -130,6 +132,61 @@ describe('updateService version & manifest gating', () => {
     const reloadRes = await reloadAppToApplyStagedUpdate();
     expect(reloadMock).toHaveBeenCalledTimes(1);
     expect(reloadRes.success).toBe(true);
+  });
+
+  it('reads real native APK version from CapApp.getInfo() separately from installed OTA bundle version', async () => {
+    vi.resetModules();
+    vi.doMock('@capacitor/core', () => ({
+      Capacitor: { isNativePlatform: () => true },
+    }));
+    vi.doMock('@capacitor/app', () => ({
+      App: {
+        getInfo: vi.fn(async () => ({
+          name: 'Meow',
+          id: 'com.meow.app',
+          version: '1.2.0',
+          build: '2',
+        })),
+      },
+    }));
+    vi.doMock('@capgo/capacitor-updater', () => ({
+      CapacitorUpdater: {
+        current: vi.fn(async () => ({ bundle: { version: '1.2.2' } })),
+      },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/apk-release.json')) {
+          return new Response(null, { status: 404 });
+        }
+        return new Response(
+          JSON.stringify({
+            version: '1.2.3',
+            buildNumber: 5,
+            bundleUrl: 'https://updates.example.com/bundles/1.2.3/bundle.zip',
+            checksum: 'sha256hex',
+            minNativeVersion: '1.2.0',
+            maxNativeVersion: '1.2.0',
+            channel: 'production',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      })
+    );
+
+    const { checkForUpdates } = await import('../src/services/updateService.ts');
+    const result = await checkForUpdates({
+      baseUrl: 'https://updates.example.com',
+      channel: 'production',
+    });
+
+    expect(result.currentNativeVersion).toBe('1.2.0');
+    expect(result.currentBuildNumber).toBe(2);
+    expect(result.currentBundleVersion).toBe('1.2.2');
+    expect(result.status).toBe('ota_available');
+    expect(result.otaUpdate?.version).toBe('1.2.3');
   });
 
   it('returns clear error when CapacitorUpdater.download fails', async () => {

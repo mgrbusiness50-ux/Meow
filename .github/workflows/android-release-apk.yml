@@ -136,10 +136,23 @@ jobs:
           VITE_GOOGLE_WEB_CLIENT_ID: ${{ vars.VITE_GOOGLE_WEB_CLIENT_ID || secrets.VITE_GOOGLE_WEB_CLIENT_ID || '' }}
           VITE_APP_CHANNEL: ${{ steps.meta.outputs.channel }}
           VITE_UPDATES_BASE_URL: ${{ steps.meta.outputs.updates_base_url }}
+          VITE_BUNDLE_VERSION: ${{ steps.meta.outputs.app_version }}
+          VITE_BUNDLE_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
         run: |
+          case "${VITE_UPDATES_BASE_URL}" in
+            https://*) ;;
+            *)
+              echo "::error::VITE_UPDATES_BASE_URL must use https:// for production release APKs (got '${VITE_UPDATES_BASE_URL}')."
+              exit 1
+              ;;
+          esac
           npm run build
           if grep -rnE "xrblocks|@dimforge/rapier|CatScene|SERVICE_ROLE_KEY|BEGIN PRIVATE KEY" dist; then
             echo "::error::Forbidden dev/XR module or secret pattern detected in release dist/"
+            exit 1
+          fi
+          if ! grep -rqF "${VITE_UPDATES_BASE_URL}" dist/assets; then
+            echo "::error::VITE_UPDATES_BASE_URL was not embedded into release dist/assets."
             exit 1
           fi
 

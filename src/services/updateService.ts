@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import {
   APP_VERSION_INFO,
@@ -178,9 +179,36 @@ export async function initUpdateService(): Promise<void> {
   }
 }
 
+export async function getNativeAppVersionInfo(): Promise<{
+  version: string;
+  buildNumber: number;
+}> {
+  if (!Capacitor.isNativePlatform()) {
+    return {
+      version: APP_VERSION_INFO.appVersion,
+      buildNumber: APP_VERSION_INFO.buildNumber,
+    };
+  }
+  try {
+    const info = await CapApp.getInfo();
+    const version = String(info?.version || '').trim() || APP_VERSION_INFO.appVersion;
+    const parsedBuild = Number.parseInt(String(info?.build || ''), 10);
+    const buildNumber =
+      Number.isFinite(parsedBuild) && parsedBuild > 0
+        ? parsedBuild
+        : APP_VERSION_INFO.buildNumber;
+    return { version, buildNumber };
+  } catch {
+    return {
+      version: APP_VERSION_INFO.appVersion,
+      buildNumber: APP_VERSION_INFO.buildNumber,
+    };
+  }
+}
+
 export async function getInstalledBundleVersion(): Promise<string> {
   if (!Capacitor.isNativePlatform()) {
-    return APP_VERSION_INFO.appVersion;
+    return APP_VERSION_INFO.bundleVersion;
   }
   try {
     const info = await CapacitorUpdater.current();
@@ -191,7 +219,7 @@ export async function getInstalledBundleVersion(): Promise<string> {
   } catch (err) {
     console.warn('Could not read CapacitorUpdater current bundle:', err);
   }
-  return APP_VERSION_INFO.appVersion;
+  return APP_VERSION_INFO.bundleVersion;
 }
 
 type ManifestFetchResult<T> =
@@ -273,10 +301,17 @@ export async function checkForUpdates(opts?: {
 }): Promise<UpdateCheckResult> {
   const baseUrl = (opts?.baseUrl ?? getUpdatesBaseUrl()).replace(/\/+$/, '');
   const channel = opts?.channel ?? APP_VERSION_INFO.channel;
+  const nativeInfo =
+    opts?.currentNativeVersion && opts?.currentBuildNumber !== undefined
+      ? {
+          version: opts.currentNativeVersion,
+          buildNumber: opts.currentBuildNumber,
+        }
+      : await getNativeAppVersionInfo();
   const currentNativeVersion =
-    opts?.currentNativeVersion ?? APP_VERSION_INFO.appVersion;
+    opts?.currentNativeVersion ?? nativeInfo.version;
   const currentBuildNumber =
-    opts?.currentBuildNumber ?? APP_VERSION_INFO.buildNumber;
+    opts?.currentBuildNumber ?? nativeInfo.buildNumber;
   const currentBundleVersion =
     opts?.currentBundleVersion ?? (await getInstalledBundleVersion());
 

@@ -37,7 +37,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Resolve OTA hosting URL & classify release change scope
         id: classify
@@ -46,6 +46,7 @@ jobs:
           PUBLISH_TARGET: ${{ vars.OTA_PUBLISH_TARGET || 'gh_pages' }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
+          PUSH_BEFORE: ${{ github.event.before || '' }}
         run: |
           if [ "${PUBLISH_TARGET}" = "disabled" ] || [ "${PUBLISH_TARGET}" = "none" ]; then
             echo "classification=ota_disabled" >> "$GITHUB_OUTPUT"
@@ -68,16 +69,24 @@ jobs:
           fi
           echo "updates_base_url=${RESOLVED_URL}" >> "$GITHUB_OUTPUT"
 
+          BASE_REF=""
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "${PUSH_BEFORE}" ] && [ "${PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+            BASE_REF="${PUSH_BEFORE}"
+          elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+            BASE_REF="HEAD~1"
+          fi
+          echo "base_ref=${BASE_REF}" >> "$GITHUB_OUTPUT"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_deploy }}" = "true" ]; then
             echo "classification=ota_eligible" >> "$GITHUB_OUTPUT"
             echo "should_deploy_ota=true" >> "$GITHUB_OUTPUT"
             echo "reason=Manual force_deploy enabled via workflow_dispatch." >> "$GITHUB_OUTPUT"
-          elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-            node scripts/classify-release-change.mjs --base HEAD~1 --head HEAD
+          elif [ -n "${BASE_REF}" ]; then
+            node scripts/classify-release-change.mjs --base "${BASE_REF}" --head HEAD
           else
             echo "classification=ota_eligible" >> "$GITHUB_OUTPUT"
             echo "should_deploy_ota=true" >> "$GITHUB_OUTPUT"
-            echo "reason=Initial commit without HEAD~1 baseline; publishing baseline OTA bundle." >> "$GITHUB_OUTPUT"
+            echo "reason=Initial commit without baseline ref; publishing baseline OTA bundle." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Summarize skipped OTA deploy
@@ -85,98 +94,20 @@ jobs:
         run: |
           echo "Skipping OTA deploy: ${{ steps.classify.outputs.classification }} — ${{ steps.classify.outputs.reason }}"
 
-      - name: Validate version.json semver increment & native compatibility
+      - name: Resolve next conflict-free OTA version & compatibility metadata
         id: meta
         if: steps.classify.outputs.should_deploy_ota == 'true'
         env:
           UPDATES_BASE_URL: ${{ steps.classify.outputs.updates_base_url }}
-          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ steps.classify.outputs.base_ref }}
           INPUT_CHANNEL: ${{ inputs.channel }}
         run: |
-          node -e '
-            const fs = require("fs");
-            const { execSync } = require("child_process");
-            const semverRe = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
-            const parse = (raw) => {
-              const cleaned = String(raw || "").trim().replace(/^v/i, "");
-              const [core, pre = ""] = cleaned.split("-", 2);
-              const [maj = 0, min = 0, pat = 0] = core.split(".").map((n) => parseInt(n, 10) || 0);
-              return { maj, min, pat, pre: pre.trim() };
-            };
-            const cmp = (a, b) => {
-              const pa = parse(a), pb = parse(b);
-              if (pa.maj !== pb.maj) return pa.maj > pb.maj ? 1 : -1;
-              if (pa.min !== pb.min) return pa.min > pb.min ? 1 : -1;
-              if (pa.pat !== pb.pat) return pa.pat > pb.pat ? 1 : -1;
-              if (!pa.pre && pb.pre) return 1;
-              if (pa.pre && !pb.pre) return -1;
-              return pa.pre === pb.pre ? 0 : (pa.pre > pb.pre ? 1 : -1);
-            };
-
-            const v = JSON.parse(fs.readFileSync("version.json", "utf8"));
-            if (!semverRe.test(String(v.appVersion || ""))) {
-              throw new Error(`Invalid appVersion in version.json: ${v.appVersion}`);
-            }
-            const minNative = v.minNativeVersion || v.appVersion;
-            if (!semverRe.test(String(minNative))) {
-              throw new Error(`Invalid minNativeVersion in version.json: ${minNative}`);
-            }
-            if (cmp(v.appVersion, minNative) < 0) {
-              throw new Error(`appVersion (${v.appVersion}) cannot be lower than minNativeVersion (${minNative}).`);
-            }
-            if (v.maxNativeVersion) {
-              if (!semverRe.test(String(v.maxNativeVersion))) {
-                throw new Error(`Invalid maxNativeVersion in version.json: ${v.maxNativeVersion}`);
-              }
-              if (cmp(v.maxNativeVersion, minNative) < 0) {
-                throw new Error(`maxNativeVersion (${v.maxNativeVersion}) cannot be lower than minNativeVersion (${minNative}).`);
-              }
-            }
-
-            let versionBumped = true;
-            try {
-              const prevRaw = execSync("git show HEAD~1:version.json", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-              const prev = JSON.parse(prevRaw);
-              if (prev?.appVersion && cmp(v.appVersion, prev.appVersion) <= 0) {
-                versionBumped = false;
-              }
-            } catch {
-              // No previous version.json in HEAD~1
-            }
-
-            const channel = process.env.INPUT_CHANNEL || v.channel || "production";
-            const out = process.env.GITHUB_OUTPUT;
-            fs.appendFileSync(out, `app_version=${v.appVersion}\n`);
-            fs.appendFileSync(out, `build_number=${v.buildNumber}\n`);
-            fs.appendFileSync(out, `min_native_version=${minNative}\n`);
-            fs.appendFileSync(out, `max_native_version=${v.maxNativeVersion || ""}\n`);
-            fs.appendFileSync(out, `channel=${channel}\n`);
-            fs.appendFileSync(out, `version_bumped=${versionBumped}\n`);
-          '
-
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ steps.meta.outputs.version_bumped }}" != "true" ]; then
-            echo "::notice::version.json appVersion (${{ steps.meta.outputs.app_version }}) was not incremented compared to HEAD~1. Skipping automatic OTA deploy until version.json is bumped (or trigger workflow_dispatch with force_deploy=true)."
-            echo "allow_publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          TARGET_CHANNEL="${INPUT_CHANNEL:-}"
+          if [ -n "${TARGET_CHANNEL}" ]; then
+            node scripts/resolve-ota-version.mjs --channel "${TARGET_CHANNEL}" --updates-url "${UPDATES_BASE_URL}" --base-ref "${BASE_REF}"
+          else
+            node scripts/resolve-ota-version.mjs --updates-url "${UPDATES_BASE_URL}" --base-ref "${BASE_REF}"
           fi
-
-          if [ -n "${UPDATES_BASE_URL}" ]; then
-            MANIFEST_NAME=$([ "${{ steps.meta.outputs.channel }}" = "testing" ] && echo "ota-manifest-testing.json" || echo "ota-manifest.json")
-            LIVE_VER=$(curl -fsSL "${UPDATES_BASE_URL%/}/${MANIFEST_NAME}" 2>/dev/null | node -e 'const fs=require("fs"); try{const d=JSON.parse(fs.readFileSync(0,"utf8")); console.log(d.version||"");}catch{}' || true)
-            if [ -n "${LIVE_VER}" ]; then
-              CMP_LIVE=$(node -e '
-                const parse = (raw) => { const [core, pre=""] = String(raw||"").trim().replace(/^v/i,"").split("-",2); const [a=0,b=0,c=0] = core.split(".").map(x=>parseInt(x,10)||0); return {a,b,c,pre}; };
-                const cmp = (x,y) => { const px=parse(x), py=parse(y); if(px.a!==py.a) return px.a>py.a?1:-1; if(px.b!==py.b) return px.b>py.b?1:-1; if(px.c!==py.c) return px.c>py.c?1:-1; if(!px.pre&&py.pre) return 1; if(px.pre&&!py.pre) return -1; return px.pre===py.pre?0:(px.pre>py.pre?1:-1); };
-                console.log(cmp(process.argv[1], process.argv[2]));
-              ' "${{ steps.meta.outputs.app_version }}" "${LIVE_VER}")
-              if [ "${CMP_LIVE}" -le 0 ]; then
-                echo "::error::version.json appVersion (${{ steps.meta.outputs.app_version }}) must be strictly greater than currently published version (${LIVE_VER})."
-                exit 1
-              fi
-            fi
-          fi
-
-          echo "allow_publish=true" >> "$GITHUB_OUTPUT"
 
       - name: Validate Supabase secrets
         if: steps.classify.outputs.should_deploy_ota == 'true' && steps.meta.outputs.allow_publish == 'true'
@@ -227,10 +158,16 @@ jobs:
           VITE_GOOGLE_WEB_CLIENT_ID: ${{ vars.VITE_GOOGLE_WEB_CLIENT_ID || secrets.VITE_GOOGLE_WEB_CLIENT_ID || '' }}
           VITE_APP_CHANNEL: ${{ steps.meta.outputs.channel }}
           VITE_UPDATES_BASE_URL: ${{ steps.classify.outputs.updates_base_url }}
+          VITE_BUNDLE_VERSION: ${{ steps.meta.outputs.app_version }}
+          VITE_BUNDLE_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
         run: |
           npm run build
           if grep -rnE "xrblocks|@dimforge/rapier|CatScene|SERVICE_ROLE_KEY|BEGIN PRIVATE KEY" dist; then
             echo "::error::Forbidden dev/XR module or secret pattern detected in OTA dist/"
+            exit 1
+          fi
+          if ! grep -rqF "${VITE_UPDATES_BASE_URL}" dist/assets; then
+            echo "::error::VITE_UPDATES_BASE_URL was not embedded into OTA dist/assets."
             exit 1
           fi
 
@@ -259,6 +196,17 @@ jobs:
             */updates) BUNDLE_URL="${BASE_CLEAN}/${BUNDLE_SUBPATH}/bundle.zip" ;;
             *) BUNDLE_URL="${BASE_CLEAN}/updates/${BUNDLE_SUBPATH}/bundle.zip" ;;
           esac
+          case "${BUNDLE_URL}" in
+            https://*) ;;
+            *)
+              echo "::error::OTA bundleUrl must use https:// (got ${BUNDLE_URL})."
+              exit 1
+              ;;
+          esac
+          if [ -z "${CHECKSUM}" ]; then
+            echo "::error::Failed to compute SHA-256 checksum for bundle.zip."
+            exit 1
+          fi
           export MANIFEST_NAME=$([ "$CHANNEL" = "testing" ] && echo "ota-manifest-testing.json" || echo "ota-manifest.json")
           export BUNDLE_URL
           export CHECKSUM

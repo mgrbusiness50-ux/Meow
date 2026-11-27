@@ -46,6 +46,29 @@ jobs:
 
           echo "Supabase build secrets verified (present and non-placeholder)."
 
+      - name: Read version metadata & resolve OTA updates URL
+        id: meta
+        env:
+          CONFIGURED_UPDATES_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL || '' }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          RESOLVED_URL="${CONFIGURED_UPDATES_URL%/}"
+          if [ -z "${RESOLVED_URL}" ]; then
+            OWNER_LOWER=$(echo "${REPO_OWNER}" | tr '[:upper:]' '[:lower:]')
+            RESOLVED_URL="https://${OWNER_LOWER}.github.io/${REPO_NAME}/updates"
+            echo "Resolved default same-repo GitHub Pages updates URL: ${RESOLVED_URL}"
+          fi
+          echo "updates_base_url=${RESOLVED_URL}" >> "$GITHUB_OUTPUT"
+          node -e '
+            const fs = require("fs");
+            const v = JSON.parse(fs.readFileSync("version.json", "utf8"));
+            const out = process.env.GITHUB_OUTPUT;
+            fs.appendFileSync(out, `app_version=${v.appVersion}\n`);
+            fs.appendFileSync(out, `build_number=${v.buildNumber}\n`);
+            fs.appendFileSync(out, `channel=${v.channel || "production"}\n`);
+          '
+
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
@@ -74,13 +97,25 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_GOOGLE_WEB_CLIENT_ID: ${{ vars.VITE_GOOGLE_WEB_CLIENT_ID || secrets.VITE_GOOGLE_WEB_CLIENT_ID || '' }}
-        run: npm run build
+          VITE_APP_CHANNEL: ${{ steps.meta.outputs.channel }}
+          VITE_UPDATES_BASE_URL: ${{ steps.meta.outputs.updates_base_url }}
+          VITE_BUNDLE_VERSION: ${{ steps.meta.outputs.app_version }}
+          VITE_BUNDLE_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
+        run: |
+          npm run build
+          if ! grep -rqF "${VITE_UPDATES_BASE_URL}" dist/assets; then
+            echo "::error::VITE_UPDATES_BASE_URL was not embedded into debug dist/assets."
+            exit 1
+          fi
 
       - name: Sync Capacitor Android assets
         run: npx cap sync android
 
       - name: Build Android Debug APK
         working-directory: android
+        env:
+          MEOW_VERSION_CODE: ${{ steps.meta.outputs.build_number }}
+          MEOW_VERSION_NAME: ${{ steps.meta.outputs.app_version }}
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon

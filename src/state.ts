@@ -133,6 +133,8 @@ import {
 const SPLASH_MIN_DURATION_MS = 2000;
 const SPLASH_MAX_WAIT_MS = 15000;
 const OTA_DISMISSED_VERSION_STORAGE_KEY = 'meow_dismissed_ota_version';
+const OTA_AUTO_CHECK_COOLDOWN_MS = 10 * 60 * 1000;
+const CHAT_DRAFTS_STORAGE_KEY = 'meow_chat_drafts_v1';
 const OFFLINE_CACHE_KEY_PREFIX = 'meow_offline_cache_v1:';
 const OFFLINE_LAST_USER_ID_KEY = 'meow_last_user_id_v1';
 const CLINIC_NOTIFY_STORAGE_KEY = 'meow_clinic_notify_v1';
@@ -209,6 +211,43 @@ function writeStoredDismissedOtaVersion(key: string | null): void {
     } else {
       localStorage.removeItem(OTA_DISMISSED_VERSION_STORAGE_KEY);
     }
+  } catch {
+    // Ignore storage quota / privacy mode errors
+  }
+}
+
+function readStoredChatDrafts(): Map<string, string> {
+  const map = new Map<string, string>();
+  try {
+    if (typeof localStorage === 'undefined') return map;
+    const raw = localStorage.getItem(CHAT_DRAFTS_STORAGE_KEY);
+    if (!raw) return map;
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof k === 'string' && k && typeof v === 'string' && v) {
+          map.set(k, v);
+        }
+      }
+    }
+  } catch {
+    // Ignore malformed draft storage
+  }
+  return map;
+}
+
+function writeStoredChatDrafts(drafts: Map<string, string>): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (drafts.size === 0) {
+      localStorage.removeItem(CHAT_DRAFTS_STORAGE_KEY);
+      return;
+    }
+    const serialized: Record<string, string> = {};
+    for (const [k, v] of drafts.entries()) {
+      if (k && v) serialized[k] = v;
+    }
+    localStorage.setItem(CHAT_DRAFTS_STORAGE_KEY, JSON.stringify(serialized));
   } catch {
     // Ignore storage quota / privacy mode errors
   }
@@ -376,7 +415,7 @@ class AppStateManager {
           }
         })()
       : [];
-  private chatDraftsByConvId: Map<string, string> = new Map();
+  private chatDraftsByConvId: Map<string, string> = readStoredChatDrafts();
   private actionFeedbackToast: {
     id: number;
     kind: 'success' | 'error' | 'info';
@@ -493,7 +532,7 @@ class AppStateManager {
     status: 'up_to_date',
     currentNativeVersion: APP_VERSION_INFO.appVersion,
     currentBuildNumber: APP_VERSION_INFO.buildNumber,
-    currentBundleVersion: APP_VERSION_INFO.appVersion,
+    currentBundleVersion: APP_VERSION_INFO.bundleVersion,
     otaUpdate: null,
     apkUpdate: null,
   };
@@ -505,6 +544,9 @@ class AppStateManager {
   private otaUpdateDismissedVersion: string | null = readStoredDismissedOtaVersion();
   private isOtaStagedForRestart: boolean = false;
   private stagedOtaVersion: string | null = null;
+  private lastOtaCheckAtMs: number = 0;
+  private autoStagedAttemptedVersions: Set<string> = new Set();
+  private isAppInBackground: boolean = false;
   private updateActionFeedback: {
     kind: 'success' | 'error' | 'info';
     message: string;
@@ -1741,6 +1783,7 @@ class AppStateManager {
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('meow_onboarding_done');
         localStorage.removeItem('meow_owner_profile_v1');
+        localStorage.removeItem(CHAT_DRAFTS_STORAGE_KEY);
       }
 
       const preAuthSteps: OnboardingStep[] = ['splash', 'welcome', 'auth_method'];
@@ -1900,7 +1943,36 @@ class AppStateManager {
     this.notify();
   }
 
+  public handleAppBackgrounded(): void {
+    this.isAppInBackground = true;
+  }
+
+  public isSafeToActivateStagedOta(): boolean {
+    if (this.onboardingStep !== 'completed') return false;
+    if (this.currentTab === 'chat' && Boolean(this.activeConversationId)) return false;
+    if (
+      this.isAddPetModalOpen ||
+      this.isEditOwnerModalOpen ||
+      Boolean(this.selectedPetForRequest) ||
+      this.isGroupAdoptionEditorOpen ||
+      this.isContactViewOpen ||
+      this.isFilterModalOpen
+    ) {
+      return false;
+    }
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      const tag = document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   public resumeFromBackground(): void {
+    const wasInBackground = this.isAppInBackground;
+    this.isAppInBackground = false;
+
     const offlineNow = typeof navigator !== 'undefined' ? navigator.onLine === false : false;
     const prevOffline = this.isOfflineState;
     this.isOfflineState = offlineNow;
@@ -1910,6 +1982,25 @@ class AppStateManager {
       void this.hydrateSupabaseWorkspaceForUser(this.supabaseAuthUserId);
     } else if (prevOffline !== offlineNow) {
       this.notify();
+    }
+
+    // Safe-point activation: when returning to app on a non-interruptive screen, apply staged OTA bundle
+    if (
+      wasInBackground &&
+      this.isOtaStagedForRestart &&
+      Capacitor.isNativePlatform() &&
+      this.isSafeToActivateStagedOta()
+    ) {
+      void this.restartForStagedOtaUpdate();
+      return;
+    }
+
+    // Throttled automatic background check on resume
+    if (
+      !offlineNow &&
+      Date.now() - this.lastOtaCheckAtMs >= OTA_AUTO_CHECK_COOLDOWN_MS
+    ) {
+      void this.checkForAppUpdates(false);
     }
   }
 
@@ -3365,6 +3456,7 @@ class AppStateManager {
   public async checkForAppUpdates(interactive = false): Promise<UpdateCheckResult> {
     if (this.isCheckingUpdates) return this.updateCheckResult;
     this.isCheckingUpdates = true;
+    this.lastOtaCheckAtMs = Date.now();
     if (interactive) {
       this.updateActionFeedback = null;
       this.notify();
@@ -3389,12 +3481,19 @@ class AppStateManager {
         const alreadyStaged =
           this.isOtaStagedForRestart && this.stagedOtaVersion === result.otaUpdate.version;
 
-        if (alreadyStaged) {
-          this.isOtaNoticeVisible = !alreadyDismissed && !this.isSettingsOpen();
-        } else if (interactive) {
-          this.isOtaNoticeVisible = !this.isSettingsOpen();
+        if (!alreadyStaged) {
+          const stagedOk = await this.stageOtaUpdateInBackground(result.otaUpdate, {
+            interactive,
+          });
+          if (stagedOk) {
+            this.isOtaNoticeVisible =
+              !alreadyDismissed && !this.isSettingsOpen() && this.isSafeToActivateStagedOta();
+          } else {
+            this.isOtaNoticeVisible = false;
+          }
         } else {
-          this.isOtaNoticeVisible = Boolean(result.otaUpdate.mandatory) || !alreadyDismissed;
+          this.isOtaNoticeVisible =
+            !alreadyDismissed && !this.isSettingsOpen() && this.isSafeToActivateStagedOta();
         }
       } else if (!this.isOtaStagedForRestart) {
         this.isOtaNoticeVisible = false;
@@ -3407,10 +3506,17 @@ class AppStateManager {
             message: 'مفيش تحديثات جديدة حاليًا',
           };
         } else if (result.status === 'ota_available' && result.otaUpdate) {
-          this.updateActionFeedback = {
-            kind: 'info',
-            message: `في تحديث جديد متاح (${result.otaUpdate.version}) يتنزّل على طول من غير ما تحمل APK.`,
-          };
+          if (this.isOtaStagedForRestart && this.stagedOtaVersion === result.otaUpdate.version) {
+            this.updateActionFeedback = {
+              kind: 'success',
+              message: `تم تنزيل وتجهيز التحديث (${this.stagedOtaVersion}) تلقائيًا. سيُفعّل عند إعادة فتح التطبيق أو يمكنك التفعيل الآن.`,
+            };
+          } else if (!this.updateActionFeedback) {
+            this.updateActionFeedback = {
+              kind: 'info',
+              message: `في تحديث جديد متاح (${result.otaUpdate.version}) يتنزّل على طول من غير ما تحمل APK.`,
+            };
+          }
         } else if (result.status === 'apk_required' && result.apkUpdate) {
           this.updateActionFeedback = {
             kind: 'info',
@@ -3430,12 +3536,25 @@ class AppStateManager {
     }
   }
 
-  public async applyOtaUpdateNow(): Promise<void> {
-    const ota = this.updateCheckResult.otaUpdate;
-    if (!ota || this.isApplyingOtaUpdate) return;
+  private async stageOtaUpdateInBackground(
+    ota: OtaManifest,
+    opts?: { interactive?: boolean }
+  ): Promise<boolean> {
+    if (!ota || this.isApplyingOtaUpdate) return false;
+    const attemptKey = this.buildOtaDismissKey(ota);
+
+    if (this.isOtaStagedForRestart && this.stagedOtaVersion === ota.version) {
+      return true;
+    }
+    if (!opts?.interactive && this.autoStagedAttemptedVersions.has(attemptKey)) {
+      return false;
+    }
+
     this.isApplyingOtaUpdate = true;
-    this.updateActionFeedback = null;
-    this.notify();
+    if (opts?.interactive) {
+      this.updateActionFeedback = null;
+      this.notify();
+    }
 
     try {
       const res = await applyOtaUpdate(ota);
@@ -3443,23 +3562,46 @@ class AppStateManager {
         const targetVer = res.version || ota.version;
         this.isOtaStagedForRestart = true;
         this.stagedOtaVersion = targetVer;
-        const key = this.buildOtaDismissKey(ota);
-        this.otaUpdateDismissedVersion = key;
-        writeStoredDismissedOtaVersion(key);
+        this.autoStagedAttemptedVersions.delete(attemptKey);
         this.updateActionFeedback = {
           kind: 'success',
-          message: `تم تنزيل وتجهيز التحديث (${targetVer}) بنجاح. سيُفعّل تلقائيًا عند وضع التطبيق في الخلفية أو إعادة فتحه، أو يمكنك إعادة التشغيل الآن.`,
+          message: `تم تنزيل وتجهيز التحديث (${targetVer}) بنجاح. سيُفعّل تلقائيًا عند إعادة فتح التطبيق أو العودة إليه، أو يمكنك إعادة التشغيل الآن.`,
         };
+        return true;
+      }
+
+      if (!opts?.interactive) {
+        this.autoStagedAttemptedVersions.add(attemptKey);
       } else {
         this.updateActionFeedback = {
           kind: 'error',
           message: res.errorMessage || 'تعذر تنزيل التحديث الهوائي. تأكد من الاتصال وحاول لاحقًا.',
         };
       }
+      return false;
+    } catch (err) {
+      if (!opts?.interactive) {
+        this.autoStagedAttemptedVersions.add(attemptKey);
+      } else {
+        this.updateActionFeedback = {
+          kind: 'error',
+          message:
+            err instanceof Error
+              ? err.message
+              : 'تعذر تنزيل التحديث الهوائي. تأكد من الاتصال وحاول لاحقًا.',
+        };
+      }
+      return false;
     } finally {
       this.isApplyingOtaUpdate = false;
       this.notify();
     }
+  }
+
+  public async applyOtaUpdateNow(): Promise<void> {
+    const ota = this.updateCheckResult.otaUpdate;
+    if (!ota) return;
+    await this.stageOtaUpdateInBackground(ota, { interactive: true });
   }
 
   public async restartForStagedOtaUpdate(): Promise<void> {
@@ -4157,6 +4299,7 @@ class AppStateManager {
     } else {
       this.chatDraftsByConvId.set(convId, text);
     }
+    writeStoredChatDrafts(this.chatDraftsByConvId);
   }
 
   public pinConversation(id: string): void {

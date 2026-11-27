@@ -367,7 +367,12 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
   const showPhone = state.getShowPhoneInProfile();
   const updateState = state.getUpdateState();
   const ota = updateState.result.otaUpdate;
-  const currentVersionLabel = `v${APP_VERSION_INFO.appVersion} (${APP_VERSION_INFO.buildNumber})`;
+  const liveBundleVer =
+    updateState.result.currentBundleVersion || APP_VERSION_INFO.bundleVersion;
+  const currentVersionLabel =
+    liveBundleVer === APP_VERSION_INFO.bundleVersion
+      ? `v${liveBundleVer} (${APP_VERSION_INFO.bundleBuildNumber})`
+      : `v${liveBundleVer}`;
 
   return `
     <div id="profile-drawer-backdrop" class="fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
@@ -640,7 +645,17 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                     : ''
                 }
                 ${
-                  ota
+                  updateState.isOtaStagedForRestart
+                    ? `
+                    <button
+                      id="drawer-restart-ota-btn"
+                      type="button"
+                      class="w-full h-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-soft transition cursor-pointer active:scale-95 font-baloo"
+                    >
+                      تطبيق التحديث المجهز (${escapeHtml(updateState.stagedOtaVersion || ota?.version || '')}) الآن
+                    </button>
+                    `
+                    : ota
                     ? `
                     <button
                       id="drawer-apply-ota-btn"
@@ -648,7 +663,7 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                       ${updateState.isApplyingOta ? 'disabled' : ''}
                       class="w-full h-9 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white text-xs font-black shadow-soft transition cursor-pointer active:scale-95 font-baloo"
                     >
-                      ${updateState.isApplyingOta ? 'جاري التثبيت...' : `تثبيت التحديث السريع (${escapeHtml(ota.version)})`}
+                      ${updateState.isApplyingOta ? 'جاري التنزيل في الخلفية...' : `تثبيت التحديث السريع (${escapeHtml(ota.version)})`}
                     </button>
                     `
                     : ''
@@ -1037,6 +1052,12 @@ export function attachProfileOverlayEvents(): void {
   if (applyOtaDrawerBtn) {
     applyOtaDrawerBtn.addEventListener('click', () => {
       void state.applyOtaUpdateNow();
+    });
+  }
+  const restartOtaDrawerBtn = document.getElementById('drawer-restart-ota-btn');
+  if (restartOtaDrawerBtn) {
+    restartOtaDrawerBtn.addEventListener('click', () => {
+      void state.restartForStagedOtaUpdate();
     });
   }
 

@@ -671,7 +671,8 @@ export class MeowApp {
     if (
       updateState.isApkModalOpen ||
       !updateState.isOtaNoticeVisible ||
-      (!ota && !updateState.isOtaStagedForRestart)
+      !updateState.isOtaStagedForRestart ||
+      !state.isSafeToActivateStagedOta()
     ) {
       return '';
     }
