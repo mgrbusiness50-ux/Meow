@@ -192,7 +192,7 @@ export function renderProfileView(): string {
                         <div class="flex items-center justify-between gap-2.5 sm:gap-3.5">
                           <div class="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1 cursor-pointer view-own-pet-detail-btn" data-pet-detail-id="${escapeAttr(pet.id)}">
                             <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-[26px] overflow-hidden bg-brand-cream dark:bg-[#342A24] flex-shrink-0 border-2 border-brand-peachBorder dark:border-warm-darkBorder shadow-sm relative group-hover:border-brand-orange transition-colors">
-                              <img src="${escapeAttr(sanitizeImageSrc(pet.photos[0], SAFE_FALLBACK_PET_SVG))}" alt="${escapeAttr(pet.name)}" class="w-full h-full object-cover" />
+                              <img src="${escapeAttr(sanitizeImageSrc(pet.photos[0], SAFE_FALLBACK_PET_SVG))}" alt="${escapeAttr(pet.name)}" class="w-full h-full object-cover" loading="lazy" decoding="async" />
                               <span class="absolute bottom-1.5 right-1.5 bg-black/65 backdrop-blur-sm text-white text-[11px] px-2 py-0.5 rounded-full font-bold">
                                 ${pet.photos.length} 📸
                               </span>
@@ -866,6 +866,76 @@ export function attachProfileEvents(): void {
   if (editUserBtn) {
     editUserBtn.addEventListener('click', () => {
       state.setEditOwnerModalVisible(true);
+    });
+  }
+
+  // Pet Status Switcher Pills (للتزاوج / للتبني / غير معروض)
+  document.querySelectorAll<HTMLButtonElement>('.pet-status-toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const petId = btn.getAttribute('data-pet-id');
+      const targetStatus = btn.getAttribute('data-target-status') as
+        | 'mating'
+        | 'adoption'
+        | 'not_available'
+        | null;
+      if (petId && targetStatus) {
+        state.requestPetStatusChange(petId, targetStatus);
+      }
+    });
+  });
+
+  // View Own Pet Details (clicks on own pet card header)
+  document.querySelectorAll<HTMLElement>('.view-own-pet-detail-btn').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('.edit-pet-btn')) return;
+      const petId = el.getAttribute('data-pet-detail-id');
+      const pet = state.getUserPets().find((p) => p.id === petId);
+      if (pet) {
+        state.setSelectedPetForDetail(pet);
+      }
+    });
+  });
+
+  // Toggle Dual Individual Listing inside Active Group Adoption
+  document.querySelectorAll<HTMLButtonElement>('.toggle-individual-dual-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const petId = btn.getAttribute('data-toggle-individual-pet-id');
+      const action = btn.getAttribute('data-individual-action') as
+        | 'stop_individual'
+        | 'enable_individual'
+        | null;
+      if (petId && action) {
+        state.requestAdoptionActionConfirm(action, petId);
+      }
+    });
+  });
+
+  // Preview Group Adoption Listing
+  const previewGroupBtn = document.getElementById('preview-group-listing-btn');
+  if (previewGroupBtn) {
+    previewGroupBtn.addEventListener('click', () => {
+      const groupListing = state.getUserGroupAdoptionListing();
+      if (groupListing) {
+        state.setSelectedPetForDetail(groupListing);
+      }
+    });
+  }
+
+  // Open Group Adoption Editor (Create or Edit Group)
+  const openGroupEditorBtn = document.getElementById('open-group-adoption-editor-btn');
+  if (openGroupEditorBtn) {
+    openGroupEditorBtn.addEventListener('click', () => {
+      state.openGroupAdoptionEditor();
+    });
+  }
+
+  // Dissolve Group Adoption to Independent Listings
+  const dissolveGroupBtn = document.getElementById('dissolve-group-adoption-btn-profile');
+  if (dissolveGroupBtn) {
+    dissolveGroupBtn.addEventListener('click', () => {
+      state.requestAdoptionActionConfirm('dissolve_group');
     });
   }
 }

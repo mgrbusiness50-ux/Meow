@@ -1,4 +1,5 @@
 import { state } from '../../state.ts';
+import type { ChatMessage, ChatMessageReply, Conversation } from '../../types.ts';
 import { attachThreeDotsMenuEvents, renderThreeDotsMenu } from '../components/BlockMenu.ts';
 import {
   formatPetAgeFull,
@@ -29,14 +30,27 @@ let isStickersOpen = false;
 let isGroupDetailsExpanded = false;
 let lastRenderedChatRoomId: string | null = null;
 let previewChatImageUrl: string | null = null;
+let previewChatImageMsgId: string | null = null;
 let pendingChatAttachment: {
   type: 'image' | 'file';
   fileUrl: string;
   fileName: string;
   fileSize: string;
+  pendingFile?: File;
+  caption?: string;
+  errorMessage?: string;
+  isSending?: boolean;
 } | null = null;
 let isStickerSearchOpen = false;
 let stickerSearchQuery = '';
+let activeStickerTab: 'all' | 'recent' | 'favorites' | 'custom' = 'all';
+let activeReplyTarget: ChatMessageReply | null = null;
+let inRoomSearchOpen = false;
+let inRoomSearchQuery = '';
+let firstUnreadMsgId: string | null = null;
+let userIsNearBottom = true;
+let justSentMessageFlag = false;
+const knownConvMsgCountMap = new Map<string, number>();
 
 // Calm scattered pattern: cat paws, dog paws, pet toys (yarn ball, bone, mouse), and supplies (food bowl, collar bell)
 const ASYMMETRIC_PAW_SVG = encodeURIComponent(
@@ -410,6 +424,11 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                           ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange text-[10px] font-black shrink-0 font-baloo" title="محادثة مثبتة"><i class="fa-solid fa-thumbtack text-[9px]"></i> مثبتة</span>`
                           : ''
                       }
+                      ${
+                        conv.isMuted
+                          ? `<span class="inline-flex items-center text-brand-subtleGray dark:text-[#A89F91] text-[10px] shrink-0" title="الإشعارات مكتومة"><i class="fa-solid fa-bell-slash"></i></span>`
+                          : ''
+                      }
                       <h4 class="text-sm font-black text-brand-dark dark:text-white group-hover:text-brand-orange transition truncate font-baloo m-0">${escapeHtml(conv.otherUserName)}</h4>
                     </div>
                     <span class="text-[10px] text-brand-subtleGray dark:text-[#A89F91] font-bold whitespace-nowrap">${escapeHtml(conv.lastMessageTime)}</span>
@@ -776,7 +795,802 @@ function renderRequestsList(
   `;
 }
 
-// WhatsApp-like Chat Room with real audio recorder, attachment handling, and keyboard scroll
+function formatMessageTextWithLinks(text: string, isUser: boolean): string {
+  if (!text) return '';
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/gi;
+  let result = '';
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      result += escapeHtml(text.slice(lastIndex, match.index));
+    }
+    let rawUrl = match[0];
+    let trailing = '';
+    while (rawUrl.length > 0 && /[.,!?:;)\]]$/.test(rawUrl)) {
+      trailing = rawUrl.slice(-1) + trailing;
+      rawUrl = rawUrl.slice(0, -1);
+    }
+    const safeUrl = sanitizeUrl(rawUrl, '');
+    if (safeUrl) {
+      result += `<a href="${escapeAttr(safeUrl)}" target="_blank" rel="noopener noreferrer" class="underline decoration-dotted break-all ${
+        isUser ? 'text-white font-black' : 'text-brand-orange font-black'
+      }">${escapeHtml(rawUrl)}</a>${escapeHtml(trailing)}`;
+    } else {
+      result += escapeHtml(match[0]);
+    }
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    result += escapeHtml(text.slice(lastIndex));
+  }
+  return result;
+}
+
+function getMessagePreviewSnippet(msg: ChatMessage): string {
+  if (msg.deletedAt) return 'اتمسحت الرسالة دي';
+  if (msg.type === 'image') return msg.text ? `📷 ${msg.text}` : '📷 صورة';
+  if (msg.type === 'audio') return '🎤 رسالة صوتية';
+  if (msg.type === 'sticker') return `🎭 ${msg.stickerTitle || 'ملصق'}`;
+  if (msg.type === 'file') return `📎 ${msg.fileName || 'ملف مرفق'}`;
+  return (msg.text || '').trim();
+}
+
+function isSameSenderGrouped(a: ChatMessage | undefined, b: ChatMessage): boolean {
+  if (!a) return false;
+  if (a.senderId === 'system' || b.senderId === 'system') return false;
+  if (a.isFromUser !== b.isFromUser || a.senderId !== b.senderId) return false;
+  if (typeof a.createdAtMs === 'number' && typeof b.createdAtMs === 'number') {
+    return Math.abs(b.createdAtMs - a.createdAtMs) <= 120_000;
+  }
+  return a.timestamp === b.timestamp;
+}
+
+function renderChatHeaderSubtitle(
+  conv: Conversation,
+  isGroupConv: boolean,
+  groupCount: number
+): string {
+  const petTypeLabel =
+    conv.petType === 'mating'
+      ? 'تزاوج'
+      : isGroupConv
+        ? `تبني جماعي • ${groupCount} حيوانات`
+        : 'تبني';
+  return `${escapeHtml(conv.petName)} (${petTypeLabel}) • ${
+    conv.isMuted ? 'مكتومة' : 'متصل الآن'
+  }`;
+}
+
+function renderInRoomSearchBarHtml(conv: Conversation): string {
+  const query = inRoomSearchQuery.trim().toLowerCase();
+  const hitsCount = query
+    ? conv.messages.filter(
+        (m) =>
+          m.senderId !== 'system' &&
+          !m.deletedAt &&
+          ((m.text || '').toLowerCase().includes(query) ||
+            (m.fileName || '').toLowerCase().includes(query) ||
+            (m.stickerTitle || '').toLowerCase().includes(query))
+      ).length
+    : 0;
+
+  return `
+    <div id="chat-inroom-search-bar" class="${
+      inRoomSearchOpen ? 'flex' : 'hidden'
+    } shrink-0 bg-[#FFFDF8] dark:bg-[#221B17] border-b border-brand-peachBorder/70 dark:border-warm-darkBorder px-3.5 py-2 items-center gap-2 z-25">
+      <div class="flex-1 min-w-0 relative flex items-center">
+        <i class="fa-solid fa-magnifying-glass text-xs text-brand-subtleGray absolute right-3 pointer-events-none"></i>
+        <input
+          id="chat-inroom-search-input"
+          type="text"
+          value="${escapeAttr(inRoomSearchQuery)}"
+          placeholder="ابحث جوه المحادثة..."
+          class="w-full h-9 pr-8 pl-3 rounded-full bg-white dark:bg-[#1A1512] border border-brand-peachBorder dark:border-warm-darkBorder text-xs font-bold text-brand-dark dark:text-white placeholder-brand-subtleGray font-baloo"
+          autocomplete="off"
+        />
+      </div>
+      ${
+        query
+          ? `<span id="chat-inroom-search-count" class="text-[11px] font-black text-brand-orange px-2 py-1 rounded-full bg-brand-orange/10 shrink-0">${hitsCount}</span>`
+          : '<span id="chat-inroom-search-count" class="hidden"></span>'
+      }
+      <button
+        id="chat-inroom-search-close-btn"
+        type="button"
+        aria-label="إغلاق البحث"
+        class="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 text-brand-dark dark:text-white hover:text-brand-orange flex items-center justify-center text-xs cursor-pointer shrink-0"
+      >
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  `;
+}
+
+function renderReplyPreviewBarHtml(): string {
+  if (!activeReplyTarget) {
+    return `<div id="chat-reply-preview-bar" class="hidden"></div>`;
+  }
+  return `
+    <div id="chat-reply-preview-bar" class="pointer-events-auto flex items-center justify-between gap-2.5 bg-[#FFF9E9]/98 dark:bg-[#27201B]/98 backdrop-blur-md border-2 border-brand-peachBorder dark:border-warm-darkBorder border-r-4 border-r-brand-orange rounded-2xl px-3.5 py-2 shadow-sm animate-fade-in">
+      <div class="min-w-0 flex-1 text-right">
+        <p class="text-[11px] font-black text-brand-orange m-0 truncate font-baloo">
+          الرد على ${escapeHtml(activeReplyTarget.senderName || 'رسالة')}
+        </p>
+        <p class="text-xs font-bold text-brand-dark/80 dark:text-[#D1C7BD] m-0 truncate">
+          ${escapeHtml(activeReplyTarget.text || 'رسالة')}
+        </p>
+      </div>
+      <button
+        id="chat-cancel-reply-btn"
+        type="button"
+        aria-label="إلغاء الرد"
+        class="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 text-brand-dark dark:text-white hover:text-red-500 flex items-center justify-center text-xs cursor-pointer shrink-0"
+      >
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  `;
+}
+
+function renderChatMessagesListHtml(conv: Conversation): string {
+  if (conv.messages.length === 0) {
+    return `
+      <div class="flex justify-center my-4 select-none">
+        <span class="px-4 py-2 rounded-2xl bg-white/90 dark:bg-[#27201B]/90 border border-brand-peachBorder/70 dark:border-warm-darkBorder text-xs font-bold text-brand-subtleGray dark:text-[#D1C7BD] text-center shadow-xs font-baloo">
+          ابدأ الكلام دلوقتي — كل رسائلكم محفوظة ومؤمّنة 🐾
+        </span>
+      </div>
+    `;
+  }
+
+  const normalizedSearch = inRoomSearchOpen ? inRoomSearchQuery.trim().toLowerCase() : '';
+  let renderedFirstRetryId = false;
+
+  return conv.messages
+    .map((msg, idx) => {
+      const unreadDividerHtml =
+        firstUnreadMsgId && msg.id === firstUnreadMsgId
+          ? `
+            <div id="chat-unread-divider" class="flex items-center justify-center my-3 select-none">
+              <span class="px-3.5 py-1 rounded-full bg-brand-orange/15 border border-brand-orange/35 text-[11px] font-black text-brand-orange font-baloo shadow-xs">
+                رسائل غير مقروءة
+              </span>
+            </div>
+          `
+          : '';
+
+      if (msg.senderId === 'system') {
+        return `
+          ${unreadDividerHtml}
+          <div class="flex justify-center my-2.5 select-none" data-msg-id="${escapeAttr(msg.id)}">
+            <span class="px-3.5 py-1.5 rounded-lg bg-white/95 dark:bg-[#27201B]/95 border border-brand-peachBorder/70 dark:border-warm-darkBorder text-xs sm:text-[13px] font-bold text-brand-orange text-center max-w-[88%] shadow-sm leading-relaxed font-baloo">
+              ${escapeHtml(msg.text)}
+            </span>
+          </div>
+        `;
+      }
+
+      const isUser = msg.isFromUser;
+      const isDeleted = Boolean(msg.deletedAt);
+      const prevMsg = idx > 0 ? conv.messages[idx - 1] : undefined;
+      const isGrouped = isSameSenderGrouped(prevMsg, msg);
+      const safeImgUrl = msg.fileUrl ? sanitizeImageSrc(msg.fileUrl, SAFE_FALLBACK_PET_SVG) : '';
+      const safeDownloadUrl = msg.fileUrl ? sanitizeUrl(msg.fileUrl, '') : '';
+      const safeAudioUrl = sanitizeAudioSrc(msg.audioBlobUrl || msg.fileUrl || '');
+      const safeStickerUrl = msg.stickerUrl ? sanitizeImageSrc(msg.stickerUrl, SAFE_FALLBACK_PET_SVG) : '';
+      const isPlayingThisAudio = currentPlayingMsgId === msg.id;
+
+      const isSearchHit = Boolean(
+        normalizedSearch &&
+          !isDeleted &&
+          ((msg.text || '').toLowerCase().includes(normalizedSearch) ||
+            (msg.fileName || '').toLowerCase().includes(normalizedSearch) ||
+            (msg.stickerTitle || '').toLowerCase().includes(normalizedSearch))
+      );
+
+      const bubbleClass = isUser
+        ? isGrouped
+          ? 'meow-bubble-grouped-out bg-brand-orange text-white rounded-2xl'
+          : 'meow-bubble-out bg-brand-orange text-white rounded-2xl'
+        : isGrouped
+          ? 'meow-bubble-grouped-in bg-white dark:bg-[#261E19] text-brand-dark dark:text-white rounded-2xl border border-brand-peachBorder/70 dark:border-warm-darkBorder'
+          : 'meow-bubble-in bg-white dark:bg-[#261E19] text-brand-dark dark:text-white rounded-2xl border border-brand-peachBorder/70 dark:border-warm-darkBorder';
+
+      let retryIdAttr = '';
+      if (isUser && msg.localStatus === 'failed' && !renderedFirstRetryId) {
+        renderedFirstRetryId = true;
+        retryIdAttr = 'id="chat-retry-msg-btn"';
+      }
+
+      const statusIndicatorHtml = isUser
+        ? msg.localStatus === 'sending'
+          ? `<span class="text-white/80 text-[11px]" title="جاري الإرسال"><i class="fa-regular fa-clock"></i></span>`
+          : msg.localStatus === 'failed'
+            ? `<button ${retryIdAttr} type="button" data-retry-msg-id="${escapeAttr(msg.id)}" class="chat-retry-msg-btn inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black cursor-pointer hover:bg-red-700 transition" title="${escapeAttr(msg.localError || 'فشل الإرسال — اضغط لإعادة المحاولة')}">
+                 <i class="fa-solid fa-circle-exclamation"></i>
+                 <span>إعادة الإرسال</span>
+               </button>`
+            : msg.status === 'read'
+              ? `<span class="text-sky-200 text-xs" title="تمت القراءة"><i class="fa-solid fa-check-double"></i></span>`
+              : msg.status === 'delivered'
+                ? `<span class="text-white/90 text-xs" title="تم التسليم"><i class="fa-solid fa-check-double"></i></span>`
+                : `<span class="text-white/80 text-xs" title="تم الإرسال"><i class="fa-solid fa-check"></i></span>`
+        : '';
+
+      return `
+        ${unreadDividerHtml}
+        <div class="flex flex-col ${isUser ? 'items-end' : 'items-start'} ${isGrouped ? 'mt-0.5' : 'mt-2.5'} transition-all group" data-msg-id="${escapeAttr(msg.id)}">
+          <div class="relative max-w-[86%] sm:max-w-[80%] px-4 py-2.5 shadow-sm text-right ${bubbleClass} ${
+            isSearchHit ? 'meow-chat-search-hit ring-2 ring-amber-300' : ''
+          }">
+            ${
+              !isDeleted && msg.replyTo
+                ? `
+                  <button
+                    type="button"
+                    data-jump-reply-id="${escapeAttr(msg.replyTo.messageId)}"
+                    class="chat-reply-quote-jump w-full text-right mb-2 px-2.5 py-1.5 rounded-xl border-r-4 ${
+                      isUser
+                        ? 'bg-black/15 border-r-white/90 text-white/95'
+                        : 'bg-[#FFF5EA] dark:bg-[#1E1713] border-r-brand-orange text-brand-dark dark:text-[#EFE6DD]'
+                    } block cursor-pointer"
+                  >
+                    <p class="text-[10px] font-black m-0 truncate font-baloo">${escapeHtml(msg.replyTo.senderName || 'رسالة')}</p>
+                    <p class="text-[11px] font-semibold opacity-90 m-0 truncate">${escapeHtml(msg.replyTo.text || '')}</p>
+                  </button>
+                `
+                : ''
+            }
+
+            ${
+              isDeleted
+                ? `
+                  <p class="text-xs sm:text-sm font-bold italic opacity-75 m-0 flex items-center gap-1.5 font-baloo">
+                    <i class="fa-solid fa-ban text-xs"></i>
+                    <span>اتمسحت الرسالة دي</span>
+                  </p>
+                `
+                : `
+                  ${
+                    msg.type === 'text' || !msg.type
+                      ? `
+                        <p class="text-[15px] sm:text-base font-bold leading-[1.6] m-0 break-words font-baloo select-text">
+                          ${formatMessageTextWithLinks(msg.text || '', isUser)}
+                        </p>
+                      `
+                      : ''
+                  }
+
+                  ${
+                    msg.type === 'image' && msg.fileUrl
+                      ? `
+                        <div class="rounded-xl overflow-hidden mb-1.5 border ${isUser ? 'border-white/25' : 'border-brand-peachBorder/40'}">
+                          <img 
+                            src="${escapeAttr(safeImgUrl)}" 
+                            alt="صورة مرفقة" 
+                            loading="lazy"
+                            decoding="async"
+                            data-chat-image-preview="${escapeAttr(safeImgUrl)}"
+                            data-chat-image-msg-id="${escapeAttr(msg.id)}"
+                            class="chat-msg-image-preview w-full max-h-60 object-cover cursor-pointer hover:opacity-95 transition" 
+                          />
+                        </div>
+                        ${msg.text ? `<p class="text-sm font-bold mt-1.5 mb-0 leading-relaxed select-text">${formatMessageTextWithLinks(msg.text, isUser)}</p>` : ''}
+                      `
+                      : ''
+                  }
+
+                  ${
+                    msg.type === 'file'
+                      ? `
+                        <div class="flex items-center gap-2.5 p-2 rounded-xl ${isUser ? 'bg-black/15 border border-white/20' : 'bg-black/5 dark:bg-white/5 border border-brand-peachBorder/40'} mb-1">
+                          <div class="w-9 h-9 rounded-lg ${isUser ? 'bg-white/20 text-white' : 'bg-brand-orange/20 text-brand-orange'} flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-file-lines text-base"></i>
+                          </div>
+                          <div class="min-w-0 flex-1 text-right">
+                            <p class="text-xs font-black truncate m-0 font-baloo">${escapeHtml(msg.fileName || 'ملف مرفق')}</p>
+                            <span class="text-[10px] ${isUser ? 'text-white/80' : 'text-brand-subtleGray'} font-bold">${escapeHtml(msg.fileSize || 'ملف')}</span>
+                          </div>
+                          ${
+                            safeDownloadUrl
+                              ? `
+                                <a href="${escapeAttr(safeDownloadUrl)}" download="${escapeAttr(msg.fileName || 'meow_file')}" rel="noopener noreferrer" class="w-9 h-9 rounded-full ${isUser ? 'bg-white text-brand-orange' : 'bg-brand-orange text-white'} flex items-center justify-center text-xs shrink-0 active:scale-90 transition" title="تحميل">
+                                  <i class="fa-solid fa-download"></i>
+                                </a>
+                              `
+                              : ''
+                          }
+                        </div>
+                        ${msg.text ? `<p class="text-sm font-bold mt-1.5 mb-0 leading-relaxed select-text">${formatMessageTextWithLinks(msg.text, isUser)}</p>` : ''}
+                      `
+                      : ''
+                  }
+
+                  ${
+                    msg.type === 'audio'
+                      ? `
+                        <div class="flex items-center gap-3 py-1 min-w-[200px]" data-audio-msg="${escapeAttr(msg.id)}">
+                          <button
+                            type="button"
+                            class="play-audio-msg-btn w-10 h-10 rounded-full ${isUser ? 'bg-white text-brand-orange' : 'bg-brand-orange text-white'} flex items-center justify-center shrink-0 shadow-soft active:scale-90 transition cursor-pointer"
+                            data-audio-url="${escapeAttr(safeAudioUrl)}"
+                            data-msg-id="${escapeAttr(msg.id)}"
+                            aria-label="تشغيل الرسالة الصوتية"
+                          >
+                            <i class="fa-solid ${isPlayingThisAudio ? 'fa-pause' : 'fa-play ml-0.5'} text-sm"></i>
+                          </button>
+                          <div class="flex-1 flex flex-col gap-1 min-w-0">
+                            <div class="flex items-center gap-0.5 h-6">
+                              <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                              <span class="w-1 h-5 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                              <span class="w-1 h-2 ${isUser ? 'bg-white/75' : 'bg-brand-orange/70'} rounded-full"></span>
+                              <span class="w-1 h-6 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                              <span class="w-1 h-4 ${isUser ? 'bg-white/70' : 'bg-brand-orange/60'} rounded-full"></span>
+                              <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                              <span class="w-1 h-5 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                              <span class="w-1 h-2 ${isUser ? 'bg-white/80' : 'bg-brand-orange/80'} rounded-full"></span>
+                              <span class="w-1 h-4 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                              <span class="w-1 h-5 ${isUser ? 'bg-white/75' : 'bg-brand-orange/70'} rounded-full"></span>
+                              <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
+                            </div>
+                            <span class="text-[10px] font-mono font-bold ${isUser ? 'text-white/85' : 'text-brand-subtleGray dark:text-[#A89F91]'}">
+                              ${msg.audioDuration ? `0:${msg.audioDuration.toString().padStart(2, '0')}` : '0:07'}
+                            </span>
+                          </div>
+                        </div>
+                      `
+                      : ''
+                  }
+
+                  ${
+                    msg.type === 'sticker'
+                      ? `
+                        <div class="flex flex-col items-center justify-center py-1.5 px-1.5 select-none">
+                          ${
+                            msg.stickerUrl
+                              ? `<img src="${escapeAttr(safeStickerUrl)}" alt="استيكر" decoding="async" class="max-w-[145px] max-h-[145px] object-contain drop-shadow-md rounded-2xl hover:scale-105 transition-transform" />`
+                              : `<span class="text-6xl sm:text-7xl filter drop-shadow-md inline-block">${escapeHtml(msg.stickerEmoji || '🐾')}</span>`
+                          }
+                          <span class="mt-1.5 px-3 py-0.5 rounded-full ${isUser ? 'bg-white/20 text-white border border-white/25' : 'bg-brand-orange/15 text-brand-orange border border-brand-orange/20'} text-[10px] font-black font-baloo shadow-sm">
+                            ${escapeHtml(msg.stickerTitle || 'ملصق مخصص')}
+                          </span>
+                        </div>
+                      `
+                      : ''
+                  }
+                `
+            }
+
+            <!-- Timestamp & Status Ticks -->
+            <div class="flex items-center justify-end gap-1.5 mt-1 -mb-0.5 text-[11px] ${isUser ? 'text-white/85' : 'text-brand-subtleGray dark:text-[#A89F91]'} font-bold select-none">
+              <span>${escapeHtml(msg.timestamp)}</span>
+              ${statusIndicatorHtml}
+            </div>
+          </div>
+
+          ${
+            !isDeleted
+              ? `
+                <div class="flex items-center gap-1 mt-1 px-1 opacity-85">
+                  <button
+                    type="button"
+                    data-reply-msg-id="${escapeAttr(msg.id)}"
+                    class="chat-msg-reply-btn px-2 py-0.5 rounded-full bg-white/80 dark:bg-[#27201B]/80 border border-brand-peachBorder/60 dark:border-warm-darkBorder text-[10px] font-black text-warm-textSec dark:text-[#D1C7BD] hover:text-brand-orange transition cursor-pointer"
+                    title="رد على الرسالة"
+                  >
+                    <i class="fa-solid fa-reply text-[9px] ml-0.5"></i> رد
+                  </button>
+                  ${
+                    msg.text
+                      ? `
+                        <button
+                          type="button"
+                          data-copy-msg-id="${escapeAttr(msg.id)}"
+                          class="chat-msg-copy-btn px-2 py-0.5 rounded-full bg-white/80 dark:bg-[#27201B]/80 border border-brand-peachBorder/60 dark:border-warm-darkBorder text-[10px] font-black text-warm-textSec dark:text-[#D1C7BD] hover:text-brand-orange transition cursor-pointer"
+                          title="نسخ النص"
+                        >
+                          <i class="fa-regular fa-copy text-[9px] ml-0.5"></i> نسخ
+                        </button>
+                      `
+                      : ''
+                  }
+                  ${
+                    isUser
+                      ? `
+                        <button
+                          type="button"
+                          data-delete-msg-id="${escapeAttr(msg.id)}"
+                          class="chat-msg-delete-btn px-2 py-0.5 rounded-full bg-white/80 dark:bg-[#27201B]/80 border border-red-200/70 dark:border-red-900/60 text-[10px] font-black text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition cursor-pointer"
+                          title="مسح الرسالة"
+                        >
+                          <i class="fa-solid fa-trash-can text-[9px] ml-0.5"></i> مسح
+                        </button>
+                      `
+                      : ''
+                  }
+                </div>
+              `
+              : ''
+          }
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function getVisibleStickersForActiveTab() {
+  const allStickers = state.getCustomStickers();
+  const byId = new Map(allStickers.map((s) => [s.id, s]));
+  let baseList = allStickers;
+
+  if (activeStickerTab === 'recent') {
+    const recentIds = state.getRecentStickerIds();
+    baseList = recentIds.map((id) => byId.get(id)).filter((s): s is NonNullable<typeof s> => Boolean(s));
+  } else if (activeStickerTab === 'favorites') {
+    const favSet = new Set(state.getFavoriteStickerIds());
+    baseList = allStickers.filter((s) => favSet.has(s.id));
+  }
+
+  const query = stickerSearchQuery.trim().toLowerCase();
+  const filteredStickers = query
+    ? baseList.filter((stk) => stk.title.toLowerCase().includes(query))
+    : baseList;
+
+  return { allStickers, filteredStickers };
+}
+
+function getStickerTabTitle(): { icon: string; label: string } {
+  switch (activeStickerTab) {
+    case 'recent':
+      return { icon: 'fa-regular fa-clock', label: 'الأخيرة' };
+    case 'favorites':
+      return { icon: 'fa-solid fa-star', label: 'المفضلة' };
+    case 'custom':
+      return { icon: 'fa-solid fa-note-sticky', label: 'ملصقاتي' };
+    default:
+      return { icon: 'fa-solid fa-paw', label: 'الكل' };
+  }
+}
+
+function renderStickersDrawerInnerHtml(): string {
+  const { allStickers, filteredStickers } = getVisibleStickersForActiveTab();
+  const tabMeta = getStickerTabTitle();
+
+  return `
+    <!-- 1. Top Drag Handle & Switcher Header -->
+    <div id="chat-stickers-drag-handle" class="pt-2.5 pb-2 px-4 flex flex-col items-center border-b border-brand-peachBorder/60 dark:border-warm-darkBorder shrink-0 bg-[#FFF9E9]/95 dark:bg-[#27201B] touch-none cursor-grab">
+      <div class="w-11 h-1.5 bg-brand-peachBorder dark:bg-warm-darkBorder rounded-full mb-2"></div>
+
+      <div class="w-full flex items-center justify-between gap-2">
+        <button
+          type="button"
+          id="sticker-search-btn"
+          class="w-9 h-9 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder ${isStickerSearchOpen ? 'text-brand-orange border-brand-orange' : 'text-warm-textSec dark:text-[#D1C7BD]'} hover:text-brand-orange flex items-center justify-center text-sm transition active:scale-90 cursor-pointer shadow-sm shrink-0"
+          title="بحث في الملصقات"
+        >
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </button>
+
+        <div class="flex items-center gap-1.5 min-w-0">
+          <div class="flex items-center bg-brand-peachBorder/30 dark:bg-black/30 p-1 rounded-full border border-brand-peachBorder/60 dark:border-warm-darkBorder shadow-sm">
+            <span class="px-3 py-1 rounded-full text-xs font-black bg-white dark:bg-[#2F241C] text-brand-orange shadow-sm flex items-center gap-1.5 font-baloo">
+              <i class="${tabMeta.icon} text-xs"></i>
+              <span>${tabMeta.label}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange font-mono">${filteredStickers.length}</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            id="import-stickers-btn"
+            class="h-8 px-2.5 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white text-[11px] font-black transition cursor-pointer font-baloo flex items-center gap-1 shrink-0 active:scale-95"
+            title="استيراد عدة صور كملصقات"
+          >
+            <i class="fa-solid fa-file-import text-[10px]"></i>
+            <span>استيراد ملصقات</span>
+          </button>
+        </div>
+
+        <button 
+          id="close-stickers-btn" 
+          type="button" 
+          class="w-9 h-9 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec hover:text-brand-orange flex items-center justify-center text-sm cursor-pointer transition active:scale-90 shadow-sm shrink-0"
+          title="إغلاق لوحة الملصقات"
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      ${
+        isStickerSearchOpen
+          ? `
+          <div class="w-full mt-2">
+            <input
+              id="sticker-search-input"
+              type="text"
+              value="${escapeAttr(stickerSearchQuery)}"
+              placeholder="ابحث باسم الملصق..."
+              class="w-full h-8 px-3 rounded-full bg-white dark:bg-[#1E1713] border border-brand-peachBorder dark:border-warm-darkBorder text-xs font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange"
+            />
+          </div>
+          `
+          : ''
+      }
+    </div>
+
+    <!-- 2. Stickers Content Grid with Smooth Scroll -->
+    <div id="chat-stickers-scroll" class="flex-1 overflow-y-auto px-4 py-3 min-h-0 overscroll-contain">
+      <div class="grid grid-cols-4 sm:grid-cols-5 gap-3">
+        ${
+          activeStickerTab === 'all' || activeStickerTab === 'custom'
+            ? `
+              <div
+                id="create-sticker-tile"
+                class="create-sticker-tile group aspect-square rounded-2xl border-2 border-dashed border-brand-orange/80 bg-brand-orange/5 hover:bg-brand-orange/15 hover:border-brand-orange flex flex-col items-center justify-center p-2 text-center cursor-pointer transition-all active:scale-95 shadow-sm"
+                title="إنشاء ملصق جديد من صورك"
+              >
+                <div class="w-9 h-9 rounded-full bg-brand-orange text-white flex items-center justify-center shadow-soft mb-1 group-hover:scale-110 transition-transform">
+                  <i class="fa-solid fa-plus text-sm"></i>
+                </div>
+                <span class="text-[11px] font-black text-brand-orange font-baloo leading-tight">
+                  إنشاء ملصق
+                </span>
+              </div>
+            `
+            : ''
+        }
+
+        ${filteredStickers
+          .map((stk) => {
+            const safeStickerImg = sanitizeImageSrc(stk.imageUrl, SAFE_FALLBACK_PET_SVG);
+            const isFav = state.isStickerFavorite(stk.id);
+            return `
+              <div class="relative group aspect-square rounded-2xl bg-white dark:bg-[#2F241C] border-2 border-brand-peachBorder dark:border-warm-darkBorder hover:border-brand-orange p-1.5 flex items-center justify-center transition-all shadow-sm hover:shadow-md">
+                <button
+                  type="button"
+                  class="custom-sticker-send-btn w-full h-full flex items-center justify-center cursor-pointer active:scale-90 transition-transform"
+                  data-sticker-id="${escapeAttr(stk.id)}"
+                  data-sticker-url="${escapeAttr(safeStickerImg)}"
+                  data-sticker-title="${escapeAttr(stk.title)}"
+                  title="إرسال هذا الملصق"
+                >
+                  <img src="${escapeAttr(safeStickerImg)}" alt="${escapeAttr(stk.title)}" decoding="async" class="max-w-full max-h-full object-contain rounded-xl select-none" />
+                </button>
+                <button
+                  type="button"
+                  class="sticker-fav-toggle-btn absolute -top-2 -left-2 w-6 h-6 rounded-full bg-white dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder ${
+                    isFav ? 'text-amber-400' : 'text-brand-subtleGray hover:text-amber-400'
+                  } flex items-center justify-center text-[10px] shadow-sm hover:scale-110 active:scale-90 transition cursor-pointer"
+                  data-sticker-id="${escapeAttr(stk.id)}"
+                  title="${isFav ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}"
+                >
+                  <i class="${isFav ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+                </button>
+                <button
+                  type="button"
+                  class="delete-custom-sticker-btn absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-[11px] shadow-sm hover:scale-110 active:scale-90 transition cursor-pointer"
+                  data-sticker-id="${escapeAttr(stk.id)}"
+                  title="حذف الملصق"
+                >
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            `;
+          })
+          .join('')}
+      </div>
+
+      ${
+        allStickers.length === 0
+          ? `
+            <div class="mt-4 p-3 rounded-2xl bg-white/70 dark:bg-[#27201B]/70 border border-brand-peachBorder/60 dark:border-warm-darkBorder text-center">
+              <p class="text-xs font-bold text-warm-textSec dark:text-[#D1C7BD] font-baloo m-0">
+                حوّل صور أليفك إلى ملصقات مخصصة محفوظة في حسابك عبر زر «إنشاء ملصق» أو «استيراد ملصقات».
+              </p>
+            </div>
+          `
+          : filteredStickers.length === 0
+            ? `
+              <div class="mt-4 p-3 rounded-2xl bg-white/70 dark:bg-[#27201B]/70 border border-brand-peachBorder/60 dark:border-warm-darkBorder text-center">
+                <p class="text-xs font-bold text-warm-textSec dark:text-[#D1C7BD] font-baloo m-0">
+                  ${
+                    activeStickerTab === 'recent'
+                      ? 'لسه مفيش ملصقات استخدمتها مؤخراً.'
+                      : activeStickerTab === 'favorites'
+                        ? 'اضغط على النجمة فوق أي ملصق لإضافته للمفضلة.'
+                        : 'لا توجد ملصقات مطابقة للبحث.'
+                  }
+                </p>
+              </div>
+            `
+            : ''
+      }
+    </div>
+
+    <!-- 3. Bottom Pack Navigation Bar -->
+    <div class="shrink-0 px-4 py-1.5 bg-[#FFF9E9] dark:bg-[#231C17] border-t border-brand-peachBorder/60 dark:border-warm-darkBorder flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          data-sticker-tab="recent"
+          class="sticker-tab-btn relative ${
+            activeStickerTab === 'recent' ? 'text-brand-orange' : 'text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange'
+          } transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90"
+          title="الأخيرة"
+          aria-label="الأخيرة"
+        >
+          <i class="fa-regular fa-clock"></i>
+          ${activeStickerTab === 'recent' ? '<span class="absolute bottom-0.5 inset-x-0 mx-auto w-3.5 h-0.5 bg-brand-orange rounded-full"></span>' : ''}
+        </button>
+        <button
+          type="button"
+          data-sticker-tab="favorites"
+          class="sticker-tab-btn relative ${
+            activeStickerTab === 'favorites' ? 'text-brand-orange' : 'text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange'
+          } transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90"
+          title="المفضلة"
+          aria-label="المفضلة"
+        >
+          <i class="${activeStickerTab === 'favorites' ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+          ${activeStickerTab === 'favorites' ? '<span class="absolute bottom-0.5 inset-x-0 mx-auto w-3.5 h-0.5 bg-brand-orange rounded-full"></span>' : ''}
+        </button>
+        <button
+          type="button"
+          data-sticker-tab="all"
+          class="sticker-tab-btn relative ${
+            activeStickerTab === 'all' ? 'text-brand-orange' : 'text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange'
+          } transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-base cursor-pointer active:scale-90"
+          title="كل الملصقات"
+          aria-label="الكل"
+        >
+          <i class="fa-solid fa-paw"></i>
+          ${activeStickerTab === 'all' ? '<span class="absolute bottom-0.5 inset-x-0 mx-auto w-3.5 h-0.5 bg-brand-orange rounded-full"></span>' : ''}
+        </button>
+        <button
+          type="button"
+          data-sticker-tab="custom"
+          class="sticker-tab-btn relative ${
+            activeStickerTab === 'custom' ? 'text-brand-orange' : 'text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange'
+          } transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90"
+          title="ملصقاتي"
+          aria-label="ملصقاتي"
+        >
+          <i class="fa-solid fa-note-sticky"></i>
+          ${activeStickerTab === 'custom' ? '<span class="absolute bottom-0.5 inset-x-0 mx-auto w-3.5 h-0.5 bg-brand-orange rounded-full"></span>' : ''}
+        </button>
+      </div>
+
+      <button
+        id="add-sticker-pack-btn"
+        type="button"
+        class="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-sm transition active:scale-90 cursor-pointer"
+        title="إضافة ملصق جديد من صورة"
+      >
+        <i class="fa-solid fa-plus"></i>
+      </button>
+    </div>
+  `;
+}
+
+function renderMediaPreviewModalHtml(): string {
+  if (!pendingChatAttachment) return '';
+  return `
+    <div id="chat-media-preview-modal" class="fixed inset-0 z-[92] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
+      <div class="bg-[#FFFDF8] dark:bg-[#27201B] w-full max-w-md rounded-t-[30px] sm:rounded-[28px] border-2 border-brand-peachBorder dark:border-warm-darkBorder p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl space-y-3.5 animate-slide-up">
+        <div class="flex items-center justify-between gap-2 pb-2 border-b border-brand-peachBorder/60 dark:border-warm-darkBorder">
+          <h3 class="text-base font-black text-brand-dark dark:text-white font-baloo m-0">معاينة المرفق قبل الإرسال</h3>
+          <button
+            id="cancel-chat-media-preview-btn"
+            type="button"
+            aria-label="إلغاء إرسال المرفق"
+            ${pendingChatAttachment.isSending ? 'disabled' : ''}
+            class="w-9 h-9 rounded-full bg-black/5 dark:bg-white/10 text-brand-dark dark:text-white hover:bg-red-500 hover:text-white flex items-center justify-center transition cursor-pointer"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        ${
+          pendingChatAttachment.type === 'image'
+            ? `
+              <div class="rounded-2xl overflow-hidden bg-black/5 dark:bg-black/30 border border-brand-peachBorder/60 dark:border-warm-darkBorder flex items-center justify-center max-h-[46dvh]">
+                <img src="${escapeAttr(sanitizeImageSrc(pendingChatAttachment.fileUrl, SAFE_FALLBACK_PET_SVG))}" alt="${escapeAttr(pendingChatAttachment.fileName)}" class="max-w-full max-h-[46dvh] object-contain" />
+              </div>
+            `
+            : `
+              <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white dark:bg-[#1E1713] border border-brand-peachBorder dark:border-warm-darkBorder">
+                <div class="w-11 h-11 rounded-xl bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-file-lines text-xl"></i>
+                </div>
+                <div class="min-w-0 flex-1 text-right">
+                  <p class="text-sm font-black text-brand-dark dark:text-white truncate m-0 font-baloo">${escapeHtml(pendingChatAttachment.fileName)}</p>
+                  <span class="text-xs font-bold text-brand-subtleGray dark:text-[#A89F91]">${escapeHtml(pendingChatAttachment.fileSize)}</span>
+                </div>
+              </div>
+            `
+        }
+
+        <div
+          id="chat-media-preview-error"
+          class="${
+            pendingChatAttachment.errorMessage ? 'block' : 'hidden'
+          } p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 text-xs font-bold text-right"
+        >
+          ${escapeHtml(pendingChatAttachment.errorMessage || '')}
+        </div>
+
+        <input
+          id="chat-media-caption-input"
+          type="text"
+          value="${escapeAttr(pendingChatAttachment.caption || '')}"
+          placeholder="أضف تعليقاً اختيارياً..."
+          class="w-full h-11 px-4 rounded-2xl bg-white dark:bg-[#1E1713] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-sm font-bold text-brand-dark dark:text-white placeholder-brand-subtleGray focus:outline-none focus:border-brand-orange font-baloo"
+          autocomplete="off"
+        />
+
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button
+            id="cancel-chat-media-secondary-btn"
+            type="button"
+            ${pendingChatAttachment.isSending ? 'disabled' : ''}
+            class="h-11 rounded-full bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-white font-black text-sm hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer font-baloo"
+          >
+            إلغاء
+          </button>
+          <button
+            id="confirm-send-chat-media-btn"
+            type="button"
+            ${pendingChatAttachment.isSending ? 'disabled' : ''}
+            class="h-11 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white font-black text-sm shadow-soft flex items-center justify-center gap-2 transition active:scale-95 ${
+              pendingChatAttachment.isSending ? 'opacity-75 cursor-wait' : 'cursor-pointer'
+            } font-baloo"
+          >
+            <span>${pendingChatAttachment.isSending ? 'جاري الإرسال...' : 'إرسال'}</span>
+            <i class="fa-solid ${pendingChatAttachment.isSending ? 'fa-spinner fa-spin' : 'fa-paper-plane'} text-xs"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderImageLightboxHtml(): string {
+  if (!previewChatImageUrl) return '';
+  const safeImg = sanitizeImageSrc(previewChatImageUrl, SAFE_FALLBACK_PET_SVG);
+  return `
+    <div id="chat-image-lightbox" class="fixed inset-0 z-[95] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" dir="rtl">
+      <div class="absolute top-[max(1rem,env(safe-area-inset-top))] inset-x-4 flex items-center justify-between gap-2 z-10">
+        <button
+          id="close-chat-image-lightbox-btn"
+          type="button"
+          aria-label="إغلاق الصورة"
+          class="w-11 h-11 rounded-full bg-white/15 hover:bg-brand-orange text-white flex items-center justify-center text-lg cursor-pointer transition active:scale-90"
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <button
+          id="chat-lightbox-download-btn"
+          type="button"
+          aria-label="تحميل الصورة"
+          class="h-10 px-4 rounded-full bg-white/15 hover:bg-brand-orange text-white text-xs font-black flex items-center gap-2 cursor-pointer transition active:scale-90 font-baloo"
+        >
+          <i class="fa-solid fa-download"></i>
+          <span>حفظ الصورة</span>
+        </button>
+      </div>
+      <img
+        id="chat-lightbox-img"
+        src="${escapeAttr(safeImg)}"
+        alt="معاينة الصورة"
+        class="max-w-full max-h-[85dvh] rounded-2xl object-contain shadow-2xl"
+      />
+    </div>
+  `;
+}
+
+// WhatsApp-like Chat Room with real audio recorder, attachment handling, and in-place patching
 function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): string {
   if (!conv) return '';
 
@@ -784,7 +1598,15 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
     lastRenderedChatRoomId = conv.id;
     isGroupDetailsExpanded = false;
     previewChatImageUrl = null;
+    previewChatImageMsgId = null;
     pendingChatAttachment = null;
+    activeReplyTarget = null;
+    inRoomSearchOpen = false;
+    inRoomSearchQuery = '';
+    firstUnreadMsgId = null;
+    userIsNearBottom = true;
+    justSentMessageFlag = false;
+    knownConvMsgCountMap.set(conv.id, conv.messages.length);
   }
 
   const resolvedPet = state.getPetForConversation(conv);
@@ -814,58 +1636,86 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
 
   return `
     <!-- WhatsApp-Style Chat Room (Meow Warm Theme) - Full Screen without Taskbar -->
-    <div id="active-chat-room" class="fixed inset-0 z-50 bg-[#FAF4ED] dark:bg-[#1A1512] flex flex-col w-full max-w-md mx-auto shadow-2xl h-[100dvh] overflow-hidden" dir="rtl">
+    <div id="active-chat-room" data-conv-id="${escapeAttr(conv.id)}" class="fixed inset-0 z-50 bg-[#FAF4ED] dark:bg-[#1A1512] flex flex-col w-full max-w-md mx-auto shadow-2xl h-[100dvh] overflow-hidden" dir="rtl">
       
       <!-- Top WhatsApp Header (Clean & Warm, Larger & Clear) -->
       <header class="shrink-0 bg-[#FFF9E9] dark:bg-[#27201B] border-b-2 border-brand-peachBorder/70 dark:border-warm-darkBorder px-3.5 sm:px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between shadow-sm z-30">
-        <div class="flex items-center gap-2.5 min-w-0">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
           <!-- Back button -->
           <button 
             id="back-to-chats-btn" 
-            class="w-11 h-11 rounded-full bg-black/5 dark:bg-white/10 hover:bg-brand-orange hover:text-white text-brand-dark dark:text-white flex items-center justify-center text-base cursor-pointer transition active:scale-90 shadow-sm shrink-0" 
+            class="w-10 h-10 rounded-full bg-black/5 dark:bg-white/10 hover:bg-brand-orange hover:text-white text-brand-dark dark:text-white flex items-center justify-center text-base cursor-pointer transition active:scale-90 shadow-sm shrink-0" 
             type="button"
             aria-label="الرجوع إلى المحادثات"
             title="رجوع"
           >
             <i class="fa-solid fa-arrow-right text-lg"></i>
           </button>
-          
-          <!-- Avatar & Online status -->
-          <div class="relative shrink-0">
-            <img
-              src="${escapeAttr(sanitizeImageSrc(conv.otherUserAvatar, SAFE_FALLBACK_AVATAR_SVG))}"
-              alt="${escapeAttr(conv.otherUserName)}"
-              referrerpolicy="no-referrer"
-              onerror="this.onerror=null;this.src='${escapeAttr(SAFE_FALLBACK_AVATAR_SVG)}';"
-              class="w-12 h-12 rounded-full object-cover border-2 border-brand-orange shadow-sm"
-            />
-            <span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#27201B]"></span>
-          </div>
 
-          <div class="min-w-0 text-right">
-            <div class="flex items-center gap-1.5">
-              <h3 class="text-base font-black text-brand-dark dark:text-white truncate font-baloo leading-tight m-0">
-                ${escapeHtml(conv.otherUserName)}
-              </h3>
-              ${
-                conv.isPinned
-                  ? `<span class="px-1.5 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange text-[10px] font-black shrink-0"><i class="fa-solid fa-thumbtack text-[9px]"></i></span>`
-                  : ''
-              }
+          <!-- Clickable User + Pet Details Shortcut -->
+          <button
+            id="open-chat-pet-detail-btn"
+            type="button"
+            class="flex items-center gap-2.5 min-w-0 flex-1 text-right cursor-pointer hover:opacity-90 transition"
+            aria-label="عرض تفاصيل الأليف"
+          >
+            <div class="relative shrink-0">
+              <img
+                src="${escapeAttr(sanitizeImageSrc(conv.otherUserAvatar, SAFE_FALLBACK_AVATAR_SVG))}"
+                alt="${escapeAttr(conv.otherUserName)}"
+                referrerpolicy="no-referrer"
+                onerror="this.onerror=null;this.src='${escapeAttr(SAFE_FALLBACK_AVATAR_SVG)}';"
+                class="w-11 h-11 rounded-full object-cover border-2 border-brand-orange shadow-sm"
+              />
+              <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white dark:border-[#27201B]"></span>
             </div>
-            <p class="text-xs font-bold text-brand-orange truncate m-0 font-baloo mt-0.5">
-              ${escapeHtml(conv.petName)} (${conv.petType === 'mating' ? 'تزاوج' : isGroupConv ? `تبني جماعي • ${groupCount} حيوانات` : 'تبني'}) • متصل الآن
-            </p>
-          </div>
+
+            <div class="min-w-0 text-right flex-1">
+              <div class="flex items-center gap-1.5">
+                <h3 class="text-sm sm:text-base font-black text-brand-dark dark:text-white truncate font-baloo leading-tight m-0">
+                  ${escapeHtml(conv.otherUserName)}
+                </h3>
+                ${
+                  conv.isPinned
+                    ? `<span class="px-1.5 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange text-[10px] font-black shrink-0"><i class="fa-solid fa-thumbtack text-[9px]"></i></span>`
+                    : ''
+                }
+                <span id="chat-header-muted-badge" class="${conv.isMuted ? 'inline-flex' : 'hidden'} px-1.5 py-0.5 rounded-full bg-black/10 dark:bg-white/10 text-brand-subtleGray text-[10px] shrink-0" title="مكتومة">
+                  <i class="fa-solid fa-bell-slash text-[9px]"></i>
+                </span>
+              </div>
+              <p id="chat-header-subtitle" class="text-[11px] sm:text-xs font-bold text-brand-orange truncate m-0 font-baloo mt-0.5">
+                ${renderChatHeaderSubtitle(conv, isGroupConv, groupCount)}
+              </p>
+            </div>
+          </button>
         </div>
 
-        <div class="flex items-center gap-1.5 shrink-0">
+        <div class="flex items-center gap-1 shrink-0">
+          <button
+            id="chat-inroom-search-toggle-btn"
+            type="button"
+            aria-label="بحث في المحادثة"
+            title="بحث في المحادثة"
+            class="w-9 h-9 rounded-full ${inRoomSearchOpen ? 'bg-brand-orange text-white' : 'bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-dark dark:text-white'} flex items-center justify-center text-sm transition cursor-pointer active:scale-90"
+          >
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
+          <button
+            id="chat-mute-toggle-btn"
+            type="button"
+            aria-label="${conv.isMuted ? 'إلغاء كتم المحادثة' : 'كتم المحادثة'}"
+            title="${conv.isMuted ? 'إلغاء الكتم' : 'كتم الإشعارات'}"
+            class="w-9 h-9 rounded-full ${conv.isMuted ? 'bg-brand-orange/15 text-brand-orange' : 'bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-dark dark:text-white'} flex items-center justify-center text-sm transition cursor-pointer active:scale-90"
+          >
+            <i class="fa-solid ${conv.isMuted ? 'fa-bell-slash' : 'fa-bell'}"></i>
+          </button>
           ${
             state.canRevealConversationPhone(conv) && conv.otherUserPhone
               ? `
               <a 
                 href="${escapeAttr(sanitizeTelUrl(conv.otherUserPhone))}" 
-                class="w-11 h-11 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition shadow-sm"
+                class="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition shadow-sm"
                 title="اتصال هاتفي"
                 aria-label="اتصال هاتفي"
               >
@@ -886,11 +1736,13 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             showDeleteConversation: true,
             reportTargetType: 'chat',
             buttonClass:
-              'w-10 h-10 min-w-[36px] min-h-[36px] rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-dark dark:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
+              'w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-dark dark:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
             dropdownAlign: 'left',
           })}
         </div>
       </header>
+
+      ${renderInRoomSearchBarHtml(conv)}
 
       ${
         isGroupConv
@@ -931,9 +1783,8 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
 
               <div class="flex items-center gap-1.5 shrink-0">
                 <button
-                  id="open-chat-pet-detail-btn"
                   type="button"
-                  class="px-3 py-1.5 min-h-[34px] rounded-full bg-white border border-brand-peachBorder text-[11px] font-black text-brand-dark hover:border-brand-orange hover:text-brand-orange transition cursor-pointer font-baloo active:scale-95"
+                  class="open-chat-group-full-btn px-3 py-1.5 min-h-[34px] rounded-full bg-white border border-brand-peachBorder text-[11px] font-black text-brand-dark hover:border-brand-orange hover:text-brand-orange transition cursor-pointer font-baloo active:scale-95"
                 >
                   الملف الكامل
                 </button>
@@ -1043,199 +1894,55 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
       }
 
       <!-- Messages Body (Bubble layout with calm pet supplies & paws backdrop) -->
-      <div 
-        id="chat-messages-container" 
-        class="flex-1 overflow-y-auto px-3.5 pt-4 pb-6 space-y-3 overscroll-contain bg-[#FAF4ED]"
-        style="${CHAT_PAW_BACKDROP_STYLE}"
-      >
-        ${
-          state.isMatingConversationApproved(conv)
-            ? `
-              <div
-                id="mating-approved-banner"
-                class="rounded-[28px] p-4 bg-gradient-to-l from-[#FFF5EA] via-white to-[#FFF9E9] border-2 border-brand-orange/60 shadow-sm flex items-center gap-3.5 text-right select-none"
-              >
-                <div class="w-12 h-12 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0 shadow-soft">
-                  <svg viewBox="0 0 64 48" class="w-8 h-6 text-white" fill="none" aria-hidden="true">
-                    <path d="M12.5 23.5 14 14.5l5.5 4.2h4l5.5-4.2 1.5 9c1.2 1.8 1.8 4 1.8 6.4 0 6.2-4.4 10.6-10.3 10.6S11 36.1 11 29.9c0-2.4.6-4.6 1.5-6.4Z" fill="currentColor"/>
-                    <path d="M33.5 24.5 35 15.8l5 3.9h3.8l5-3.9 1.5 8.7c1.1 1.7 1.7 3.8 1.7 6 0 6-4.2 10-9.7 10s-9.7-4-9.7-10c0-2.2.5-4.3.9-6Z" fill="currentColor"/>
-                    <path d="M23.5 33.5c2.2-6.5 8-12 8.5-18.8.4-4.8-3.2-8.2-6.6-8.2-2.6 0-4.6 1.6-5.2 4.1" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
-                    <path d="M40.5 33.5c-2.2-6.5-8-12-8.5-18.8-.4-4.8 3.2-8.2 6.6-8.2 2.6 0 4.6 1.6 5.2 4.1" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
-                    <path d="M32 13.5c-1.4-2.5-5.1-2.4-5.9.3-.8 2.6 2.1 5.1 5.9 7.5 3.8-2.4 6.7-4.9 5.9-7.5-.8-2.7-4.5-2.8-5.9-.3Z" fill="#FFE082"/>
-                  </svg>
-                </div>
-                <div class="min-w-0 flex-1">
-                  <h4 class="text-sm sm:text-base font-black font-baloo text-brand-orange m-0">
-                    تمت الموافقة على التزاوج! بالتوفيق 🐾
-                  </h4>
-                  <p class="text-xs font-bold text-brand-dark/85 mt-0.5 mb-0 leading-relaxed">
-                    وفّق ديلين في الحلال — يمكنك الآن الاتفاق على الموعد والفحوصات الطبية بهدوء ووضوح.
-                  </p>
-                </div>
-              </div>
-            `
-            : ''
-        }
-        ${conv.messages
-          .map((msg) => {
-            if (msg.senderId === 'system') {
-              return `
-                <div class="flex justify-center my-2.5 select-none">
-                  <span class="px-3.5 py-1.5 rounded-lg bg-white/95 dark:bg-[#27201B]/95 border border-brand-peachBorder/70 dark:border-warm-darkBorder text-xs sm:text-[13px] font-bold text-brand-orange text-center max-w-[88%] shadow-sm leading-relaxed font-baloo">
-                    ${escapeHtml(msg.text)}
-                  </span>
-                </div>
-              `;
-            }
-
-            const isUser = msg.isFromUser;
-            const safeImgUrl = msg.fileUrl ? sanitizeImageSrc(msg.fileUrl, SAFE_FALLBACK_PET_SVG) : '';
-            const safeDownloadUrl = msg.fileUrl ? sanitizeUrl(msg.fileUrl, '') : '';
-            const safeAudioUrl = sanitizeAudioSrc(msg.audioBlobUrl || msg.fileUrl || '');
-            const safeStickerUrl = msg.stickerUrl ? sanitizeImageSrc(msg.stickerUrl, SAFE_FALLBACK_PET_SVG) : '';
-
-            return `
-              <div class="flex flex-col ${isUser ? 'items-end' : 'items-start'} transition-all animate-fade-in group" data-msg-id="${escapeAttr(msg.id)}">
-                
-                <!-- Bubble Container (WhatsApp Style with Speech Tail) -->
-                <div class="relative max-w-[86%] sm:max-w-[80%] px-4 py-2.5 shadow-sm text-right ${
-                  isUser
-                    ? 'meow-bubble-out bg-brand-orange text-white rounded-2xl'
-                    : 'meow-bubble-in bg-white dark:bg-[#261E19] text-brand-dark dark:text-white rounded-2xl border border-brand-peachBorder/70 dark:border-warm-darkBorder'
-                }">
-
-                  <!-- 1. Text Message Content -->
-                  ${
-                    msg.type === 'text' || !msg.type
-                      ? `
-                      <p class="text-[15px] sm:text-base font-bold leading-[1.6] m-0 break-words font-baloo select-text">
-                        ${escapeHtml(msg.text || '')}
-                      </p>
-                      `
-                      : ''
-                  }
-
-                  <!-- 2. Image Attachment Content -->
-                  ${
-                    msg.type === 'image' && msg.fileUrl
-                      ? `
-                      <div class="rounded-xl overflow-hidden mb-1.5 border ${isUser ? 'border-white/25' : 'border-brand-peachBorder/40'}">
-                        <img 
-                          src="${escapeAttr(safeImgUrl)}" 
-                          alt="صورة مرفقة" 
-                          data-chat-image-preview="${escapeAttr(safeImgUrl)}"
-                          class="chat-msg-image-preview w-full max-h-60 object-cover cursor-pointer hover:opacity-95 transition" 
-                        />
-                      </div>
-                      ${msg.text ? `<p class="text-sm font-bold mt-1.5 mb-0 leading-relaxed">${escapeHtml(msg.text)}</p>` : ''}
-                      `
-                      : ''
-                  }
-
-                  <!-- 3. Document / File Attachment Content -->
-                  ${
-                    msg.type === 'file'
-                      ? `
-                      <div class="flex items-center gap-2.5 p-2 rounded-xl ${isUser ? 'bg-black/15 border border-white/20' : 'bg-black/5 dark:bg-white/5 border border-brand-peachBorder/40'} mb-1">
-                        <div class="w-9 h-9 rounded-lg ${isUser ? 'bg-white/20 text-white' : 'bg-brand-orange/20 text-brand-orange'} flex items-center justify-center shrink-0">
-                          <i class="fa-solid fa-file-lines text-base"></i>
-                        </div>
-                        <div class="min-w-0 flex-1 text-right">
-                          <p class="text-xs font-black truncate m-0 font-baloo">${escapeHtml(msg.fileName || 'ملف مرفق')}</p>
-                          <span class="text-[10px] ${isUser ? 'text-white/80' : 'text-brand-subtleGray'} font-bold">${escapeHtml(msg.fileSize || 'ملف')}</span>
-                        </div>
-                        ${
-                          safeDownloadUrl
-                            ? `
-                            <a href="${escapeAttr(safeDownloadUrl)}" download="${escapeAttr(msg.fileName || 'meow_file')}" rel="noopener noreferrer" class="w-9 h-9 rounded-full ${isUser ? 'bg-white text-brand-orange' : 'bg-brand-orange text-white'} flex items-center justify-center text-xs shrink-0 active:scale-90 transition" title="تحميل">
-                              <i class="fa-solid fa-download"></i>
-                            </a>
-                            `
-                            : ''
-                        }
-                      </div>
-                      ${msg.text ? `<p class="text-sm font-bold mt-1.5 mb-0 leading-relaxed">${escapeHtml(msg.text)}</p>` : ''}
-                      `
-                      : ''
-                  }
-
-                  <!-- 4. Voice Audio Message (Real Player) -->
-                  ${
-                    msg.type === 'audio'
-                      ? `
-                      <div class="flex items-center gap-3 py-1 min-w-[200px]" data-audio-msg="${escapeAttr(msg.id)}">
-                        <button
-                          type="button"
-                          class="play-audio-msg-btn w-10 h-10 rounded-full ${isUser ? 'bg-white text-brand-orange' : 'bg-brand-orange text-white'} flex items-center justify-center shrink-0 shadow-soft active:scale-90 transition cursor-pointer"
-                          data-audio-url="${escapeAttr(safeAudioUrl)}"
-                          data-msg-id="${escapeAttr(msg.id)}"
-                          aria-label="تشغيل الرسالة الصوتية"
-                        >
-                          <i class="fa-solid fa-play text-sm ml-0.5"></i>
-                        </button>
-
-                        <!-- Simulated / Real Audio Waveform bars -->
-                        <div class="flex-1 flex flex-col gap-1 min-w-0">
-                          <div class="flex items-center gap-0.5 h-6">
-                            <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
-                            <span class="w-1 h-5 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
-                            <span class="w-1 h-2 ${isUser ? 'bg-white/75' : 'bg-brand-orange/70'} rounded-full"></span>
-                            <span class="w-1 h-6 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
-                            <span class="w-1 h-4 ${isUser ? 'bg-white/70' : 'bg-brand-orange/60'} rounded-full"></span>
-                            <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
-                            <span class="w-1 h-5 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
-                            <span class="w-1 h-2 ${isUser ? 'bg-white/80' : 'bg-brand-orange/80'} rounded-full"></span>
-                            <span class="w-1 h-4 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
-                            <span class="w-1 h-5 ${isUser ? 'bg-white/75' : 'bg-brand-orange/70'} rounded-full"></span>
-                            <span class="w-1 h-3 ${isUser ? 'bg-white' : 'bg-brand-orange'} rounded-full"></span>
-                          </div>
-                          <span class="text-[10px] font-mono font-bold ${isUser ? 'text-white/85' : 'text-brand-subtleGray dark:text-[#A89F91]'}">
-                            ${msg.audioDuration ? `0:${msg.audioDuration.toString().padStart(2, '0')}` : '0:07'}
-                          </span>
-                        </div>
-                      </div>
-                      `
-                      : ''
-                  }
-
-                  <!-- 5. Custom Pet Sticker Message -->
-                  ${
-                    msg.type === 'sticker'
-                      ? `
-                      <div class="flex flex-col items-center justify-center py-1.5 px-1.5 select-none group">
-                        ${
-                          msg.stickerUrl
-                            ? `<img src="${escapeAttr(safeStickerUrl)}" alt="استيكر" class="max-w-[145px] max-h-[145px] object-contain drop-shadow-md rounded-2xl hover:scale-105 transition-transform" />`
-                            : `<span class="text-6xl sm:text-7xl filter drop-shadow-md transform hover:scale-110 active:scale-95 transition-transform duration-200 cursor-pointer animate-fade-in inline-block">${escapeHtml(msg.stickerEmoji || '🐾')}</span>`
-                        }
-                        <span class="mt-1.5 px-3 py-0.5 rounded-full ${isUser ? 'bg-white/20 text-white border border-white/25' : 'bg-brand-orange/15 text-brand-orange border border-brand-orange/20'} text-[10px] font-black font-baloo shadow-sm">
-                          ${escapeHtml(msg.stickerTitle || 'ملصق مخصص')}
-                        </span>
-                      </div>
-                      `
-                      : ''
-                  }
-
-                  <!-- Timestamp & Read Receipts (WhatsApp Style in bottom corner) -->
-                  <div class="flex items-center justify-end gap-1.5 mt-1 -mb-0.5 text-[11px] ${isUser ? 'text-white/85' : 'text-brand-subtleGray dark:text-[#A89F91]'} font-bold select-none">
-                    <span>${escapeHtml(msg.timestamp)}</span>
-                    ${
-                      isUser
-                        ? `
-                        <span class="${msg.status === 'read' ? 'text-sky-200' : 'text-white/90'} text-xs" title="تم الإرسال">
-                          <i class="fa-solid fa-check-double"></i>
-                        </span>
-                        `
-                        : ''
-                    }
+      <div class="relative flex-1 min-h-0 flex flex-col">
+        <div 
+          id="chat-messages-container" 
+          class="flex-1 overflow-y-auto px-3.5 pt-4 pb-6 space-y-2 overscroll-contain bg-[#FAF4ED] dark:bg-[#1A1512]"
+          style="${CHAT_PAW_BACKDROP_STYLE}"
+        >
+          ${
+            state.isMatingConversationApproved(conv)
+              ? `
+                <div
+                  id="mating-approved-banner"
+                  class="rounded-[28px] p-4 bg-gradient-to-l from-[#FFF5EA] via-white to-[#FFF9E9] border-2 border-brand-orange/60 shadow-sm flex items-center gap-3.5 text-right select-none mb-2"
+                >
+                  <div class="w-12 h-12 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0 shadow-soft">
+                    <svg viewBox="0 0 64 48" class="w-8 h-6 text-white" fill="none" aria-hidden="true">
+                      <path d="M12.5 23.5 14 14.5l5.5 4.2h4l5.5-4.2 1.5 9c1.2 1.8 1.8 4 1.8 6.4 0 6.2-4.4 10.6-10.3 10.6S11 36.1 11 29.9c0-2.4.6-4.6 1.5-6.4Z" fill="currentColor"/>
+                      <path d="M33.5 24.5 35 15.8l5 3.9h3.8l5-3.9 1.5 8.7c1.1 1.7 1.7 3.8 1.7 6 0 6-4.2 10-9.7 10s-9.7-4-9.7-10c0-2.2.5-4.3.9-6Z" fill="currentColor"/>
+                      <path d="M23.5 33.5c2.2-6.5 8-12 8.5-18.8.4-4.8-3.2-8.2-6.6-8.2-2.6 0-4.6 1.6-5.2 4.1" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+                      <path d="M40.5 33.5c-2.2-6.5-8-12-8.5-18.8-.4-4.8 3.2-8.2 6.6-8.2 2.6 0 4.6 1.6 5.2 4.1" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+                      <path d="M32 13.5c-1.4-2.5-5.1-2.4-5.9.3-.8 2.6 2.1 5.1 5.9 7.5 3.8-2.4 6.7-4.9 5.9-7.5-.8-2.7-4.5-2.8-5.9-.3Z" fill="#FFE082"/>
+                    </svg>
                   </div>
-
+                  <div class="min-w-0 flex-1">
+                    <h4 class="text-sm sm:text-base font-black font-baloo text-brand-orange m-0">
+                      تمت الموافقة على التزاوج! بالتوفيق 🐾
+                    </h4>
+                    <p class="text-xs font-bold text-brand-dark/85 mt-0.5 mb-0 leading-relaxed">
+                      وفّق ديلين في الحلال — يمكنك الآن الاتفاق على الموعد والفحوصات الطبية بهدوء ووضوح.
+                    </p>
+                  </div>
                 </div>
+              `
+              : ''
+          }
+          <div id="chat-messages-list" class="space-y-2">
+            ${renderChatMessagesListHtml(conv)}
+          </div>
+        </div>
 
-              </div>
-            `;
-          })
-          .join('')}
+        <button
+          id="chat-scroll-to-bottom-btn"
+          type="button"
+          aria-label="النزول لآخر الرسائل"
+          class="${
+            userIsNearBottom ? 'hidden' : 'flex'
+          } absolute bottom-3 left-3 z-20 w-10 h-10 rounded-full bg-white/95 dark:bg-[#27201B]/95 border-2 border-brand-orange text-brand-orange shadow-lg items-center justify-center cursor-pointer transition active:scale-90"
+        >
+          <i class="fa-solid fa-chevron-down text-sm"></i>
+        </button>
       </div>
 
       <!-- Hidden Real File Picker for Attachments -->
@@ -1258,6 +1965,10 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
       <!-- Detached Floating Bubble Composer & Floating Audio/Sticker Drawers -->
       <footer class="shrink-0 px-3 pt-1.5 pb-[max(0.85rem,env(safe-area-inset-bottom))] z-40 pointer-events-none flex flex-col gap-2 bg-transparent">
         
+        <div id="chat-reply-preview-slot">
+          ${renderReplyPreviewBarHtml()}
+        </div>
+
         <!-- Live Voice Recording Floating Bubble Bar -->
         <div 
           id="recording-ui-bar" 
@@ -1292,193 +2003,15 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
         </div>
 
         <!-- Floating Bubble Sticker Drawer -->
-        ${(() => {
-          const allStickers = state.getCustomStickers();
-          const filteredStickers = stickerSearchQuery.trim()
-            ? allStickers.filter((stk) =>
-                stk.title.toLowerCase().includes(stickerSearchQuery.trim().toLowerCase())
-              )
-            : allStickers;
-          return `
         <div 
           id="chat-stickers-drawer" 
           class="${isStickersOpen ? 'flex' : 'hidden'} pointer-events-auto flex-col bg-[#FAF4ED]/98 dark:bg-[#221B17]/98 backdrop-blur-md border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-[30px] h-72 sm:h-80 transition-all overflow-hidden shadow-nav"
         >
-          <!-- 1. Top Drag Handle & Switcher Header -->
-          <div id="chat-stickers-drag-handle" class="pt-2.5 pb-2 px-4 flex flex-col items-center border-b border-brand-peachBorder/60 dark:border-warm-darkBorder shrink-0 bg-[#FFF9E9]/95 dark:bg-[#27201B] touch-none cursor-grab">
-            <div class="w-11 h-1.5 bg-brand-peachBorder dark:bg-warm-darkBorder rounded-full mb-2"></div>
-            
-            <!-- Controls Bar: Search Icon, Center Switcher Pills, Close Button -->
-            <div class="w-full flex items-center justify-between gap-2">
-              
-              <!-- Search Icon Button -->
-              <button
-                type="button"
-                id="sticker-search-btn"
-                class="w-9 h-9 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder ${isStickerSearchOpen ? 'text-brand-orange border-brand-orange' : 'text-warm-textSec dark:text-[#D1C7BD]'} hover:text-brand-orange flex items-center justify-center text-sm transition active:scale-90 cursor-pointer shadow-sm shrink-0"
-                title="بحث في الملصقات"
-              >
-                <i class="fa-solid fa-magnifying-glass"></i>
-              </button>
-
-              <!-- Center Switcher Pill + Import Stickers Action -->
-              <div class="flex items-center gap-1.5 min-w-0">
-                <div class="flex items-center bg-brand-peachBorder/30 dark:bg-black/30 p-1 rounded-full border border-brand-peachBorder/60 dark:border-warm-darkBorder shadow-sm">
-                  <button
-                    type="button"
-                    class="px-3 py-1 rounded-full text-xs font-black bg-white dark:bg-[#2F241C] text-brand-orange shadow-sm flex items-center gap-1.5 font-baloo cursor-pointer"
-                  >
-                    <i class="fa-solid fa-note-sticky text-xs"></i>
-                    <span>ملصقاتي</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-orange/15 text-brand-orange font-mono">${allStickers.length}</span>
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  id="import-stickers-btn"
-                  class="h-8 px-2.5 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white text-[11px] font-black transition cursor-pointer font-baloo flex items-center gap-1 shrink-0 active:scale-95"
-                  title="استيراد عدة صور كملصقات"
-                >
-                  <i class="fa-solid fa-file-import text-[10px]"></i>
-                  <span>استيراد ملصقات</span>
-                </button>
-              </div>
-
-              <!-- Close Drawer Button (✕) -->
-              <button 
-                id="close-stickers-btn" 
-                type="button" 
-                class="w-9 h-9 rounded-full bg-white dark:bg-[#2F241C] border border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec hover:text-brand-orange flex items-center justify-center text-sm cursor-pointer transition active:scale-90 shadow-sm shrink-0"
-                title="إغلاق لوحة الملصقات"
-              >
-                <i class="fa-solid fa-xmark"></i>
-              </button>
-
-            </div>
-
-            ${
-              isStickerSearchOpen
-                ? `
-                <div class="w-full mt-2">
-                  <input
-                    id="sticker-search-input"
-                    type="text"
-                    value="${escapeAttr(stickerSearchQuery)}"
-                    placeholder="ابحث باسم الملصق..."
-                    class="w-full h-8 px-3 rounded-full bg-white dark:bg-[#1E1713] border border-brand-peachBorder dark:border-warm-darkBorder text-xs font-bold text-brand-dark dark:text-white focus:outline-none focus:border-brand-orange"
-                  />
-                </div>
-                `
-                : ''
-            }
-          </div>
-
-          <!-- 2. Stickers Content Grid with Smooth Scroll -->
-          <div id="chat-stickers-scroll" class="flex-1 overflow-y-auto px-4 py-3 min-h-0 overscroll-contain">
-            
-            <div class="grid grid-cols-4 sm:grid-cols-5 gap-3">
-              
-              <!-- FIRST ITEM IN GRID: Dedicated 'إنشاء استيكر' Tile -->
-              <div
-                id="create-sticker-tile"
-                class="create-sticker-tile group aspect-square rounded-2xl border-2 border-dashed border-brand-orange/80 bg-brand-orange/5 hover:bg-brand-orange/15 hover:border-brand-orange flex flex-col items-center justify-center p-2 text-center cursor-pointer transition-all active:scale-95 shadow-sm"
-                title="إنشاء ملصق جديد من صورك"
-              >
-                <div class="w-9 h-9 rounded-full bg-brand-orange text-white flex items-center justify-center shadow-soft mb-1 group-hover:scale-110 transition-transform">
-                  <i class="fa-solid fa-plus text-sm"></i>
-                </div>
-                <span class="text-[11px] font-black text-brand-orange font-baloo leading-tight">
-                  إنشاء ملصق
-                </span>
-              </div>
-
-              <!-- User's Saved Custom Stickers -->
-              ${filteredStickers
-                .map(
-                  (stk) => {
-                    const safeStickerImg = sanitizeImageSrc(stk.imageUrl, SAFE_FALLBACK_PET_SVG);
-                    return `
-                <div class="relative group aspect-square rounded-2xl bg-white dark:bg-[#2F241C] border-2 border-brand-peachBorder dark:border-warm-darkBorder hover:border-brand-orange p-1.5 flex items-center justify-center transition-all shadow-sm hover:shadow-md">
-                  <button
-                    type="button"
-                    class="custom-sticker-send-btn w-full h-full flex items-center justify-center cursor-pointer active:scale-90 transition-transform"
-                    data-sticker-url="${escapeAttr(safeStickerImg)}"
-                    data-sticker-title="${escapeAttr(stk.title)}"
-                    title="إرسال هذا الملصق"
-                  >
-                    <img src="${escapeAttr(safeStickerImg)}" alt="${escapeAttr(stk.title)}" class="max-w-full max-h-full object-contain rounded-xl select-none" />
-                  </button>
-                  <button
-                    type="button"
-                    class="delete-custom-sticker-btn absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-[11px] shadow-sm hover:scale-110 active:scale-90 transition cursor-pointer"
-                    data-sticker-id="${escapeAttr(stk.id)}"
-                    title="حذف الملصق"
-                  >
-                    <i class="fa-solid fa-xmark"></i>
-                  </button>
-                </div>
-              `;
-                  }
-                )
-                .join('')}
-
-            </div>
-
-            <!-- Helpful Warm Note if No Stickers Yet -->
-            ${
-              allStickers.length === 0
-                ? `
-                <div class="mt-4 p-3 rounded-2xl bg-white/70 dark:bg-[#27201B]/70 border border-brand-peachBorder/60 dark:border-warm-darkBorder text-center">
-                  <p class="text-xs font-bold text-warm-textSec dark:text-[#D1C7BD] font-baloo m-0">
-                    حوّل صور أليفك إلى ملصقات مخصصة محفوظة في حسابك عبر زر «إنشاء ملصق» أو «استيراد ملصقات».
-                  </p>
-                </div>
-                `
-                : filteredStickers.length === 0
-                ? `
-                <div class="mt-4 p-3 rounded-2xl bg-white/70 dark:bg-[#27201B]/70 border border-brand-peachBorder/60 dark:border-warm-darkBorder text-center">
-                  <p class="text-xs font-bold text-warm-textSec dark:text-[#D1C7BD] font-baloo m-0">
-                    لا توجد ملصقات مطابقة للبحث.
-                  </p>
-                </div>
-                `
-                : ''
-            }
-
-          </div>
-
-          <!-- 3. Bottom Pack Navigation Bar -->
-          <div class="shrink-0 px-4 py-1.5 bg-[#FFF9E9] dark:bg-[#231C17] border-t border-brand-peachBorder/60 dark:border-warm-darkBorder flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <button type="button" class="text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90" title="الأخيرة">
-                <i class="fa-regular fa-clock"></i>
-              </button>
-              <button type="button" class="text-warm-textSec dark:text-[#A89F91] hover:text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-sm cursor-pointer active:scale-90" title="المفضلة">
-                <i class="fa-regular fa-star"></i>
-              </button>
-              <button type="button" class="relative text-brand-orange transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-base cursor-pointer active:scale-90" title="ملصقات مياو">
-                <i class="fa-solid fa-paw"></i>
-                <span class="absolute bottom-0.5 inset-x-0 mx-auto w-3.5 h-0.5 bg-brand-orange rounded-full"></span>
-              </button>
-            </div>
-
-            <button
-              id="add-sticker-pack-btn"
-              type="button"
-              class="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange hover:bg-brand-orange hover:text-white flex items-center justify-center text-sm transition active:scale-90 cursor-pointer"
-              title="إضافة ملصق جديد من صورة"
-            >
-              <i class="fa-solid fa-plus"></i>
-            </button>
-          </div>
-
+          ${renderStickersDrawerInnerHtml()}
         </div>
-          `;
-        })()}
 
         <!-- Floating Bubble Composer Bar -->
         <div class="pointer-events-auto bg-[#FFF9E9]/95 dark:bg-[#27201B]/95 backdrop-blur-md border-2 border-brand-peachBorder dark:border-warm-darkBorder rounded-[34px] p-2 shadow-nav flex items-center gap-2">
-          <!-- Attachment Button -->
           <button
             id="chat-attachment-btn"
             type="button"
@@ -1489,7 +2022,6 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             <i class="fa-solid fa-paperclip"></i>
           </button>
 
-          <!-- Interactive Stickers Toggle Button (Square Folded-Corner Cat Sticker Icon) -->
           <button
             id="chat-stickers-btn"
             type="button"
@@ -1508,115 +2040,31 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             </svg>
           </button>
 
-          <!-- Floating Pill Input Field -->
           <div class="flex-1 min-w-0 min-h-[46px] relative flex items-center bg-white dark:bg-[#1E1713] border-2 border-brand-peachBorder/90 dark:border-warm-darkBorder rounded-full px-4 py-1 shadow-sm focus-within:border-brand-orange transition-colors">
             <input
               type="text"
               id="chat-message-input"
+              value="${escapeAttr(state.getChatDraft(conv.id))}"
               placeholder="اكتب رسالة..."
               class="w-full min-w-0 bg-transparent border-none py-1 text-[15px] sm:text-base font-bold text-brand-dark dark:text-white placeholder-brand-subtleGray dark:placeholder-[#A89F91] focus:outline-none font-baloo"
               autocomplete="off"
             />
           </div>
 
-          <!-- Dynamic Action Button: Mic or Send -->
           <button
             id="chat-action-btn"
             class="w-11 h-11 rounded-full bg-brand-orange text-white flex items-center justify-center hover:bg-brand-orangeHover active:scale-90 transition-all shadow-soft cursor-pointer shrink-0 font-baloo"
             type="button"
             aria-label="تسجيل صوتي أو إرسال"
-            title="تسجيل صوتي"
+            title="${state.getChatDraft(conv.id).trim() ? 'إرسال' : 'تسجيل صوتي'}"
           >
-            <i id="chat-action-icon" class="fa-solid fa-microphone text-lg"></i>
+            <i id="chat-action-icon" class="fa-solid ${state.getChatDraft(conv.id).trim() ? 'fa-paper-plane' : 'fa-microphone'} text-lg"></i>
           </button>
         </div>
       </footer>
 
-      ${
-        pendingChatAttachment
-          ? `
-          <div id="chat-media-preview-modal" class="fixed inset-0 z-[92] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
-            <div class="bg-[#FFFDF8] dark:bg-[#27201B] w-full max-w-md rounded-t-[30px] sm:rounded-[28px] border-2 border-brand-peachBorder dark:border-warm-darkBorder p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl space-y-3.5 animate-slide-up">
-              <div class="flex items-center justify-between gap-2 pb-2 border-b border-brand-peachBorder/60 dark:border-warm-darkBorder">
-                <h3 class="text-base font-black text-brand-dark dark:text-white font-baloo m-0">معاينة المرفق قبل الإرسال</h3>
-                <button
-                  id="cancel-chat-media-preview-btn"
-                  type="button"
-                  aria-label="إلغاء إرسال المرفق"
-                  class="w-9 h-9 rounded-full bg-black/5 dark:bg-white/10 text-brand-dark dark:text-white hover:bg-red-500 hover:text-white flex items-center justify-center transition cursor-pointer"
-                >
-                  <i class="fa-solid fa-xmark"></i>
-                </button>
-              </div>
-
-              ${
-                pendingChatAttachment.type === 'image'
-                  ? `
-                  <div class="rounded-2xl overflow-hidden bg-black/5 dark:bg-black/30 border border-brand-peachBorder/60 dark:border-warm-darkBorder flex items-center justify-center max-h-[46dvh]">
-                    <img src="${escapeAttr(sanitizeImageSrc(pendingChatAttachment.fileUrl, SAFE_FALLBACK_PET_SVG))}" alt="${escapeAttr(pendingChatAttachment.fileName)}" class="max-w-full max-h-[46dvh] object-contain" />
-                  </div>
-                  `
-                  : `
-                  <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-white dark:bg-[#1E1713] border border-brand-peachBorder dark:border-warm-darkBorder">
-                    <div class="w-11 h-11 rounded-xl bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
-                      <i class="fa-solid fa-file-lines text-xl"></i>
-                    </div>
-                    <div class="min-w-0 flex-1 text-right">
-                      <p class="text-sm font-black text-brand-dark dark:text-white truncate m-0 font-baloo">${escapeHtml(pendingChatAttachment.fileName)}</p>
-                      <span class="text-xs font-bold text-brand-subtleGray dark:text-[#A89F91]">${escapeHtml(pendingChatAttachment.fileSize)}</span>
-                    </div>
-                  </div>
-                  `
-              }
-
-              <input
-                id="chat-media-caption-input"
-                type="text"
-                placeholder="أضف تعليقاً اختيارياً..."
-                class="w-full h-11 px-4 rounded-2xl bg-white dark:bg-[#1E1713] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-sm font-bold text-brand-dark dark:text-white placeholder-brand-subtleGray focus:outline-none focus:border-brand-orange font-baloo"
-                autocomplete="off"
-              />
-
-              <div class="grid grid-cols-2 gap-2.5 pt-1">
-                <button
-                  id="cancel-chat-media-secondary-btn"
-                  type="button"
-                  class="h-11 rounded-full bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-white font-black text-sm hover:bg-brand-peachBorder/20 transition active:scale-95 cursor-pointer font-baloo"
-                >
-                  إلغاء
-                </button>
-                <button
-                  id="confirm-send-chat-media-btn"
-                  type="button"
-                  class="h-11 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white font-black text-sm shadow-soft flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer font-baloo"
-                >
-                  <span>إرسال</span>
-                  <i class="fa-solid fa-paper-plane text-xs"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-          `
-          : ''
-      }
-
-      ${
-        previewChatImageUrl
-          ? `
-          <div id="chat-image-lightbox" class="fixed inset-0 z-[95] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-            <button
-              id="close-chat-image-lightbox-btn"
-              type="button"
-              aria-label="إغلاق الصورة"
-              class="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 w-11 h-11 rounded-full bg-white/15 hover:bg-brand-orange text-white flex items-center justify-center text-lg cursor-pointer transition active:scale-90"
-            >
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-            <img src="${escapeAttr(sanitizeImageSrc(previewChatImageUrl, SAFE_FALLBACK_PET_SVG))}" alt="معاينة الصورة" class="max-w-full max-h-[85dvh] rounded-2xl object-contain shadow-2xl" />
-          </div>
-          `
-          : ''
-      }
+      <div id="chat-media-preview-slot">${renderMediaPreviewModalHtml()}</div>
+      <div id="chat-image-lightbox-slot">${renderImageLightboxHtml()}</div>
 
     </div>
   `;
@@ -1836,6 +2284,639 @@ function refreshChatListInPlace(): void {
   }
 }
 
+function updateReplyPreviewBarInPlace(): void {
+  const slot = document.getElementById('chat-reply-preview-slot');
+  if (!slot) return;
+  slot.innerHTML = renderReplyPreviewBarHtml();
+  const cancelBtn = document.getElementById('chat-cancel-reply-btn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      activeReplyTarget = null;
+      updateReplyPreviewBarInPlace();
+    });
+  }
+}
+
+function updateMediaPreviewSlotInPlace(): void {
+  const slot = document.getElementById('chat-media-preview-slot');
+  if (!slot) return;
+  slot.innerHTML = renderMediaPreviewModalHtml();
+  attachMediaPreviewModalEvents();
+}
+
+function updateImageLightboxSlotInPlace(): void {
+  const slot = document.getElementById('chat-image-lightbox-slot');
+  if (!slot) return;
+  slot.innerHTML = renderImageLightboxHtml();
+  attachImageLightboxEvents();
+}
+
+function refreshStickersDrawerInPlace(): void {
+  const drawer = document.getElementById('chat-stickers-drawer');
+  if (!drawer) return;
+  const searchFocused = document.activeElement?.id === 'sticker-search-input';
+  const searchInputPrev = document.getElementById('sticker-search-input') as HTMLInputElement | null;
+  const cursorPos = searchInputPrev?.selectionStart ?? stickerSearchQuery.length;
+
+  drawer.innerHTML = renderStickersDrawerInnerHtml();
+  attachStickersDrawerInnerEvents();
+
+  if (searchFocused) {
+    const newInput = document.getElementById('sticker-search-input') as HTMLInputElement | null;
+    if (newInput) {
+      newInput.focus();
+      try {
+        newInput.setSelectionRange(cursorPos, cursorPos);
+      } catch {
+        // ignore selection error
+      }
+    }
+  }
+}
+
+function scrollChatToBottom(smooth = false): void {
+  const container = document.getElementById('chat-messages-container');
+  if (!container) return;
+  if (typeof container.scrollTo === 'function') {
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto',
+    });
+  } else {
+    container.scrollTop = container.scrollHeight;
+  }
+  userIsNearBottom = true;
+  firstUnreadMsgId = null;
+  document.getElementById('chat-scroll-to-bottom-btn')?.classList.add('hidden');
+  document.getElementById('chat-scroll-to-bottom-btn')?.classList.remove('flex');
+}
+
+function copyTextToClipboard(text: string): void {
+  if (!text) return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => showMobileToast('تم نسخ نص الرسالة', 'success'))
+      .catch(() => {
+        copyTextFallback(text);
+        showMobileToast('تم نسخ نص الرسالة', 'success');
+      });
+  } else {
+    copyTextFallback(text);
+    showMobileToast('تم نسخ نص الرسالة', 'success');
+  }
+}
+
+function attachChatMessagesEvents(scope: ParentNode, conv: Conversation): void {
+  // Audio playback buttons
+  scope.querySelectorAll<HTMLButtonElement>('.play-audio-msg-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const msgId = btn.getAttribute('data-msg-id');
+      let audioUrl = sanitizeAudioSrc(btn.getAttribute('data-audio-url'));
+      if (!audioUrl && msgId) {
+        const refreshed = await state.ensureMessageMediaUrl(conv.id, msgId);
+        audioUrl = sanitizeAudioSrc(refreshed);
+      }
+
+      if (currentlyPlayingAudio && currentPlayingMsgId === msgId) {
+        currentlyPlayingAudio.pause();
+        currentlyPlayingAudio = null;
+        currentPlayingMsgId = null;
+        btn.innerHTML = '<i class="fa-solid fa-play text-sm ml-0.5"></i>';
+        return;
+      }
+
+      if (currentlyPlayingAudio) {
+        currentlyPlayingAudio.pause();
+        const prevBtn = document.querySelector(`[data-msg-id="${currentPlayingMsgId}"] .play-audio-msg-btn`);
+        if (prevBtn) prevBtn.innerHTML = '<i class="fa-solid fa-play text-sm ml-0.5"></i>';
+      }
+
+      if (audioUrl) {
+        const audio = new Audio(audioUrl);
+        currentlyPlayingAudio = audio;
+        currentPlayingMsgId = msgId;
+        btn.innerHTML = '<i class="fa-solid fa-pause text-sm"></i>';
+
+        void audio.play();
+        audio.onended = () => {
+          btn.innerHTML = '<i class="fa-solid fa-play text-sm ml-0.5"></i>';
+          currentlyPlayingAudio = null;
+          currentPlayingMsgId = null;
+        };
+      } else {
+        showMobileToast('المقطع الصوتي غير متاح للتشغيل حاليًا.', 'default');
+      }
+    });
+  });
+
+  // Image click -> Lightbox + signed URL fallback on broken image
+  scope.querySelectorAll<HTMLImageElement>('.chat-msg-image-preview').forEach((img) => {
+    img.addEventListener('click', () => {
+      const url = sanitizeImageSrc(img.getAttribute('data-chat-image-preview') || img.src, '');
+      const msgId = img.getAttribute('data-chat-image-msg-id');
+      if (url) {
+        previewChatImageUrl = url;
+        previewChatImageMsgId = msgId;
+        updateImageLightboxSlotInPlace();
+      }
+    });
+    img.addEventListener('error', () => {
+      if (img.dataset.refreshedUrl === '1') return;
+      img.dataset.refreshedUrl = '1';
+      const msgId = img.getAttribute('data-chat-image-msg-id');
+      if (msgId) {
+        void state.ensureMessageMediaUrl(conv.id, msgId).then((signed) => {
+          if (signed) {
+            img.src = sanitizeImageSrc(signed, SAFE_FALLBACK_PET_SVG);
+            img.setAttribute('data-chat-image-preview', signed);
+          }
+        });
+      }
+    });
+  });
+
+  // Retry failed message
+  scope.querySelectorAll<HTMLButtonElement>('.chat-retry-msg-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const msgId = btn.getAttribute('data-retry-msg-id');
+      if (msgId) {
+        void state.retryFailedMessage(conv.id, msgId);
+      }
+    });
+  });
+
+  // Reply button on message
+  scope.querySelectorAll<HTMLButtonElement>('.chat-msg-reply-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const msgId = btn.getAttribute('data-reply-msg-id');
+      const targetMsg = conv.messages.find((m) => m.id === msgId);
+      if (!targetMsg || targetMsg.deletedAt) return;
+      activeReplyTarget = {
+        messageId: targetMsg.id,
+        senderName: targetMsg.isFromUser ? 'أنت' : conv.otherUserName,
+        text: getMessagePreviewSnippet(targetMsg),
+        type: targetMsg.type || 'text',
+      };
+      updateReplyPreviewBarInPlace();
+      document.getElementById('chat-message-input')?.focus();
+    });
+  });
+
+  // Copy button on message
+  scope.querySelectorAll<HTMLButtonElement>('.chat-msg-copy-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const msgId = btn.getAttribute('data-copy-msg-id');
+      const targetMsg = conv.messages.find((m) => m.id === msgId);
+      const text = targetMsg?.text?.trim() || '';
+      if (text) copyTextToClipboard(text);
+    });
+  });
+
+  // Soft-delete own message
+  scope.querySelectorAll<HTMLButtonElement>('.chat-msg-delete-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const msgId = btn.getAttribute('data-delete-msg-id');
+      if (msgId) {
+        void state.softDeleteMessage(conv.id, msgId);
+      }
+    });
+  });
+
+  // Jump to quoted message
+  scope.querySelectorAll<HTMLButtonElement>('.chat-reply-quote-jump').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const targetId = btn.getAttribute('data-jump-reply-id');
+      if (!targetId) return;
+      const targetRow = document.querySelector<HTMLElement>(`#chat-messages-list [data-msg-id="${targetId}"]`);
+      if (targetRow) {
+        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetRow.classList.add('meow-chat-search-hit');
+        window.setTimeout(() => targetRow.classList.remove('meow-chat-search-hit'), 1400);
+      }
+    });
+  });
+
+  // Long-press on message copies text
+  scope.querySelectorAll<HTMLElement>('#chat-messages-list > [data-msg-id]').forEach((row) => {
+    attachLongPress(row, () => {
+      const msgId = row.getAttribute('data-msg-id');
+      const targetMsg = conv.messages.find((m) => m.id === msgId);
+      if (targetMsg?.deletedAt) return;
+      const textToCopy = targetMsg?.text?.trim() || '';
+      if (!textToCopy) {
+        showMobileToast('يمكن نسخ الرسائل النصية فقط', 'default');
+        return;
+      }
+      copyTextToClipboard(textToCopy);
+    });
+  });
+}
+
+function attachMediaPreviewModalEvents(): void {
+  const previewModal = document.getElementById('chat-media-preview-modal');
+  const cancelMediaBtn = document.getElementById('cancel-chat-media-preview-btn');
+  const cancelMediaSecondaryBtn = document.getElementById('cancel-chat-media-secondary-btn');
+  const confirmSendMediaBtn = document.getElementById('confirm-send-chat-media-btn');
+  const mediaCaptionInput = document.getElementById('chat-media-caption-input') as HTMLInputElement | null;
+  const filePicker = document.getElementById('chat-file-picker') as HTMLInputElement | null;
+
+  const dismissPendingMedia = () => {
+    if (pendingChatAttachment?.isSending) return;
+    pendingChatAttachment = null;
+    if (filePicker) filePicker.value = '';
+    updateMediaPreviewSlotInPlace();
+  };
+
+  mediaCaptionInput?.addEventListener('input', () => {
+    if (pendingChatAttachment) {
+      pendingChatAttachment.caption = mediaCaptionInput.value;
+    }
+  });
+
+  cancelMediaBtn?.addEventListener('click', dismissPendingMedia);
+  cancelMediaSecondaryBtn?.addEventListener('click', dismissPendingMedia);
+  previewModal?.addEventListener('click', (e) => {
+    if (e.target === previewModal) {
+      dismissPendingMedia();
+    }
+  });
+
+  if (confirmSendMediaBtn) {
+    const sendPendingMedia = async () => {
+      if (!pendingChatAttachment || pendingChatAttachment.isSending) return;
+      const conv = state.getActiveConversation();
+      if (!conv) return;
+
+      const caption = mediaCaptionInput?.value.trim() || '';
+      pendingChatAttachment.caption = mediaCaptionInput?.value || '';
+
+      if (pendingChatAttachment.type === 'image' && pendingChatAttachment.pendingFile) {
+        pendingChatAttachment.isSending = true;
+        pendingChatAttachment.errorMessage = undefined;
+        updateMediaPreviewSlotInPlace();
+
+        const res = await state.sendChatImageAttachmentAsync({
+          conversationId: conv.id,
+          file: pendingChatAttachment.pendingFile,
+          caption,
+          replyTo: activeReplyTarget ?? undefined,
+        });
+
+        if (!res.success) {
+          if (pendingChatAttachment) {
+            pendingChatAttachment.isSending = false;
+            pendingChatAttachment.errorMessage =
+              res.errorMessage || 'تعذر رفع وإرسال الصورة، جرب تاني.';
+          }
+          updateMediaPreviewSlotInPlace();
+          return;
+        }
+
+        pendingChatAttachment = null;
+        activeReplyTarget = null;
+        justSentMessageFlag = true;
+        updateReplyPreviewBarInPlace();
+        updateMediaPreviewSlotInPlace();
+        setTimeout(() => scrollChatToBottom(), 60);
+        return;
+      }
+
+      const attachment = pendingChatAttachment;
+      pendingChatAttachment = null;
+      state.sendMessage(
+        {
+          type: attachment.type,
+          fileUrl: attachment.fileUrl,
+          fileName: attachment.fileName,
+          fileSize: attachment.fileSize,
+          text: caption || undefined,
+        },
+        activeReplyTarget ?? undefined
+      );
+      activeReplyTarget = null;
+      justSentMessageFlag = true;
+      updateReplyPreviewBarInPlace();
+      updateMediaPreviewSlotInPlace();
+      setTimeout(() => scrollChatToBottom(), 60);
+    };
+
+    confirmSendMediaBtn.addEventListener('click', () => {
+      void sendPendingMedia();
+    });
+    mediaCaptionInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void sendPendingMedia();
+      }
+    });
+  }
+}
+
+function attachImageLightboxEvents(): void {
+  const lightbox = document.getElementById('chat-image-lightbox');
+  const closeLightboxBtn = document.getElementById('close-chat-image-lightbox-btn');
+  const downloadBtn = document.getElementById('chat-lightbox-download-btn');
+  const lightboxImg = document.getElementById('chat-lightbox-img') as HTMLImageElement | null;
+
+  const closeLightbox = () => {
+    previewChatImageUrl = null;
+    previewChatImageMsgId = null;
+    updateImageLightboxSlotInPlace();
+  };
+
+  closeLightboxBtn?.addEventListener('click', closeLightbox);
+  lightbox?.addEventListener('click', (e) => {
+    if (e.target === lightbox) {
+      closeLightbox();
+    }
+  });
+
+  if (lightboxImg && previewChatImageMsgId) {
+    const conv = state.getActiveConversation();
+    const msgId = previewChatImageMsgId;
+    lightboxImg.addEventListener('error', () => {
+      if (!conv || lightboxImg.dataset.refreshedUrl === '1') return;
+      lightboxImg.dataset.refreshedUrl = '1';
+      void state.ensureMessageMediaUrl(conv.id, msgId).then((signed) => {
+        if (signed) {
+          previewChatImageUrl = signed;
+          lightboxImg.src = sanitizeImageSrc(signed, SAFE_FALLBACK_PET_SVG);
+        }
+      });
+    });
+  }
+
+  downloadBtn?.addEventListener('click', async () => {
+    const url = previewChatImageUrl;
+    if (!url) return;
+    try {
+      const a = document.createElement('a');
+      if (url.startsWith('data:') || url.startsWith('blob:')) {
+        a.href = url;
+        a.download = `meow-chat-${Date.now()}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        showMobileToast('تم حفظ الصورة', 'success');
+        return;
+      }
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      a.href = objUrl;
+      a.download = `meow-chat-${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objUrl), 2500);
+      showMobileToast('تم حفظ الصورة', 'success');
+    } catch {
+      const a = document.createElement('a');
+      a.href = sanitizeUrl(url, '');
+      a.download = `meow-chat-${Date.now()}.jpg`;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  });
+}
+
+function attachStickersDrawerInnerEvents(): void {
+  const stickersBtn = document.getElementById('chat-stickers-btn');
+  const stickersDrawer = document.getElementById('chat-stickers-drawer');
+  const closeStickersBtn = document.getElementById('close-stickers-btn');
+  const createStickerTile = document.getElementById('create-sticker-tile');
+  const addStickerPackBtn = document.getElementById('add-sticker-pack-btn');
+  const importStickersBtn = document.getElementById('import-stickers-btn');
+  const stickerSearchBtn = document.getElementById('sticker-search-btn');
+  const stickerSearchInput = document.getElementById('sticker-search-input') as HTMLInputElement | null;
+  const stickerUploadInput = document.getElementById('sticker-upload-input') as HTMLInputElement | null;
+
+  if (closeStickersBtn && stickersDrawer && stickersBtn) {
+    const closeStickers = () => {
+      isStickersOpen = false;
+      stickersDrawer.classList.remove('flex');
+      stickersDrawer.classList.add('hidden');
+      stickersBtn.classList.remove('border-brand-orange', 'text-brand-orange', 'bg-brand-orange/15', 'shadow-soft');
+      stickersBtn.classList.add('text-warm-textSec');
+    };
+    closeStickersBtn.addEventListener('click', closeStickers);
+
+    attachSheetDragToDismiss(stickersDrawer, {
+      handleSelector: '#chat-stickers-drag-handle',
+      scrollContainerSelector: '#chat-stickers-scroll',
+      onClose: closeStickers,
+    });
+  }
+
+  stickerSearchBtn?.addEventListener('click', () => {
+    isStickerSearchOpen = !isStickerSearchOpen;
+    if (!isStickerSearchOpen) stickerSearchQuery = '';
+    isStickersOpen = true;
+    refreshStickersDrawerInPlace();
+    if (isStickerSearchOpen) {
+      document.getElementById('sticker-search-input')?.focus();
+    }
+  });
+
+  stickerSearchInput?.addEventListener('input', () => {
+    stickerSearchQuery = stickerSearchInput.value;
+    isStickersOpen = true;
+    refreshStickersDrawerInPlace();
+  });
+
+  const triggerStickerPicker = () => {
+    stickerUploadInput?.click();
+  };
+  createStickerTile?.addEventListener('click', triggerStickerPicker);
+  addStickerPackBtn?.addEventListener('click', triggerStickerPicker);
+  importStickersBtn?.addEventListener('click', triggerStickerPicker);
+
+  document.querySelectorAll<HTMLButtonElement>('.sticker-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const nextTab = btn.getAttribute('data-sticker-tab') as
+        | 'all'
+        | 'recent'
+        | 'favorites'
+        | 'custom'
+        | null;
+      if (!nextTab || nextTab === activeStickerTab) return;
+      activeStickerTab = nextTab;
+      isStickersOpen = true;
+      refreshStickersDrawerInPlace();
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.sticker-fav-toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const stickerId = btn.getAttribute('data-sticker-id');
+      if (!stickerId) return;
+      const nowFav = state.toggleFavoriteSticker(stickerId);
+      showMobileToast(nowFav ? 'انضاف للمفضلة ⭐' : 'اتشال من المفضلة', 'default', 1300);
+      refreshStickersDrawerInPlace();
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.custom-sticker-send-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const stickerId = btn.getAttribute('data-sticker-id') || '';
+      const stickerUrl = btn.getAttribute('data-sticker-url') || '';
+      const stickerTitle = btn.getAttribute('data-sticker-title') || 'ملصق مخصص';
+      if (stickerId) state.recordRecentSticker(stickerId);
+
+      state.sendMessage(
+        {
+          type: 'sticker',
+          stickerUrl,
+          stickerTitle,
+        },
+        activeReplyTarget ?? undefined
+      );
+      activeReplyTarget = null;
+      justSentMessageFlag = true;
+      updateReplyPreviewBarInPlace();
+
+      isStickersOpen = false;
+      if (stickersDrawer) {
+        stickersDrawer.classList.remove('flex');
+        stickersDrawer.classList.add('hidden');
+      }
+      if (stickersBtn) {
+        stickersBtn.classList.remove('border-brand-orange', 'text-brand-orange', 'bg-brand-orange/15', 'shadow-soft');
+        stickersBtn.classList.add('text-warm-textSec');
+      }
+
+      setTimeout(() => scrollChatToBottom(), 80);
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.delete-custom-sticker-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-sticker-id');
+      if (id) {
+        isStickersOpen = true;
+        await state.removeCustomSticker(id);
+        refreshStickersDrawerInPlace();
+        showMobileToast('تم حذف الملصق', 'default', 1400);
+      }
+    });
+  });
+}
+
+export function patchActiveChatRoomInPlace(): boolean {
+  const conv = state.getActiveConversation();
+  if (!conv) return false;
+  const roomEl = document.getElementById('active-chat-room');
+  if (!roomEl || roomEl.getAttribute('data-conv-id') !== conv.id) {
+    return false;
+  }
+
+  const scrollContainer = document.getElementById('chat-messages-container');
+  const listEl = document.getElementById('chat-messages-list');
+  if (!scrollContainer || !listEl) return false;
+
+  const prevScrollTop = scrollContainer.scrollTop;
+  const distFromBottom =
+    scrollContainer.scrollHeight - prevScrollTop - scrollContainer.clientHeight;
+  const wasNearBottom = distFromBottom <= 90 || userIsNearBottom;
+
+  const prevMsgCount = knownConvMsgCountMap.get(conv.id) ?? conv.messages.length;
+  if (conv.messages.length > prevMsgCount && !wasNearBottom && !firstUnreadMsgId) {
+    const newlyAdded = conv.messages.slice(prevMsgCount);
+    const firstIncoming = newlyAdded.find(
+      (m) => !m.isFromUser && m.senderId !== 'system'
+    );
+    if (firstIncoming) {
+      firstUnreadMsgId = firstIncoming.id;
+    }
+  }
+  knownConvMsgCountMap.set(conv.id, conv.messages.length);
+
+  // Update header metadata + mute button state in-place
+  const resolvedPet = state.getPetForConversation(conv);
+  const isGroupConv =
+    conv.adoptionType === 'group' || resolvedPet?.adoptionType === 'group';
+  const groupCount =
+    conv.groupCount ||
+    resolvedPet?.groupCount ||
+    conv.groupMembers?.length ||
+    resolvedPet?.groupMembers?.length ||
+    2;
+
+  const subtitleEl = document.getElementById('chat-header-subtitle');
+  if (subtitleEl) {
+    subtitleEl.innerHTML = renderChatHeaderSubtitle(conv, isGroupConv, groupCount);
+  }
+  const mutedBadge = document.getElementById('chat-header-muted-badge');
+  if (mutedBadge) {
+    mutedBadge.className = `${
+      conv.isMuted ? 'inline-flex' : 'hidden'
+    } px-1.5 py-0.5 rounded-full bg-black/10 dark:bg-white/10 text-brand-subtleGray text-[10px] shrink-0`;
+  }
+  const muteBtn = document.getElementById('chat-mute-toggle-btn');
+  if (muteBtn) {
+    muteBtn.setAttribute('aria-label', conv.isMuted ? 'إلغاء كتم المحادثة' : 'كتم المحادثة');
+    muteBtn.setAttribute('title', conv.isMuted ? 'إلغاء الكتم' : 'كتم الإشعارات');
+    muteBtn.className = `w-9 h-9 rounded-full ${
+      conv.isMuted
+        ? 'bg-brand-orange/15 text-brand-orange'
+        : 'bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-dark dark:text-white'
+    } flex items-center justify-center text-sm transition cursor-pointer active:scale-90`;
+    muteBtn.innerHTML = `<i class="fa-solid ${conv.isMuted ? 'fa-bell-slash' : 'fa-bell'}"></i>`;
+  }
+
+  // Update search hit counter if open
+  if (inRoomSearchOpen) {
+    const countEl = document.getElementById('chat-inroom-search-count');
+    const q = inRoomSearchQuery.trim().toLowerCase();
+    if (countEl) {
+      if (q) {
+        const hits = conv.messages.filter(
+          (m) =>
+            m.senderId !== 'system' &&
+            !m.deletedAt &&
+            ((m.text || '').toLowerCase().includes(q) ||
+              (m.fileName || '').toLowerCase().includes(q) ||
+              (m.stickerTitle || '').toLowerCase().includes(q))
+        ).length;
+        countEl.textContent = String(hits);
+        countEl.className =
+          'text-[11px] font-black text-brand-orange px-2 py-1 rounded-full bg-brand-orange/10 shrink-0';
+      } else {
+        countEl.className = 'hidden';
+      }
+    }
+  }
+
+  // Patch ONLY the messages list container (preserving #chat-message-input focus/value & drawers)
+  listEl.innerHTML = renderChatMessagesListHtml(conv);
+  attachChatMessagesEvents(listEl, conv);
+
+  if (justSentMessageFlag || wasNearBottom) {
+    scrollChatToBottom();
+    justSentMessageFlag = false;
+  } else {
+    scrollContainer.scrollTop = prevScrollTop;
+    const jumpBtn = document.getElementById('chat-scroll-to-bottom-btn');
+    if (jumpBtn) {
+      jumpBtn.classList.remove('hidden');
+      jumpBtn.classList.add('flex');
+    }
+  }
+
+  return true;
+}
+
 export function attachChatEvents(): void {
   // Sub-tabs & category pills
   const chatsSubTabBtn = document.getElementById('subtab-chats-btn');
@@ -1895,30 +2976,13 @@ export function attachChatEvents(): void {
 
   attachChatListBodyEvents(document);
 
-  // Long-press on text message bubble copies text
-  const messageRows = document.querySelectorAll<HTMLElement>('#chat-messages-container > [data-msg-id]');
-  messageRows.forEach((row) => {
-    attachLongPress(row, () => {
-      const pEl = row.querySelector('p');
-      const textToCopy = pEl?.textContent?.trim() || '';
-      if (!textToCopy) {
-        showMobileToast('يمكن نسخ الرسائل النصية فقط', 'default');
-        return;
-      }
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard
-          .writeText(textToCopy)
-          .then(() => showMobileToast('تم نسخ نص الرسالة', 'success'))
-          .catch(() => {
-            copyTextFallback(textToCopy);
-            showMobileToast('تم نسخ نص الرسالة', 'success');
-          });
-      } else {
-        copyTextFallback(textToCopy);
-        showMobileToast('تم نسخ نص الرسالة', 'success');
-      }
-    });
-  });
+  if (!currentActiveConv) return;
+
+  // Bind message-level interactions inside #chat-messages-list
+  const messagesListEl = document.getElementById('chat-messages-list');
+  if (messagesListEl) {
+    attachChatMessagesEvents(messagesListEl, currentActiveConv);
+  }
 
   // Back button in chat room
   const backBtn = document.getElementById('back-to-chats-btn');
@@ -1927,13 +2991,71 @@ export function attachChatEvents(): void {
       if (currentlyPlayingAudio) {
         currentlyPlayingAudio.pause();
         currentlyPlayingAudio = null;
+        currentPlayingMsgId = null;
       }
       isGroupDetailsExpanded = false;
       previewChatImageUrl = null;
+      previewChatImageMsgId = null;
       pendingChatAttachment = null;
+      activeReplyTarget = null;
+      inRoomSearchOpen = false;
+      inRoomSearchQuery = '';
+      firstUnreadMsgId = null;
       state.setActiveConversationId(null);
     });
   }
+
+  // Mute / unmute conversation toggle
+  const muteToggleBtn = document.getElementById('chat-mute-toggle-btn');
+  if (muteToggleBtn) {
+    muteToggleBtn.addEventListener('click', () => {
+      const conv = state.getActiveConversation();
+      if (!conv) return;
+      const nowMuted = state.toggleMuteConversation(conv.id);
+      showMobileToast(nowMuted ? 'تم كتم إشعارات المحادثة' : 'تم إلغاء كتم المحادثة', 'default', 1600);
+    });
+  }
+
+  // In-room search bar toggle & live filtering
+  const searchToggleBtn = document.getElementById('chat-inroom-search-toggle-btn');
+  const searchBar = document.getElementById('chat-inroom-search-bar');
+  const searchInput = document.getElementById('chat-inroom-search-input') as HTMLInputElement | null;
+  const searchCloseBtn = document.getElementById('chat-inroom-search-close-btn');
+
+  if (searchToggleBtn && searchBar) {
+    searchToggleBtn.addEventListener('click', () => {
+      inRoomSearchOpen = !inRoomSearchOpen;
+      if (inRoomSearchOpen) {
+        searchBar.classList.remove('hidden');
+        searchBar.classList.add('flex');
+        searchToggleBtn.classList.add('bg-brand-orange', 'text-white');
+        searchToggleBtn.classList.remove('bg-transparent');
+        searchInput?.focus();
+      } else {
+        inRoomSearchQuery = '';
+        if (searchInput) searchInput.value = '';
+        searchBar.classList.remove('flex');
+        searchBar.classList.add('hidden');
+        searchToggleBtn.classList.remove('bg-brand-orange', 'text-white');
+        searchToggleBtn.classList.add('bg-transparent');
+      }
+      patchActiveChatRoomInPlace();
+    });
+  }
+  searchInput?.addEventListener('input', () => {
+    inRoomSearchQuery = searchInput.value;
+    patchActiveChatRoomInPlace();
+  });
+  searchCloseBtn?.addEventListener('click', () => {
+    inRoomSearchOpen = false;
+    inRoomSearchQuery = '';
+    if (searchInput) searchInput.value = '';
+    searchBar?.classList.remove('flex');
+    searchBar?.classList.add('hidden');
+    searchToggleBtn?.classList.remove('bg-brand-orange', 'text-white');
+    searchToggleBtn?.classList.add('bg-transparent');
+    patchActiveChatRoomInPlace();
+  });
 
   // Group adoption toggle & full pet profile inside active chat
   const toggleGroupDetailsBtn = document.getElementById('toggle-chat-group-details-btn');
@@ -1945,17 +3067,18 @@ export function attachChatEvents(): void {
     });
   }
 
-  const openChatPetBtn = document.getElementById('open-chat-pet-detail-btn');
-  if (openChatPetBtn) {
-    openChatPetBtn.addEventListener('click', () => {
-      const activeConv = state.getActiveConversation();
-      if (!activeConv) return;
-      const pet = state.getPetForConversation(activeConv);
-      if (pet) {
-        state.setSelectedPetForDetail(pet, null);
-      }
-    });
-  }
+  const openPetDetailHandler = () => {
+    const activeConv = state.getActiveConversation();
+    if (!activeConv) return;
+    const pet = state.getPetForConversation(activeConv);
+    if (pet) {
+      state.setSelectedPetForDetail(pet, null);
+    }
+  };
+  document.getElementById('open-chat-pet-detail-btn')?.addEventListener('click', openPetDetailHandler);
+  document.querySelectorAll<HTMLButtonElement>('.open-chat-group-full-btn').forEach((btn) => {
+    btn.addEventListener('click', openPetDetailHandler);
+  });
 
   document.querySelectorAll<HTMLButtonElement>('.open-chat-member-detail-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -1970,66 +3093,64 @@ export function attachChatEvents(): void {
     });
   });
 
-  // In-app image lightbox (replaces window.open)
-  const msgImagePreviews = document.querySelectorAll<HTMLImageElement>('.chat-msg-image-preview');
-  msgImagePreviews.forEach((img) => {
-    img.addEventListener('click', () => {
-      const url = sanitizeImageSrc(img.getAttribute('data-chat-image-preview'), '');
-      if (url) {
-        previewChatImageUrl = url;
-        const activeId = state.getActiveConversation()?.id || null;
-        state.setActiveConversationId(activeId);
-      }
-    });
+  // Reply bar cancel
+  document.getElementById('chat-cancel-reply-btn')?.addEventListener('click', () => {
+    activeReplyTarget = null;
+    updateReplyPreviewBarInPlace();
   });
 
-  const lightbox = document.getElementById('chat-image-lightbox');
-  const closeLightboxBtn = document.getElementById('close-chat-image-lightbox-btn');
-  if (closeLightboxBtn) {
-    closeLightboxBtn.addEventListener('click', () => {
-      previewChatImageUrl = null;
-      const activeId = state.getActiveConversation()?.id || null;
-      state.setActiveConversationId(activeId);
-    });
-  }
-  if (lightbox) {
-    lightbox.addEventListener('click', (e) => {
-      if (e.target === lightbox) {
-        previewChatImageUrl = null;
-        const activeId = state.getActiveConversation()?.id || null;
-        state.setActiveConversationId(activeId);
-      }
-    });
-  }
+  // Lightbox & Media Preview Modal bindings
+  attachImageLightboxEvents();
+  attachMediaPreviewModalEvents();
 
   // --- WHATSAPP-LIKE TOOLS: Text, File Picker, Voice Notes ---
-  const input = document.getElementById('chat-message-input') as HTMLInputElement;
+  const input = document.getElementById('chat-message-input') as HTMLInputElement | null;
   const actionBtn = document.getElementById('chat-action-btn');
   const actionIcon = document.getElementById('chat-action-icon');
-  const filePicker = document.getElementById('chat-file-picker') as HTMLInputElement;
+  const filePicker = document.getElementById('chat-file-picker') as HTMLInputElement | null;
   const attachmentBtn = document.getElementById('chat-attachment-btn');
   const recordingUiBar = document.getElementById('recording-ui-bar');
   const recordingTimerDisplay = document.getElementById('recording-live-timer');
   const cancelRecBtn = document.getElementById('cancel-recording-btn');
   const sendRecBtn = document.getElementById('send-recording-btn');
   const container = document.getElementById('chat-messages-container');
+  const jumpBottomBtn = document.getElementById('chat-scroll-to-bottom-btn');
 
-  // Auto scroll to bottom
-  const scrollToBottom = () => {
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
-  };
-  scrollToBottom();
+  scrollChatToBottom();
 
-  // Scroll into view on input focus (Keyboard behavior)
+  if (container) {
+    container.addEventListener(
+      'scroll',
+      () => {
+        const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+        userIsNearBottom = dist <= 90;
+        if (userIsNearBottom) {
+          firstUnreadMsgId = null;
+          jumpBottomBtn?.classList.add('hidden');
+          jumpBottomBtn?.classList.remove('flex');
+        } else {
+          jumpBottomBtn?.classList.remove('hidden');
+          jumpBottomBtn?.classList.add('flex');
+        }
+      },
+      { passive: true }
+    );
+  }
+
+  jumpBottomBtn?.addEventListener('click', () => {
+    scrollChatToBottom(true);
+  });
+
   if (input) {
     input.addEventListener('focus', () => {
-      setTimeout(scrollToBottom, 250);
+      setTimeout(() => {
+        if (userIsNearBottom) scrollChatToBottom();
+      }, 250);
     });
 
-    // Toggle between Mic and Paperplane send icon
     input.addEventListener('input', () => {
+      const convId = state.getActiveConversation()?.id;
+      if (convId) state.setChatDraft(convId, input.value);
       if (!actionIcon) return;
       if (input.value.trim().length > 0) {
         actionIcon.className = 'fa-solid fa-paper-plane text-lg';
@@ -2048,13 +3169,20 @@ export function attachChatEvents(): void {
     });
   }
 
-  // Send action or Start Audio Recording
   const handleSend = () => {
     if (input && input.value.trim()) {
-      state.sendMessage(input.value.trim());
+      const convId = state.getActiveConversation()?.id;
+      const textToSend = input.value.trim();
+      const replyToSend = activeReplyTarget ?? undefined;
       input.value = '';
+      if (convId) state.setChatDraft(convId, '');
+      activeReplyTarget = null;
+      justSentMessageFlag = true;
+      updateReplyPreviewBarInPlace();
       if (actionIcon) actionIcon.className = 'fa-solid fa-microphone text-lg';
-      setTimeout(scrollToBottom, 100);
+      actionBtn?.setAttribute('title', 'تسجيل صوتي');
+      state.sendMessage(textToSend, replyToSend);
+      setTimeout(() => scrollChatToBottom(), 60);
     }
   };
 
@@ -2063,7 +3191,6 @@ export function attachChatEvents(): void {
       if (input && input.value.trim().length > 0) {
         handleSend();
       } else {
-        // Start voice recording!
         startAudioRecording();
       }
     });
@@ -2107,6 +3234,7 @@ export function attachChatEvents(): void {
             fileUrl: safeUrl,
             fileName: file.name,
             fileSize: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+            pendingFile: file,
           };
         } else {
           pendingChatAttachment = {
@@ -2114,83 +3242,21 @@ export function attachChatEvents(): void {
             fileUrl: result,
             fileName: file.name,
             fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+            pendingFile: file,
           };
         }
         filePicker.value = '';
-        const activeId = state.getActiveConversation()?.id || null;
-        if (activeId) {
-          state.setActiveConversationId(activeId);
-        }
+        updateMediaPreviewSlotInPlace();
       };
 
       reader.readAsDataURL(file);
     });
   }
 
-  // Media preview modal actions (Cancel / Send with optional caption)
-  const previewModal = document.getElementById('chat-media-preview-modal');
-  const cancelMediaBtn = document.getElementById('cancel-chat-media-preview-btn');
-  const cancelMediaSecondaryBtn = document.getElementById('cancel-chat-media-secondary-btn');
-  const confirmSendMediaBtn = document.getElementById('confirm-send-chat-media-btn');
-  const mediaCaptionInput = document.getElementById('chat-media-caption-input') as HTMLInputElement | null;
-
-  const dismissPendingMedia = () => {
-    pendingChatAttachment = null;
-    if (filePicker) filePicker.value = '';
-    const activeId = state.getActiveConversation()?.id || null;
-    if (activeId) {
-      state.setActiveConversationId(activeId);
-    }
-  };
-
-  if (cancelMediaBtn) {
-    cancelMediaBtn.addEventListener('click', dismissPendingMedia);
-  }
-  if (cancelMediaSecondaryBtn) {
-    cancelMediaSecondaryBtn.addEventListener('click', dismissPendingMedia);
-  }
-  if (previewModal) {
-    previewModal.addEventListener('click', (e) => {
-      if (e.target === previewModal) {
-        dismissPendingMedia();
-      }
-    });
-  }
-  if (confirmSendMediaBtn) {
-    const sendPendingMedia = () => {
-      if (!pendingChatAttachment) return;
-      const caption = mediaCaptionInput?.value.trim() || '';
-      const attachment = pendingChatAttachment;
-      pendingChatAttachment = null;
-      state.sendMessage({
-        type: attachment.type,
-        fileUrl: attachment.fileUrl,
-        fileName: attachment.fileName,
-        fileSize: attachment.fileSize,
-        text: caption || undefined,
-      });
-      setTimeout(scrollToBottom, 100);
-    };
-
-    confirmSendMediaBtn.addEventListener('click', sendPendingMedia);
-    mediaCaptionInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        sendPendingMedia();
-      }
-    });
-  }
-
   // Interactive Custom Stickers Drawer Toggle, Creation & Selection
   const stickersBtn = document.getElementById('chat-stickers-btn');
   const stickersDrawer = document.getElementById('chat-stickers-drawer');
-  const closeStickersBtn = document.getElementById('close-stickers-btn');
-  const createStickerTile = document.getElementById('create-sticker-tile');
-  const addStickerPackBtn = document.getElementById('add-sticker-pack-btn');
-  const importStickersBtn = document.getElementById('import-stickers-btn');
-  const stickerSearchBtn = document.getElementById('sticker-search-btn');
-  const stickerSearchInput = document.getElementById('sticker-search-input') as HTMLInputElement | null;
-  const stickerUploadInput = document.getElementById('sticker-upload-input') as HTMLInputElement;
+  const stickerUploadInput = document.getElementById('sticker-upload-input') as HTMLInputElement | null;
 
   if (stickersBtn && stickersDrawer) {
     stickersBtn.addEventListener('click', () => {
@@ -2206,71 +3272,13 @@ export function attachChatEvents(): void {
         stickersBtn.classList.remove('border-brand-orange', 'text-brand-orange', 'bg-brand-orange/15', 'shadow-soft');
         stickersBtn.classList.add('text-warm-textSec');
       }
-      setTimeout(scrollToBottom, 150);
+      setTimeout(() => {
+        if (userIsNearBottom) scrollChatToBottom();
+      }, 150);
     });
   }
 
-  if (closeStickersBtn && stickersDrawer && stickersBtn) {
-    const closeStickers = () => {
-      isStickersOpen = false;
-      stickersDrawer.classList.remove('flex');
-      stickersDrawer.classList.add('hidden');
-      stickersBtn.classList.remove('border-brand-orange', 'text-brand-orange', 'bg-brand-orange/15', 'shadow-soft');
-      stickersBtn.classList.add('text-warm-textSec');
-    };
-    closeStickersBtn.addEventListener('click', closeStickers);
-
-    attachSheetDragToDismiss(stickersDrawer, {
-      handleSelector: '#chat-stickers-drag-handle',
-      scrollContainerSelector: '#chat-stickers-scroll',
-      onClose: closeStickers,
-    });
-  }
-
-  if (stickerSearchBtn) {
-    stickerSearchBtn.addEventListener('click', () => {
-      isStickerSearchOpen = !isStickerSearchOpen;
-      if (!isStickerSearchOpen) stickerSearchQuery = '';
-      isStickersOpen = true;
-      const activeId = state.getActiveConversation()?.id;
-      if (activeId) state.setActiveConversationId(activeId);
-    });
-  }
-
-  if (stickerSearchInput) {
-    stickerSearchInput.addEventListener('input', () => {
-      stickerSearchQuery = stickerSearchInput.value;
-      isStickersOpen = true;
-      const activeId = state.getActiveConversation()?.id;
-      if (activeId) {
-        state.setActiveConversationId(activeId);
-        window.requestAnimationFrame(() => {
-          const el = document.getElementById('sticker-search-input') as HTMLInputElement | null;
-          if (el) {
-            el.focus();
-            el.setSelectionRange(el.value.length, el.value.length);
-          }
-        });
-      }
-    });
-  }
-
-  // Create / Import Sticker File Picker Trigger
-  const triggerStickerPicker = () => {
-    if (stickerUploadInput) {
-      stickerUploadInput.click();
-    }
-  };
-
-  if (createStickerTile) {
-    createStickerTile.addEventListener('click', triggerStickerPicker);
-  }
-  if (addStickerPackBtn) {
-    addStickerPackBtn.addEventListener('click', triggerStickerPicker);
-  }
-  if (importStickersBtn) {
-    importStickersBtn.addEventListener('click', triggerStickerPicker);
-  }
+  attachStickersDrawerInnerEvents();
 
   if (stickerUploadInput) {
     stickerUploadInput.addEventListener('change', async () => {
@@ -2313,6 +3321,7 @@ export function attachChatEvents(): void {
       }
 
       isStickersOpen = true;
+      refreshStickersDrawerInPlace();
       if (addedCount > 0) {
         showMobileToast(
           addedCount === 1 ? 'تمت إضافة الملصق بنجاح' : `تمت إضافة ${addedCount} ملصقات بنجاح`,
@@ -2324,48 +3333,6 @@ export function attachChatEvents(): void {
       }
     });
   }
-
-  // Send Custom Sticker
-  const customStickerSendBtns = document.querySelectorAll<HTMLButtonElement>('.custom-sticker-send-btn');
-  customStickerSendBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const stickerUrl = btn.getAttribute('data-sticker-url') || '';
-      const stickerTitle = btn.getAttribute('data-sticker-title') || 'ملصق مخصص';
-
-      state.sendMessage({
-        type: 'sticker',
-        stickerUrl,
-        stickerTitle,
-      });
-
-      // Close drawer after selection
-      isStickersOpen = false;
-      if (stickersDrawer) {
-        stickersDrawer.classList.remove('flex');
-        stickersDrawer.classList.add('hidden');
-      }
-      if (stickersBtn) {
-        stickersBtn.classList.remove('border-brand-orange', 'text-brand-orange', 'bg-brand-orange/15', 'shadow-soft');
-        stickersBtn.classList.add('text-warm-textSec');
-      }
-
-      setTimeout(scrollToBottom, 120);
-    });
-  });
-
-  // Delete Custom Sticker
-  const deleteStickerBtns = document.querySelectorAll<HTMLButtonElement>('.delete-custom-sticker-btn');
-  deleteStickerBtns.forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = btn.getAttribute('data-sticker-id');
-      if (id) {
-        isStickersOpen = true;
-        await state.removeCustomSticker(id);
-        showMobileToast('تم حذف الملصق', 'default', 1400);
-      }
-    });
-  });
 
   // Start real Audio Recording via MediaRecorder with Android WebView MIME negotiation
   const startAudioRecording = async () => {
@@ -2467,15 +3434,20 @@ export function attachChatEvents(): void {
 
   const sendFallbackVoiceNote = () => {
     if (!import.meta.env.DEV) return;
-    state.sendMessage({
-      type: 'audio',
-      audioDuration: 8,
-      audioBlobUrl: '',
-    });
-    setTimeout(scrollToBottom, 100);
+    justSentMessageFlag = true;
+    state.sendMessage(
+      {
+        type: 'audio',
+        audioDuration: 8,
+        audioBlobUrl: '',
+      },
+      activeReplyTarget ?? undefined
+    );
+    activeReplyTarget = null;
+    updateReplyPreviewBarInPlace();
+    setTimeout(() => scrollChatToBottom(), 80);
   };
 
-  // Cancel Audio Recording
   if (cancelRecBtn) {
     cancelRecBtn.addEventListener('click', () => {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -2486,7 +3458,6 @@ export function attachChatEvents(): void {
     });
   }
 
-  // Send Recorded Audio
   if (sendRecBtn) {
     sendRecBtn.addEventListener('click', () => {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -2502,21 +3473,33 @@ export function attachChatEvents(): void {
           reader.onload = (ev) => {
             const rawAudioUrl = typeof ev.target?.result === 'string' ? ev.target.result : '';
             const safeAudioDataUrl = sanitizeAudioSrc(rawAudioUrl) || fallbackObjectUrl;
-            state.sendMessage({
-              type: 'audio',
-              audioDuration: duration,
-              audioBlobUrl: safeAudioDataUrl,
-              fileUrl: safeAudioDataUrl.startsWith('data:') ? safeAudioDataUrl : undefined,
-            });
-            setTimeout(scrollToBottom, 100);
+            justSentMessageFlag = true;
+            state.sendMessage(
+              {
+                type: 'audio',
+                audioDuration: duration,
+                audioBlobUrl: safeAudioDataUrl,
+                fileUrl: safeAudioDataUrl.startsWith('data:') ? safeAudioDataUrl : undefined,
+              },
+              activeReplyTarget ?? undefined
+            );
+            activeReplyTarget = null;
+            updateReplyPreviewBarInPlace();
+            setTimeout(() => scrollChatToBottom(), 80);
           };
           reader.onerror = () => {
-            state.sendMessage({
-              type: 'audio',
-              audioDuration: duration,
-              audioBlobUrl: fallbackObjectUrl,
-            });
-            setTimeout(scrollToBottom, 100);
+            justSentMessageFlag = true;
+            state.sendMessage(
+              {
+                type: 'audio',
+                audioDuration: duration,
+                audioBlobUrl: fallbackObjectUrl,
+              },
+              activeReplyTarget ?? undefined
+            );
+            activeReplyTarget = null;
+            updateReplyPreviewBarInPlace();
+            setTimeout(() => scrollChatToBottom(), 80);
           };
           reader.readAsDataURL(audioBlob);
         };
@@ -2529,47 +3512,6 @@ export function attachChatEvents(): void {
       stopRecordingUI();
     });
   }
-
-  // Audio Playback in Chat Bubbles
-  const playAudioBtns = document.querySelectorAll<HTMLButtonElement>('.play-audio-msg-btn');
-  playAudioBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const msgId = btn.getAttribute('data-msg-id');
-      const audioUrl = sanitizeAudioSrc(btn.getAttribute('data-audio-url'));
-
-      if (currentlyPlayingAudio && currentPlayingMsgId === msgId) {
-        // Pause current
-        currentlyPlayingAudio.pause();
-        currentlyPlayingAudio = null;
-        currentPlayingMsgId = null;
-        btn.innerHTML = '<i class="fa-solid fa-play text-sm ml-0.5"></i>';
-        return;
-      }
-
-      if (currentlyPlayingAudio) {
-        currentlyPlayingAudio.pause();
-        const prevBtn = document.querySelector(`[data-msg-id="${currentPlayingMsgId}"] .play-audio-msg-btn`);
-        if (prevBtn) prevBtn.innerHTML = '<i class="fa-solid fa-play text-sm ml-0.5"></i>';
-      }
-
-      if (audioUrl) {
-        const audio = new Audio(audioUrl);
-        currentlyPlayingAudio = audio;
-        currentPlayingMsgId = msgId;
-        btn.innerHTML = '<i class="fa-solid fa-pause text-sm"></i>';
-
-        void audio.play();
-        audio.onended = () => {
-          btn.innerHTML = '<i class="fa-solid fa-play text-sm ml-0.5"></i>';
-          currentlyPlayingAudio = null;
-          currentPlayingMsgId = null;
-        };
-      } else {
-        showMobileToast('المقطع الصوتي غير متاح للتشغيل حاليًا.', 'default');
-      }
-    });
-  });
-
 }
 
 function launchOneTimeMatingConfetti(): void {

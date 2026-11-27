@@ -3,6 +3,7 @@ import { getViewMode } from '../components/Header.ts';
 import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
 import { attachPullToRefresh, showMobileToast } from '../../utils/touchGestures.ts';
 import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
+import { handleZeroFlashSavePetClick } from '../../utils/savePetDom.ts';
 
 export function renderAdoptionView(): string {
   const filters = state.getAdoptionFilters();
@@ -41,20 +42,17 @@ export function renderAdoptionView(): string {
       }
 
       <!-- Smart Warm Banner for Adoption -->
-      <div class="bg-white/90 dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-4 shadow-sm relative overflow-hidden">
-        <div class="flex items-center gap-3">
+      <div class="bg-white/90 dark:bg-[#27201B] border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-4 shadow-sm relative overflow-hidden meow-floating-hearts">
+        <div class="pointer-events-none select-none" aria-hidden="true">
+          <i class="fa-solid fa-heart meow-ambient-heart text-[11px]" style="left: 16px; bottom: 18px; --heart-dur: 4.4s; --heart-delay: 0s; --heart-drift: 8px;"></i>
+          <i class="fa-solid fa-heart meow-ambient-heart text-[9px]" style="left: 42px; bottom: 12px; --heart-dur: 5.1s; --heart-delay: 1.4s; --heart-drift: -6px;"></i>
+        </div>
+        <div class="flex items-center gap-3 relative z-10">
           <div class="w-12 h-12 rounded-2xl bg-brand-orange/15 border border-brand-peachBorder dark:border-warm-darkBorder flex items-center justify-center text-2xl flex-shrink-0 text-brand-orange">
             <i class="fa-solid fa-hand-holding-heart"></i>
           </div>
           <div class="min-w-0">
-            <div class="flex items-center gap-1.5 mb-0.5">
-              <span class="text-xs font-black text-brand-orange bg-brand-orange/10 px-2 py-0.5 rounded-md">تبني رحيم وآمن</span>
-              <span class="text-xs font-bold text-brand-subtleGray dark:text-[#A89F91]">بدون أي مقابل مالي 💛</span>
-            </div>
-            <h3 class="text-base font-black text-brand-dark dark:text-white truncate font-baloo">امنح حيوانًا أليفًا بيتًا دافئًا ومستقرًا</h3>
-            <p class="text-xs font-semibold text-brand-subtleGray dark:text-[#A89F91] leading-tight line-clamp-1">
-              تصفح الحالات الفردية والمجموعات واطلع على شروط تبني المجموعة
-            </p>
+            <h3 class="text-base font-black text-brand-dark dark:text-white truncate font-baloo m-0">امنح حيوانًا أليفًا بيتًا دافئًا ومستقرًا</h3>
           </div>
         </div>
 
@@ -211,7 +209,7 @@ export function renderAdoptionView(): string {
                               src="${escapeAttr(primaryPhoto)}"
                               alt="${escapeAttr(`تبني جماعي: ${pet.name}`)}"
                               class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 pet-card-img"
-                              loading="lazy"
+                              loading="lazy" decoding="async"
                             />
                             <div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 via-black/35 to-transparent pointer-events-none"></div>
                           </div>
@@ -318,7 +316,7 @@ export function renderAdoptionView(): string {
                             src="${escapeAttr(safePetPhoto)}"
                             alt="${escapeAttr(`صورة ${pet.name}`)}"
                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 pet-card-img"
-                            loading="lazy"
+                            loading="lazy" decoding="async"
                           />
                         </div>
 
@@ -383,7 +381,7 @@ export function renderAdoptionView(): string {
                             src="${escapeAttr(primaryPhoto)}"
                             alt="${escapeAttr(`تبني جماعي: ${pet.name}`)}"
                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                            loading="lazy"
+                            loading="lazy" decoding="async"
                           />
                           <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent pointer-events-none"></div>
                         </div>
@@ -505,7 +503,7 @@ export function renderAdoptionView(): string {
                           src="${escapeAttr(safePetPhoto)}"
                           alt="${escapeAttr(`صورة ${pet.name}`)}"
                           class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          loading="lazy"
+                          loading="lazy" decoding="async"
                         />
 
                         <!-- Gradient Overlay from bottom up -->
@@ -634,7 +632,7 @@ export function attachAdoptionEvents(): void {
 
   const gridScope = document.querySelector<HTMLElement>('[data-purpose="pet-listings-grid"]');
 
-  // Toggle Save Pet (Heart button) - Scoped strictly to grid/list container
+  // Toggle Save Pet (Heart button) - Zero-flash DOM update scoped to grid/list container
   const saveTriggers = gridScope
     ? gridScope.querySelectorAll<HTMLElement>('.toggle-save-pet-btn')
     : [];
@@ -643,7 +641,7 @@ export function attachAdoptionEvents(): void {
       e.stopPropagation();
       const petId = btn.getAttribute('data-pet-save-id');
       if (petId) {
-        state.toggleSavePet(petId);
+        handleZeroFlashSavePetClick(petId);
       }
     });
   });

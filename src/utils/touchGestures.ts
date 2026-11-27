@@ -530,7 +530,7 @@ export function attachPullToRefresh(
     const el = document.createElement('div');
     el.id = 'meow-ptr-indicator';
     el.className =
-      'fixed left-1/2 -translate-x-1/2 z-[125] pointer-events-none w-11 h-11 rounded-full bg-white/95 dark:bg-[#27201B]/95 border-2 border-brand-peachBorder dark:border-warm-darkBorder shadow-md flex items-center justify-center transition-opacity duration-150 opacity-0';
+      'fixed left-1/2 z-[125] pointer-events-none flex items-center justify-center transition-opacity duration-150 opacity-0';
     el.style.top = 'calc(env(safe-area-inset-top, 0px) + 0.65rem)';
     el.innerHTML =
       '<div class="meow-ptr-dots" data-ptr-dots aria-hidden="true"><span></span><span></span><span></span></div>';
@@ -546,7 +546,9 @@ export function attachPullToRefresh(
       dots.classList.toggle('is-spinning', spinning);
       if (!spinning) {
         const progress = Math.min(1, Math.max(0.25, dist / 70));
-        dots.style.transform = `scale(${armed ? 1.05 : 0.72 + progress * 0.28})`;
+        dots.style.transform = `translate3d(0, ${Math.min(8, dist * 0.1).toFixed(1)}px, 0) scale(${
+          armed ? 1.08 : 0.78 + progress * 0.24
+        })`;
         dots.style.opacity = String(armed ? 1 : 0.55 + progress * 0.45);
       } else {
         dots.style.transform = '';
@@ -555,7 +557,7 @@ export function attachPullToRefresh(
     }
     const clampedY = Math.min(68, dist * 0.52);
     el.style.opacity = dist > 8 || spinning ? '1' : '0';
-    el.style.transform = `translate(-50%, ${clampedY}px)`;
+    el.style.transform = `translate3d(-50%, ${clampedY}px, 0)`;
   };
 
   const hideIndicator = () => {

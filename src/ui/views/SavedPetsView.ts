@@ -204,7 +204,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                       src="${escapeAttr(memberThumbs[0] || safePetPhoto)}"
                       alt="${escapeAttr(pet.name)}"
                       class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading="lazy"
+                      loading="lazy" decoding="async"
                     />
                     <div class="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/75 to-transparent pointer-events-none"></div>
                   </div>
@@ -287,7 +287,7 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
                     src="${escapeAttr(safePetPhoto)}"
                     alt="${escapeAttr(pet.name)}"
                     class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
+                    loading="lazy" decoding="async"
                   />
                 </div>
 
@@ -348,14 +348,58 @@ function renderSavedPetsList(pets: Pet[], type: 'mating' | 'adoption'): string {
 }
 
 function attachSavedPetsBodyEvents(): void {
-  // Remove pet from saved button
+  // Remove pet from saved button — in-place smooth removal without flashing #saved-pets-modal
   const removeBtns = document.querySelectorAll<HTMLButtonElement>('.remove-saved-pet-btn');
   removeBtns.forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const petId = btn.getAttribute('data-pet-save-id');
-      if (petId) {
-        state.toggleSavePet(petId);
+      if (!petId) return;
+
+      const activeTab = state.getSavedPetsSubTab();
+      const card = btn.closest('.saved-pet-card') as HTMLElement | null;
+
+      state.toggleSavePet(petId, {
+        silent: true,
+        onErrorRollback: () => {
+          const bodyEl = document.getElementById('saved-pets-body');
+          if (bodyEl) {
+            const savedPets = state.getSavedPets();
+            bodyEl.innerHTML = renderSavedPetsBody(
+              state.getSavedPetsSubTab(),
+              savedPets.filter((p) => p.status === 'mating'),
+              savedPets.filter((p) => p.status === 'adoption')
+            );
+            attachSavedPetsBodyEvents();
+          }
+        },
+      });
+
+      const savedPets = state.getSavedPets();
+      const matingSaved = savedPets.filter((p) => p.status === 'mating');
+      const adoptionSaved = savedPets.filter((p) => p.status === 'adoption');
+
+      const headerCountBadge = document.querySelector('#saved-pets-modal header span.rounded-full');
+      if (headerCountBadge) {
+        headerCountBadge.textContent = `${savedPets.length} عنصر`;
+      }
+      const matingTabCount = document.querySelector('[data-saved-tab="mating"] span:last-child');
+      if (matingTabCount) matingTabCount.textContent = `(${matingSaved.length})`;
+      const adoptionTabCount = document.querySelector('[data-saved-tab="adoption"] span:last-child');
+      if (adoptionTabCount) adoptionTabCount.textContent = `(${adoptionSaved.length})`;
+
+      const drawerBadge = document.querySelector('#drawer-saved-pets-btn span.rounded-full');
+      if (drawerBadge) drawerBadge.textContent = String(state.getSavedCount());
+
+      const remainingInActiveTab = activeTab === 'adoption' ? adoptionSaved : matingSaved;
+      if (remainingInActiveTab.length === 0) {
+        const bodyEl = document.getElementById('saved-pets-body');
+        if (bodyEl) {
+          bodyEl.innerHTML = renderSavedPetsBody(activeTab, matingSaved, adoptionSaved);
+          attachSavedPetsBodyEvents();
+        }
+      } else if (card) {
+        card.remove();
       }
     });
   });

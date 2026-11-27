@@ -3,6 +3,7 @@ import { getViewMode } from '../components/Header.ts';
 import { renderThreeDotsMenu } from '../components/BlockMenu.ts';
 import { attachPullToRefresh, showMobileToast } from '../../utils/touchGestures.ts';
 import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
+import { handleZeroFlashSavePetClick } from '../../utils/savePetDom.ts';
 
 export function renderMatingView(): string {
   const filters = state.getMatingFilters();
@@ -42,7 +43,11 @@ export function renderMatingView(): string {
       }
 
       <!-- Count Bar -->
-      <div class="flex items-center justify-between gap-2 px-1">
+      <div class="flex items-center justify-between gap-2 px-1 relative meow-floating-hearts">
+        <div class="pointer-events-none select-none" aria-hidden="true">
+          <i class="fa-solid fa-heart meow-ambient-heart text-[10px]" style="left: 18px; top: 4px; --heart-dur: 4.5s; --heart-delay: 0.2s; --heart-drift: 9px;"></i>
+          <i class="fa-solid fa-heart meow-ambient-heart text-[8px]" style="left: 44px; top: 8px; --heart-dur: 5.2s; --heart-delay: 1.8s; --heart-drift: -7px;"></i>
+        </div>
         <div class="flex items-center gap-1.5 text-sm font-extrabold text-brand-dark">
           <span class="text-brand-orange text-lg">🐾</span>
           <span class="text-xs font-black text-brand-orange px-2.5 py-0.5 rounded-full bg-white border border-brand-peachBorder shadow-sm">${pets.length} متاح</span>
@@ -137,7 +142,7 @@ export function renderMatingView(): string {
                             alt="${escapeAttr(pet.name)}"
                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                             src="${escapeAttr(safePhoto)}"
-                            loading="lazy"
+                            loading="lazy" decoding="async"
                           />
                         </div>
 
@@ -211,7 +216,7 @@ export function renderMatingView(): string {
                           alt="${escapeAttr(pet.name)}"
                           class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           src="${escapeAttr(safePhoto)}"
-                          loading="lazy"
+                          loading="lazy" decoding="async"
                         />
 
                         <!-- Gradient Overlay from bottom up -->
@@ -358,7 +363,7 @@ export function attachMatingEvents(): void {
 
   const gridScope = document.querySelector<HTMLElement>('[data-purpose="pet-listings-grid"]');
 
-  // Toggle Save Pet (Heart button) - Scoped strictly to grid/list container
+  // Toggle Save Pet (Heart button) - Zero-flash DOM update scoped to grid/list container
   const saveTriggers = gridScope
     ? gridScope.querySelectorAll<HTMLElement>('.toggle-save-pet-btn')
     : [];
@@ -367,7 +372,7 @@ export function attachMatingEvents(): void {
       e.stopPropagation();
       const petId = btn.getAttribute('data-pet-save-id');
       if (petId) {
-        state.toggleSavePet(petId);
+        handleZeroFlashSavePetClick(petId);
       }
     });
   });

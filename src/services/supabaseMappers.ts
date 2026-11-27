@@ -190,6 +190,7 @@ export interface DbConversationUserStateRow {
   user_id: string;
   unread_count: number;
   is_pinned: boolean;
+  is_muted?: boolean;
   pinned_at: string | null;
   is_hidden: boolean;
   hidden_at: string | null;
@@ -212,6 +213,11 @@ export interface DbMessageRow {
   sticker_url: string | null;
   sticker_emoji: string | null;
   sticker_title: string | null;
+  reply_to_id?: string | null;
+  reply_to_sender_name?: string | null;
+  reply_to_text?: string | null;
+  reply_to_type?: NonNullable<ChatMessage['type']> | null;
+  deleted_at?: string | null;
   status: NonNullable<ChatMessage['status']>;
   created_at: string;
 }
@@ -715,23 +721,44 @@ export function mapDbMessageToModel(
   row: DbMessageRow,
   currentUserId: string
 ): ChatMessage {
+  const isDeleted = Boolean(row.deleted_at);
+  const rawFileUrl = row.file_url || undefined;
+  const storagePath =
+    rawFileUrl && rawFileUrl.startsWith('sb-storage://chat-media/')
+      ? rawFileUrl.slice('sb-storage://chat-media/'.length)
+      : undefined;
+  const parsedCreatedAt = Date.parse(row.created_at);
+
   return {
     id: row.id,
     conversationId: row.conversation_id,
     senderId: row.is_system ? 'system' : row.sender_id || 'system',
     senderName: row.is_system ? 'Meow' : '',
-    text: row.text || undefined,
-    type: row.type,
-    fileUrl: row.file_url || undefined,
-    fileName: row.file_name || undefined,
-    fileSize: row.file_size || undefined,
-    audioDuration: row.audio_duration ?? undefined,
-    stickerUrl: row.sticker_url || undefined,
-    stickerEmoji: row.sticker_emoji || undefined,
-    stickerTitle: row.sticker_title || undefined,
+    text: isDeleted ? 'اتمسحت الرسالة دي' : row.text || undefined,
+    type: isDeleted ? 'text' : row.type,
+    fileUrl: isDeleted || storagePath ? undefined : rawFileUrl,
+    storagePath: isDeleted ? undefined : storagePath,
+    fileName: isDeleted ? undefined : row.file_name || undefined,
+    fileSize: isDeleted ? undefined : row.file_size || undefined,
+    audioDuration: isDeleted ? undefined : row.audio_duration ?? undefined,
+    stickerUrl: isDeleted ? undefined : row.sticker_url || undefined,
+    stickerEmoji: isDeleted ? undefined : row.sticker_emoji || undefined,
+    stickerTitle: isDeleted ? undefined : row.sticker_title || undefined,
+    replyTo:
+      !isDeleted && row.reply_to_id
+        ? {
+            messageId: row.reply_to_id,
+            senderName: row.reply_to_sender_name || 'مستخدم',
+            text: row.reply_to_text || '',
+            type: row.reply_to_type || 'text',
+          }
+        : undefined,
+    deletedAt: row.deleted_at || undefined,
     timestamp: formatArabicClock(row.created_at),
+    createdAtMs: Number.isNaN(parsedCreatedAt) ? Date.now() : parsedCreatedAt,
     isFromUser: !row.is_system && row.sender_id === currentUserId,
     status: row.status,
+    localStatus: 'sent',
   };
 }
 
@@ -752,6 +779,9 @@ export function isConversationVisibleToUser(
 }
 
 export function formatDbMessagePreview(row: DbMessageRow): string {
+  if (row.deleted_at) {
+    return 'تم مسح الرسالة';
+  }
   switch (row.type) {
     case 'sticker':
       return `🎭 ملصق: ${row.sticker_title || row.sticker_emoji || 'مياو'}`;
@@ -842,6 +872,7 @@ export function mapDbConversationToModel(
     ownerPrivacy: otherShowPhone ? 'public' : 'private',
     messages: visibleMessageRows.map((m) => mapDbMessageToModel(m, currentUserId)),
     isPinned: options?.userState?.is_pinned ?? false,
+    isMuted: options?.userState?.is_muted ?? false,
     pinnedAt: options?.userState?.pinned_at ? Date.parse(options.userState.pinned_at) : undefined,
     updatedAt: Date.parse(row.last_message_at) || Date.parse(row.updated_at),
     adoptionType: pet?.adoptionType,

@@ -37,6 +37,8 @@ function shouldBypassCache(url) {
   if (
     path.includes('/updates/') ||
     path.endsWith('ota-manifest.json') ||
+    path.endsWith('ota-manifest-testing.json') ||
+    path.endsWith('apk-release.json') ||
     path.endsWith('.zip') ||
     path.endsWith('.apk') ||
     path.startsWith('/api/')

@@ -9,6 +9,7 @@ import {
 } from '../../utils/petFormatters.ts';
 import { escapeAttr, escapeHtml, sanitizeImageSrc } from '../../utils/sanitize.ts';
 import { attachHorizontalCarouselSwipe, showMobileToast } from '../../utils/touchGestures.ts';
+import { handleZeroFlashSavePetClick } from '../../utils/savePetDom.ts';
 
 let activePhotoIndex = 0;
 let lastOpenedPetId: string | null = null;
@@ -37,8 +38,6 @@ interface IndividualProfileParams {
   personality?: string[];
   healthNotes?: string;
   locationText: string;
-  statusBadgeLabel: string;
-  statusBadgeClass: string;
   aboutHeading: string;
   adoptionExtraHtml?: string;
   isGroupMemberCard?: boolean;
@@ -174,9 +173,6 @@ function renderIndividualProfileDetails(params: IndividualProfileParams): string
           <span>${escapeHtml(params.aboutHeading)}</span>
           <span class="text-brand-orange text-lg">🐾</span>
         </h3>
-        <span class="px-4 py-1.5 rounded-full text-xs sm:text-sm font-black shadow-sm font-baloo shrink-0 ${params.statusBadgeClass}">
-          ${escapeHtml(params.statusBadgeLabel)}
-        </span>
       </div>
 
       ${
@@ -486,8 +482,6 @@ function renderGroupMemberIndividualCard(
           personality: member.personality,
           healthNotes: member.healthNotes,
           locationText,
-          statusBadgeLabel: 'للتبني',
-          statusBadgeClass: 'bg-brand-orange text-white',
           aboutHeading: `عن ${member.name}`,
           adoptionExtraHtml: extraHtml,
           isGroupMemberCard: true,
@@ -602,6 +596,9 @@ export function renderPetDetailModal(pet: Pet | null): string {
   const pendingMemberTarget = pendingRequestMemberId
     ? groupMembers.find((m) => m.petId === pendingRequestMemberId) || null
     : null;
+  const relState = state.getPetRelationshipState(pet);
+  const pendingReq = state.getPendingRequestForPet(pet);
+  const existingConv = state.getConversationForPet(pet);
 
   return `
     <!-- Full-Screen Pet Profile View -->
@@ -671,6 +668,7 @@ export function renderPetDetailModal(pet: Pet | null): string {
                             src="${escapeAttr(sanitizeImageSrc(item.url))}"
                             alt="${escapeAttr(item.label || `${pet.name} - صورة ${idx + 1}`)}"
                             class="w-full h-full object-cover pointer-events-none select-none"
+                            decoding="async"
                             draggable="false"
                           />
                         </div>
@@ -840,8 +838,6 @@ export function renderPetDetailModal(pet: Pet | null): string {
                         personality: selectedMember.personality,
                         healthNotes: selectedMember.healthNotes,
                         locationText,
-                        statusBadgeLabel: 'للتبني',
-                        statusBadgeClass: 'bg-brand-orange text-white',
                         aboutHeading: `عن ${selectedMember.name}`,
                         adoptionExtraHtml: `
                           <div class="pt-2.5 border-t border-brand-peachBorder/50 space-y-1.5 text-xs sm:text-sm font-bold text-[#5d4b3d]">
@@ -931,11 +927,6 @@ export function renderPetDetailModal(pet: Pet | null): string {
                   personality: pet.personality,
                   healthNotes: pet.healthNotes,
                   locationText,
-                  statusBadgeLabel: isMating ? 'للزواج' : isAdoption ? 'للتبني' : 'أليف شخصي',
-                  statusBadgeClass:
-                    isMating || isAdoption
-                      ? 'bg-brand-orange text-white'
-                      : 'bg-[#f3ebdd] text-[#2d221b]',
                   aboutHeading: `عن ${pet.name}`,
                   adoptionExtraHtml: hasAdoptionDetails
                     ? `
@@ -987,11 +978,67 @@ export function renderPetDetailModal(pet: Pet | null): string {
       </div>
 
       <!-- 6. Fixed Bottom Action Bar -->
-      <footer class="fixed bottom-0 inset-x-0 z-40 bg-[#FFF9E9]/95 backdrop-blur-md border-t border-brand-peachBorder/60 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl">
+      <footer class="fixed bottom-0 inset-x-0 z-40 bg-[#FFF9E9]/95 backdrop-blur-md border-t border-brand-peachBorder/60 px-4 pt-3.5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl">
         <div class="max-w-md mx-auto">
           ${
-            !isUserPet
+            relState === 'owner' || isUserPet
               ? `
+                <div class="w-full h-12 rounded-full bg-brand-cream/85 border-2 border-brand-peachBorder flex items-center justify-center text-xs sm:text-sm font-black text-brand-orange font-baloo">
+                  ${isGroupAdoption ? 'هذا الإعلان الجماعي مسجل ضمن حسابك الشخصي 👑' : 'هذا الأليف مسجل ضمن حسابك الشخصي 👑'}
+                </div>
+              `
+              : relState === 'accepted'
+              ? `
+                <button
+                  id="modal-open-chat-btn"
+                  data-conv-id="${escapeAttr(existingConv?.id || '')}"
+                  type="button"
+                  class="w-full h-13 px-5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base sm:text-lg shadow-soft transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 font-baloo"
+                >
+                  <i class="fa-solid fa-comments text-lg"></i>
+                  <span>فتح المحادثة</span>
+                </button>
+              `
+              : relState === 'outgoing_pending' && pendingReq
+              ? `
+                <div class="flex items-center gap-2.5">
+                  <div class="flex-1 h-12 px-4 rounded-full bg-[#fff5ea] border-2 border-brand-orange/35 text-brand-orange font-black text-xs sm:text-sm flex items-center justify-center gap-2 font-baloo">
+                    <i class="fa-regular fa-clock"></i>
+                    <span>بانتظار موافقة المالك</span>
+                  </div>
+                  <button
+                    id="modal-withdraw-request-btn"
+                    data-request-id="${escapeAttr(pendingReq.id)}"
+                    type="button"
+                    class="h-12 px-5 rounded-full bg-white border-2 border-rose-200 text-rose-600 hover:bg-rose-50 font-black text-xs sm:text-sm transition-all cursor-pointer active:scale-95 font-baloo shrink-0"
+                  >
+                    سحب الطلب
+                  </button>
+                </div>
+              `
+              : relState === 'incoming_pending' && pendingReq
+              ? `
+                <div class="grid grid-cols-3 gap-2.5">
+                  <button
+                    id="modal-approve-request-btn"
+                    data-request-id="${escapeAttr(pendingReq.id)}"
+                    type="button"
+                    class="col-span-2 h-12 px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm sm:text-base shadow-soft transition-all cursor-pointer active:scale-95 font-baloo flex items-center justify-center gap-2"
+                  >
+                    <i class="fa-solid fa-check"></i>
+                    <span>قبول وفتح الشات</span>
+                  </button>
+                  <button
+                    id="modal-reject-request-btn"
+                    data-request-id="${escapeAttr(pendingReq.id)}"
+                    type="button"
+                    class="col-span-1 h-12 px-3 rounded-full bg-white border-2 border-rose-200 text-rose-600 hover:bg-rose-50 font-black text-sm transition-all cursor-pointer active:scale-95 font-baloo"
+                  >
+                    رفض
+                  </button>
+                </div>
+              `
+              : `
               <button
                 id="modal-open-confirmation-btn"
                 type="button"
@@ -1006,19 +1053,14 @@ export function renderPetDetailModal(pet: Pet | null): string {
                         fill="none"
                         aria-hidden="true"
                       >
-                        <!-- هالة قلب دافئة داخل التقاء الذيلين -->
                         <path d="M42 16c-2.6-4.4-9.4-3.8-10.8 1.2-1.4 4.8 4 10.6 10.8 15.8 6.8-5.2 12.2-11 10.8-15.8-1.4-5-8.2-5.6-10.8-1.2Z" fill="#FFE082" fill-opacity="0.28"/>
-                        <!-- القط الأيسر (جالس من الخلف) -->
                         <path d="M13 24l1.2-8.2 5.2 4c1-.3 2.2-.3 3.2 0l5.2-4 1.2 8.2a9 9 0 0 1 1 11.4c1.2 2.4 1.6 5.2 1.2 8-.6 4.4-4.2 7.6-10.2 7.6s-9.6-3.2-10.2-7.6c-.4-2.8 0-5.6 1.2-8A9 9 0 0 1 13 24Z" fill="currentColor"/>
                         <path d="M14.2 31.4c4.5 1.4 9.1 1.4 13.6 0" stroke="#E67E22" stroke-width="1.9" stroke-linecap="round"/>
-                        <!-- القط الأيمن (جالس من الخلف) -->
                         <path d="M55 24l1.2-8.2 5.2 4c1-.3 2.2-.3 3.2 0l5.2-4 1.2 8.2a9 9 0 0 1 1 11.4c1.2 2.4 1.6 5.2 1.2 8-.6 4.4-4.2 7.6-10.2 7.6s-9.6-3.2-10.2-7.6c-.4-2.8 0-5.6 1.2-8A9 9 0 0 1 55 24Z" fill="currentColor"/>
                         <path d="M56.2 31.4c4.5 1.4 9.1 1.4 13.6 0" stroke="#E67E22" stroke-width="1.9" stroke-linecap="round"/>
-                        <!-- ذيلا القطين يمتدان من الأسفل ويلتفان من الأعلى ليشكلا قلباً واضحاً -->
                         <path d="M27 44.5c5.8 0 11.5-4 15-8.5" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
                         <path d="M57 44.5c-5.8 0-11.5-4-15-8.5" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
                         <path d="M42 36c-7.5-4.5-13.5-10.5-13.5-17.2 0-5.2 4-8.8 8.3-8.8 2.6 0 4.3 1.4 5.2 3.8.9-2.4 2.6-3.8 5.2-3.8 4.3 0 8.3 3.6 8.3 8.8 0 6.7-6 12.7-13.5 17.2Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-                        <!-- قلب مضيء مركزي بين الذيلين -->
                         <path d="M42 18.2c-1.8-3-6.4-2.6-7.4.8-1 3.3 2.7 7.2 7.4 10.8 4.7-3.6 8.4-7.5 7.4-10.8-1-3.4-5.6-3.8-7.4-.8Z" fill="#FFE082"/>
                       </svg>
                       <span>وفّق ديلين في الحلال</span>
@@ -1034,11 +1076,6 @@ export function renderPetDetailModal(pet: Pet | null): string {
                     `
                 }
               </button>
-              `
-              : `
-              <div class="w-full h-12 rounded-full bg-brand-cream/85 border-2 border-brand-peachBorder flex items-center justify-center text-xs sm:text-sm font-black text-brand-orange font-baloo">
-                ${isGroupAdoption ? 'هذا الإعلان الجماعي مسجل ضمن حسابك الشخصي 👑' : 'هذا الأليف مسجل ضمن حسابك الشخصي 👑'}
-              </div>
               `
           }
         </div>
@@ -1166,18 +1203,18 @@ export function attachPetDetailModalEvents(pet: Pet | null): void {
 
   if (closeBtn) closeBtn.addEventListener('click', handleClose);
 
-  // Save Heart Buttons (Top Floating + Any Independent Member Card Save Button)
+  // Save Heart Buttons (Top Floating + Any Independent Member Card Save Button) — Zero-flash DOM update
   const saveBtn = document.getElementById('detail-save-pet-btn');
   if (saveBtn) {
     saveBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      state.toggleSavePet(pet.id);
+      handleZeroFlashSavePetClick(pet.id);
     });
   }
   document.querySelectorAll<HTMLButtonElement>('.member-card-save-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      state.toggleSavePet(pet.id);
+      handleZeroFlashSavePetClick(pet.id);
     });
   });
 
@@ -1430,6 +1467,63 @@ export function attachPetDetailModalEvents(pet: Pet | null): void {
       beginDrag(e.clientX, e.clientY);
       document.addEventListener('mousemove', onDocMouseMove);
       document.addEventListener('mouseup', onDocMouseUp);
+    });
+  }
+
+  // Open existing conversation directly when relationship is accepted
+  const openChatBtn = document.getElementById('modal-open-chat-btn');
+  if (openChatBtn) {
+    openChatBtn.addEventListener('click', () => {
+      const convId =
+        openChatBtn.getAttribute('data-conv-id') || state.getConversationForPet(pet)?.id;
+      handleClose();
+      state.setChatSubTab('chats');
+      state.setCurrentTab('chat');
+      if (convId) {
+        state.setActiveConversationId(convId);
+      }
+    });
+  }
+
+  // Withdraw outgoing pending request directly from pet details
+  const withdrawReqBtn = document.getElementById('modal-withdraw-request-btn');
+  if (withdrawReqBtn) {
+    withdrawReqBtn.addEventListener('click', () => {
+      const reqId = withdrawReqBtn.getAttribute('data-request-id');
+      if (!reqId) return;
+      state.withdrawContactRequest(reqId);
+      rerenderPetDetailModalInPlace(pet, false);
+      showMobileToast('تم سحب الطلب بنجاح', 'success', 1600);
+    });
+  }
+
+  // Approve incoming pending request directly from pet details
+  const approveReqBtn = document.getElementById('modal-approve-request-btn');
+  if (approveReqBtn) {
+    approveReqBtn.addEventListener('click', () => {
+      const reqId = approveReqBtn.getAttribute('data-request-id');
+      if (!reqId) return;
+      state.approveContactRequest(reqId);
+      const conv = state.getConversationForPet(pet);
+      handleClose();
+      state.setChatSubTab('chats');
+      state.setCurrentTab('chat');
+      if (conv) {
+        state.setActiveConversationId(conv.id);
+      }
+      showMobileToast('تم قبول الطلب وفتح المحادثة 🎉', 'success', 1800);
+    });
+  }
+
+  // Reject incoming pending request directly from pet details
+  const rejectReqBtn = document.getElementById('modal-reject-request-btn');
+  if (rejectReqBtn) {
+    rejectReqBtn.addEventListener('click', () => {
+      const reqId = rejectReqBtn.getAttribute('data-request-id');
+      if (!reqId) return;
+      state.rejectContactRequest(reqId);
+      rerenderPetDetailModalInPlace(pet, false);
+      showMobileToast('تم رفض الطلب', 'default', 1600);
     });
   }
 

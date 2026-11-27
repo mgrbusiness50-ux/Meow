@@ -1,10 +1,16 @@
 import { MAIN_TAB_ORDER, OnboardingStep, state } from '../state.ts';
 import { MainTab } from '../types.ts';
 import { renderHeader, attachHeaderEvents } from './components/Header.ts';
-import { renderTabBar, attachTabBarEvents } from './components/TabBar.ts';
+import { renderTabBar, attachTabBarEvents, shouldHideTabBar } from './components/TabBar.ts';
 import { renderMatingView, attachMatingEvents } from './views/MatingView.ts';
 import { renderAdoptionView, attachAdoptionEvents } from './views/AdoptionView.ts';
-import { renderChatView, attachChatEvents } from './views/ChatView.ts';
+import {
+  renderChatView,
+  attachChatEvents,
+  patchActiveChatRoomInPlace,
+  renderDeleteConversationConfirmModal,
+  attachDeleteConversationModalEvents,
+} from './views/ChatView.ts';
 import { renderClinicView, attachClinicEvents } from './views/ClinicView.ts';
 import { renderStoreView, attachStoreEvents } from './views/StoreView.ts';
 import {
@@ -13,7 +19,7 @@ import {
   renderProfileOverlayModals,
   attachProfileOverlayEvents,
 } from './views/ProfileView.ts';
-import { attachHorizontalTabSwipe } from '../utils/touchGestures.ts';
+import { attachHorizontalTabSwipe, showMobileToast } from '../utils/touchGestures.ts';
 import { renderPetDetailModal, attachPetDetailModalEvents } from './modals/PetDetailModal.ts';
 import { renderContactRequestModal, attachContactRequestModalEvents } from './modals/ContactRequestModal.ts';
 import { renderAddPetModal, attachAddPetModalEvents } from './modals/AddPetModal.ts';
@@ -39,10 +45,6 @@ import {
   attachThreeDotsMenuEvents,
   closeAllThreeDotsDropdowns,
 } from './components/BlockMenu.ts';
-import {
-  renderDeleteConversationConfirmModal,
-  attachDeleteConversationModalEvents,
-} from './views/ChatView.ts';
 import { escapeAttr, escapeHtml, sanitizeUrl } from '../utils/sanitize.ts';
 import { APP_VERSION_INFO } from '../config/appVersion.ts';
 
@@ -54,6 +56,7 @@ export class MeowApp {
   private currentRenderedStep: OnboardingStep | null = null;
   private lastRenderedTab: MainTab | null = null;
   private lastRenderedInsideChatRoom = false;
+  private lastRenderedChatConvId: string | null = null;
   private tabScrollPositions = new Map<MainTab, number>();
   private activeTabSwipeCleanup: (() => void) | null = null;
 
@@ -262,6 +265,7 @@ export class MeowApp {
       this.activeTabSwipeCleanup = null;
       this.lastRenderedTab = null;
       this.lastRenderedInsideChatRoom = false;
+      this.lastRenderedChatConvId = null;
 
       if (onboardingStep === 'splash') {
         state.markSplashViewMounted();
@@ -301,8 +305,7 @@ export class MeowApp {
     const currentTab = state.getCurrentTab();
     const activeConversation = state.getActiveConversation();
     const isInsideChatRoom = currentTab === 'chat' && Boolean(activeConversation);
-    const isSettingsOpen = state.isSettingsOpen();
-    const hideBottomBar = isInsideChatRoom || isSettingsOpen;
+    const hideBottomBar = shouldHideTabBar();
     const selectedPetDetail = state.getSelectedPetForDetail();
     const selectedPetRequest = state.getSelectedPetForRequest();
     const isAddPetOpen = state.isAddPetModalVisible();
@@ -315,31 +318,42 @@ export class MeowApp {
       this.tabScrollPositions.set(this.lastRenderedTab, Math.max(0, window.scrollY || window.pageYOffset || 0));
     }
 
+    const shellAlreadyMounted = Boolean(this.container.querySelector('#app-shell-root'));
+    const wasAlreadyInsideSameChat =
+      shellAlreadyMounted &&
+      currentTab === 'chat' &&
+      isInsideChatRoom &&
+      this.lastRenderedTab === 'chat' &&
+      this.lastRenderedInsideChatRoom &&
+      Boolean(activeConversation?.id) &&
+      activeConversation!.id === this.lastRenderedChatConvId;
+
     let tabHtml = '';
-    switch (currentTab) {
-      case 'mating':
-        tabHtml = renderMatingView();
-        break;
-      case 'adoption':
-        tabHtml = renderAdoptionView();
-        break;
-      case 'chat':
-        tabHtml = renderChatView();
-        break;
-      case 'clinic':
-        tabHtml = renderClinicView();
-        break;
-      case 'store':
-        tabHtml = renderStoreView();
-        break;
-      case 'profile':
-        tabHtml = renderProfileView();
-        break;
-      default:
-        tabHtml = renderMatingView();
+    if (!wasAlreadyInsideSameChat) {
+      switch (currentTab) {
+        case 'mating':
+          tabHtml = renderMatingView();
+          break;
+        case 'adoption':
+          tabHtml = renderAdoptionView();
+          break;
+        case 'chat':
+          tabHtml = renderChatView();
+          break;
+        case 'clinic':
+          tabHtml = renderClinicView();
+          break;
+        case 'store':
+          tabHtml = renderStoreView();
+          break;
+        case 'profile':
+          tabHtml = renderProfileView();
+          break;
+        default:
+          tabHtml = renderMatingView();
+      }
     }
 
-    const shellAlreadyMounted = Boolean(this.container.querySelector('#app-shell-root'));
     if (!shellAlreadyMounted) {
       this.container.innerHTML = `
         <div id="app-shell-root" class="min-h-full flex flex-col justify-between bg-warm-bg dark:bg-warm-darkBg text-warm-text dark:text-white transition-colors duration-200">
@@ -371,6 +385,7 @@ export class MeowApp {
       offlineBannerSlot.innerHTML = isInsideChatRoom ? '' : this.renderOfflineStatusBanner();
     }
 
+    let chatPatchedInPlace = false;
     if (mainSlot) {
       mainSlot.className = `flex-1 flex flex-col ${isInsideChatRoom ? 'p-0 m-0 pb-0' : ''}`;
       mainSlot.style.paddingBottom = isInsideChatRoom
@@ -391,7 +406,14 @@ export class MeowApp {
         mainSlot.classList.remove('meow-tab-enter-next', 'meow-tab-enter-prev', 'meow-view-enter');
       }
 
-      mainSlot.innerHTML = tabHtml;
+      if (wasAlreadyInsideSameChat) {
+        chatPatchedInPlace = patchActiveChatRoomInPlace();
+        if (!chatPatchedInPlace) {
+          mainSlot.innerHTML = renderChatView();
+        }
+      } else {
+        mainSlot.innerHTML = tabHtml;
+      }
     }
 
     if (tabbarSlot) {
@@ -436,26 +458,29 @@ export class MeowApp {
 
     this.lastRenderedTab = currentTab;
     this.lastRenderedInsideChatRoom = isInsideChatRoom;
+    this.lastRenderedChatConvId = isInsideChatRoom ? activeConversation?.id ?? null : null;
 
-    switch (currentTab) {
-      case 'mating':
-        attachMatingEvents();
-        break;
-      case 'adoption':
-        attachAdoptionEvents();
-        break;
-      case 'chat':
-        attachChatEvents();
-        break;
-      case 'clinic':
-        attachClinicEvents();
-        break;
-      case 'store':
-        attachStoreEvents();
-        break;
-      case 'profile':
-        attachProfileEvents();
-        break;
+    if (!chatPatchedInPlace) {
+      switch (currentTab) {
+        case 'mating':
+          attachMatingEvents();
+          break;
+        case 'adoption':
+          attachAdoptionEvents();
+          break;
+        case 'chat':
+          attachChatEvents();
+          break;
+        case 'clinic':
+          attachClinicEvents();
+          break;
+        case 'store':
+          attachStoreEvents();
+          break;
+        case 'profile':
+          attachProfileEvents();
+          break;
+      }
     }
 
     this.ensureTabSwipeAttached(mainSlot);
@@ -478,6 +503,20 @@ export class MeowApp {
     if (state.getLastSubmittedReportNotice()) attachReportToastEvents();
     this.attachOtaUpdateNoticeEvents();
     this.attachApkUpdateModalEvents();
+
+    const actionToast = state.getActionFeedbackToast();
+    if (actionToast) {
+      showMobileToast(
+        actionToast.message,
+        actionToast.kind === 'error'
+          ? 'danger'
+          : actionToast.kind === 'success'
+            ? 'success'
+            : 'default',
+        2400
+      );
+      state.clearActionFeedbackToast();
+    }
   }
 
   private renderApkUpdateModal(): string {

@@ -43,7 +43,7 @@ export function renderHeader(): string {
 
   return `
     <header class="sticky top-0 z-40 w-full bg-[#FFF9E9]/95 dark:bg-[#27201B]/95 backdrop-blur-md border-b border-brand-peachBorder/40 dark:border-warm-darkBorder shadow-sm transition-transform duration-300 ease-out will-change-transform" id="main-header">
-      <div class="max-w-md mx-auto px-3.5 min-[360px]:px-4 pt-[max(0.35rem,env(safe-area-inset-top))] pb-2 flex flex-col gap-2">
+      <div class="max-w-md mx-auto px-3.5 min-[360px]:px-4 pt-[max(0.35rem,env(safe-area-inset-top))] pb-2 flex flex-col gap-1.5">
         
         <!-- Row 1: Review/View Switcher + Notifications Bell & Meow Logo -->
         <div class="flex items-center justify-between w-full gap-2 min-w-0">
@@ -96,11 +96,11 @@ export function renderHeader(): string {
             }
           </div>
 
-          <!-- Opposite side (Left in RTL): Compact Brand Logo -->
-          <div class="cursor-pointer flex items-center transition-transform active:scale-95 shrink-0" id="header-logo-container">
+          <!-- Opposite side (Left in RTL): Prominent Brand Logo (~1.75x) -->
+          <div class="cursor-pointer flex items-center justify-end transition-transform active:scale-95 shrink min-w-0" id="header-logo-container">
             <img
               alt="Meow Brand Logo"
-              class="h-11 min-[360px]:h-[50px] sm:h-14 w-auto object-contain drop-shadow-sm"
+              class="h-[76px] min-[360px]:h-[84px] sm:h-[92px] max-w-[165px] w-auto object-contain drop-shadow-sm"
               src="${MEOW_LOGO_URL}"
             />
           </div>

@@ -1,12 +1,33 @@
 import { state } from '../../state.ts';
 import { MainTab } from '../../types.ts';
 
-export function renderTabBar(): string {
+export function shouldHideTabBar(): boolean {
   const currentTab = state.getCurrentTab();
-  if (currentTab === 'chat' && state.getActiveConversation()) {
-    return '';
+  if (currentTab === 'chat' && Boolean(state.getActiveConversation())) {
+    return true;
   }
   if (state.isSettingsOpen()) {
+    return true;
+  }
+  if (
+    Boolean(state.getPendingStatusChange()) ||
+    Boolean(state.getPendingDeletePet()) ||
+    Boolean(state.getPendingAdoptionActionConfirm()) ||
+    Boolean(state.getPendingGroupChoicePet()) ||
+    state.getIsGroupAdoptionEditorOpen() ||
+    Boolean(state.getPendingDeleteConversation()) ||
+    Boolean(state.getPendingBlockTarget()) ||
+    Boolean(state.getPendingReportTarget()) ||
+    state.getUpdateState().isApkModalOpen
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function renderTabBar(): string {
+  const currentTab = state.getCurrentTab();
+  if (shouldHideTabBar()) {
     return '';
   }
   const pendingRequestsCount = state.getPendingRequestsCount();

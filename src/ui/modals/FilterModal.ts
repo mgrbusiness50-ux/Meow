@@ -236,7 +236,7 @@ export function renderFilterModal(): string {
                     id="recommended-match-btn"
                     type="button"
                     ${activeRefPet ? '' : 'disabled'}
-                    class="w-full h-14 px-6 rounded-full font-black text-base sm:text-lg flex items-center justify-center gap-2 transition shadow-soft ${
+                    class="w-full h-11 px-5 rounded-full font-black text-sm sm:text-base flex items-center justify-center gap-2 transition shadow-soft ${
                       activeRefPet
                         ? isRecommendedActive
                           ? 'bg-brand-orange text-white ring-4 ring-brand-orange/30 cursor-pointer active:scale-[0.98]'
@@ -270,17 +270,17 @@ export function renderFilterModal(): string {
           }
 
           <!-- 1. عندك ايه (قطة / كلب / الكل) -->
-          <div class="space-y-2">
-            <label class="block text-base font-bold text-[#2d221b]">عندك ايه</label>
+          <div class="space-y-1.5">
+            <label class="block text-sm sm:text-base font-bold text-[#2d221b]">عندك ايه</label>
             <div class="grid grid-cols-3 gap-2 sm:gap-2.5">
               <button
                 type="button"
                 data-filter-species="all"
-                class="filter-species-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-[28px] border-2 ${
+                class="filter-species-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-2xl border-2 ${
                   selectedSpecies === 'all'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="font-black truncate">الكل</span>
               </button>
@@ -288,42 +288,42 @@ export function renderFilterModal(): string {
               <button
                 type="button"
                 data-filter-species="cat"
-                class="filter-species-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-[28px] border-2 ${
+                class="filter-species-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-2xl border-2 ${
                   selectedSpecies === 'cat'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="text-lg sm:text-xl">🐱</span>
+                <span class="text-base sm:text-lg">🐱</span>
                 <span class="font-black truncate">قطة</span>
               </button>
 
               <button
                 type="button"
                 data-filter-species="dog"
-                class="filter-species-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-[28px] border-2 ${
+                class="filter-species-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-2xl border-2 ${
                   selectedSpecies === 'dog'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
-                <span class="text-lg sm:text-xl">🐶</span>
+                <span class="text-base sm:text-lg">🐶</span>
                 <span class="font-black truncate">كلب</span>
               </button>
             </div>
           </div>
 
           <!-- 2. اللون -->
-          <div class="space-y-2">
-            <label for="filter-color-input" class="block text-base font-bold text-[#2d221b]">اللون</label>
-            <div class="relative flex items-center h-16">
+          <div class="space-y-1.5">
+            <label for="filter-color-input" class="block text-sm sm:text-base font-bold text-[#2d221b]">اللون</label>
+            <div class="relative flex items-center h-11 sm:h-12">
               <input
                 id="filter-color-input"
                 type="text"
                 value="${escapeAttr(filters.color || '')}"
                 placeholder="مثال: أبيض، رمادي، مشمشي..."
                 autocomplete="off"
-                class="w-full h-16 py-4 px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                class="w-full h-11 sm:h-12 py-2 px-4 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-2xl text-sm sm:text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
               />
             </div>
           </div>
@@ -356,10 +356,10 @@ export function renderFilterModal(): string {
           </div>
 
           <!-- 4. العمر (سنة & شهر اختياري) -->
-          <div class="space-y-2">
-            <label class="block text-base font-black text-[#2d221b]">العمر</label>
-            <div class="grid grid-cols-2 gap-3.5 h-16">
-              <div class="relative flex items-center h-16">
+          <div class="space-y-1.5">
+            <label class="block text-sm sm:text-base font-black text-[#2d221b]">العمر</label>
+            <div class="grid grid-cols-2 gap-3 h-11 sm:h-12">
+              <div class="relative flex items-center h-11 sm:h-12">
                 <input
                   id="filter-age-years-input"
                   type="number"
@@ -368,10 +368,10 @@ export function renderFilterModal(): string {
                   max="25"
                   value="${filters.ageYears ?? ''}"
                   placeholder="سنة"
-                  class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full h-11 sm:h-12 py-2 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-2xl text-sm sm:text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
-              <div class="relative flex items-center h-16">
+              <div class="relative flex items-center h-11 sm:h-12">
                 <input
                   id="filter-age-months-input"
                   type="number"
@@ -380,24 +380,24 @@ export function renderFilterModal(): string {
                   max="11"
                   value="${filters.ageMonths ?? ''}"
                   placeholder="شهر (اختياري)"
-                  class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
+                  class="w-full h-11 sm:h-12 py-2 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-2xl text-sm sm:text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
             </div>
           </div>
 
           <!-- 5. الجنس -->
-          <div class="space-y-2">
-            <label class="block text-base font-bold text-[#2d221b]">الجنس</label>
+          <div class="space-y-1.5">
+            <label class="block text-sm sm:text-base font-bold text-[#2d221b]">الجنس</label>
             <div class="grid grid-cols-3 gap-2 sm:gap-2.5">
               <button
                 type="button"
                 data-filter-gender="all"
-                class="filter-gender-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
+                class="filter-gender-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1.5 rounded-2xl border-2 ${
                   selectedGender === 'all'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
+                } text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
               >
                 <span class="font-black truncate">الكل</span>
               </button>
@@ -405,11 +405,11 @@ export function renderFilterModal(): string {
               <button
                 type="button"
                 data-filter-gender="male"
-                class="filter-gender-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
+                class="filter-gender-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1.5 rounded-2xl border-2 ${
                   selectedGender === 'male'
                     ? 'border-[#3b82f6] bg-[#eff6ff] text-[#2563eb]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } text-base sm:text-lg font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
+                } text-sm sm:text-base font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
               >
                 <span class="font-black truncate">ذكر</span>
               </button>
@@ -417,11 +417,11 @@ export function renderFilterModal(): string {
               <button
                 type="button"
                 data-filter-gender="female"
-                class="filter-gender-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${
+                class="filter-gender-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1.5 rounded-2xl border-2 ${
                   selectedGender === 'female'
                     ? 'border-[#ec4899] bg-[#fce7f3] text-[#db2777]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } text-base sm:text-lg font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
+                } text-sm sm:text-base font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3"
               >
                 <span class="font-black truncate">انثى</span>
               </button>
@@ -429,17 +429,17 @@ export function renderFilterModal(): string {
           </div>
 
           <!-- 6. حالة التطعيم -->
-          <div class="space-y-2">
-            <label class="block text-base font-black text-[#2d221b]">حالة التطعيم</label>
-            <div class="grid grid-cols-3 gap-2 sm:gap-2.5 h-16">
+          <div class="space-y-1.5">
+            <label class="block text-sm sm:text-base font-black text-[#2d221b]">حالة التطعيم</label>
+            <div class="grid grid-cols-3 gap-2 sm:gap-2.5 h-11 sm:h-12">
               <button
                 type="button"
                 data-filter-vaccine="all"
-                class="filter-vaccine-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-[28px] border-2 ${
+                class="filter-vaccine-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl border-2 ${
                   selectedVaccination === 'all'
                     ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-                } cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-1.5 sm:px-2"
+                } cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xs sm:text-sm px-1.5 sm:px-2"
               >
                 <span class="font-black truncate">الكل</span>
               </button>
@@ -447,11 +447,11 @@ export function renderFilterModal(): string {
               <button
                 type="button"
                 data-filter-vaccine="fully_vaccinated"
-                class="filter-vaccine-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-[28px] border-2 ${
+                class="filter-vaccine-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl border-2 ${
                   selectedVaccination === 'fully_vaccinated'
                     ? 'border-[#10b981] bg-[#ecfdf5] text-[#059669]'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-1.5 sm:px-2"
+                } font-bold cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xs sm:text-sm px-1.5 sm:px-2"
               >
                 <i class="fa-solid fa-check shrink-0"></i>
                 <span class="font-black truncate">مطعم</span>
@@ -460,11 +460,11 @@ export function renderFilterModal(): string {
               <button
                 type="button"
                 data-filter-vaccine="not_vaccinated"
-                class="filter-vaccine-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 rounded-[28px] border-2 ${
+                class="filter-vaccine-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 rounded-2xl border-2 ${
                   selectedVaccination === 'not_vaccinated'
                     ? 'border-brand-orange bg-[#fff5ea] text-brand-orange'
                     : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555]'
-                } font-bold text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]"
+                } font-bold text-xs sm:text-sm cursor-pointer shadow-sm transition-all active:scale-[0.98]"
               >
                 <span class="font-black truncate">غير مطعم</span>
               </button>
@@ -544,11 +544,11 @@ export function renderFilterModal(): string {
           </div>
 
           <!-- CTA Button -->
-          <div class="pt-3">
+          <div class="pt-2">
             <button
               id="apply-filter-btn"
               type="button"
-              class="w-full h-16 px-6 text-white bg-brand-orange hover:bg-brand-accent rounded-full font-extrabold text-xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
+              class="w-full h-12 px-5 text-white bg-brand-orange hover:bg-brand-accent rounded-full font-extrabold text-base sm:text-lg shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer font-baloo"
             >
               <span>تطبيق الفلترة</span>
             </button>
@@ -609,11 +609,11 @@ export function attachFilterModalEvents(onApply?: () => void): void {
     tempSpecies = species;
     speciesBtns.forEach((b) => {
       const isMatch = b.getAttribute('data-filter-species') === tempSpecies;
-      b.className = `filter-species-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-[28px] border-2 ${
+      b.className = `filter-species-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 rounded-2xl border-2 ${
         isMatch
           ? 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold'
           : 'border-[#d6c7b2] bg-[#ffffff] text-[#786555] font-bold'
-      } text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98]`;
+      } text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98]`;
     });
   };
 
@@ -629,7 +629,7 @@ export function attachFilterModalEvents(onApply?: () => void): void {
           activeCls = 'border-[#ec4899] bg-[#fce7f3] text-[#db2777] font-bold';
         else activeCls = 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold';
       }
-      b.className = `filter-gender-btn min-w-0 h-16 relative flex items-center justify-center gap-1.5 rounded-[28px] border-2 ${activeCls} text-base sm:text-lg cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3`;
+      b.className = `filter-gender-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1.5 rounded-2xl border-2 ${activeCls} text-sm sm:text-base cursor-pointer shadow-sm transition-all active:scale-[0.98] px-2 sm:px-3`;
     });
   };
 
@@ -646,7 +646,7 @@ export function attachFilterModalEvents(onApply?: () => void): void {
           activeCls = 'border-brand-orange bg-[#fff5ea] text-brand-orange font-bold';
         else activeCls = 'border-[#e67e22] bg-[#fff5ea] text-[#e67e22] font-extrabold';
       }
-      b.className = `filter-vaccine-btn min-w-0 h-16 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-[28px] border-2 ${activeCls} cursor-pointer shadow-sm transition-all active:scale-[0.98] text-sm sm:text-base px-1.5 sm:px-2`;
+      b.className = `filter-vaccine-btn min-w-0 h-11 sm:h-12 relative flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl border-2 ${activeCls} cursor-pointer shadow-sm transition-all active:scale-[0.98] text-xs sm:text-sm px-1.5 sm:px-2`;
     });
   };
 
@@ -925,7 +925,7 @@ export function attachFilterModalEvents(onApply?: () => void): void {
         recCardBox.classList.add('border-[#e67e22]', 'bg-[#fff5ea]');
       }
       recMatchBtn.className =
-        'w-full h-14 px-6 rounded-full font-black text-base sm:text-lg flex items-center justify-center gap-2 transition shadow-soft bg-brand-orange text-white ring-4 ring-brand-orange/30 cursor-pointer active:scale-[0.98]';
+        'w-full h-11 px-5 rounded-full font-black text-sm sm:text-base flex items-center justify-center gap-2 transition shadow-soft bg-brand-orange text-white ring-4 ring-brand-orange/30 cursor-pointer active:scale-[0.98]';
       if (recFilledBanner) recFilledBanner.classList.remove('hidden');
       if (disableRecBtn) disableRecBtn.classList.remove('hidden');
     });
@@ -942,7 +942,7 @@ export function attachFilterModalEvents(onApply?: () => void): void {
       disableRecBtn.classList.add('hidden');
       if (recMatchBtn) {
         recMatchBtn.className =
-          'w-full h-14 px-6 rounded-full font-black text-base sm:text-lg flex items-center justify-center gap-2 transition shadow-soft bg-brand-orange hover:bg-brand-accent text-white cursor-pointer active:scale-[0.98]';
+          'w-full h-11 px-5 rounded-full font-black text-sm sm:text-base flex items-center justify-center gap-2 transition shadow-soft bg-brand-orange hover:bg-brand-accent text-white cursor-pointer active:scale-[0.98]';
       }
     });
   }

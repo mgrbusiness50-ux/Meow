@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient.ts';
+import { resolveConversationMediaUrls } from './supabaseChatService.ts';
 import {
   CustomStickerModel,
   DbBlockedUserRow,
@@ -354,6 +355,10 @@ export async function hydrateSupabaseWorkspace(
       );
       return mappedConv;
     });
+
+    await Promise.all(
+      conversations.map((conv) => resolveConversationMediaUrls(conv.messages))
+    );
 
     const contactRequests: MappedContactRequest[] = requestRows.map((row) =>
       mapDbContactRequestToModel(row, {
@@ -1144,67 +1149,188 @@ export async function deleteCustomStickerInSupabase(
   }
 }
 
+export interface SupabaseRealtimeHandlers {
+  onMessageEvent?: (eventType: 'INSERT' | 'UPDATE', row: DbMessageRow) => void;
+  onConversationEvent?: (eventType: string) => void;
+  onConversationUserStateEvent?: (row: DbConversationUserStateRow) => void;
+  onContactRequestEvent?: () => void;
+  onNotificationEvent?: () => void;
+  onReconnectCatchup?: () => void;
+}
+
 export function subscribeToSupabaseWorkspaceRealtime(
   userId: string,
-  onWorkspaceChange: () => void
+  onWorkspaceChange: () => void,
+  handlers?: SupabaseRealtimeHandlers
 ): () => void {
   const client = getSupabaseClient();
   if (!client || !isValidUuid(userId) || typeof client.channel !== 'function') {
     return () => {};
   }
 
+  let disposed = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryAttempt = 0;
+  let hasSubscribedOnce = false;
+  let channel: RealtimeChannel | null = null;
+
   const triggerRefresh = () => {
+    if (disposed) return;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
-      onWorkspaceChange();
-    }, 350);
+      if (!disposed) onWorkspaceChange();
+    }, 300);
   };
 
-  let channel: RealtimeChannel | null = null;
-  try {
-    channel = client
-      .channel(`meow_workspace_${userId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'contact_requests', filter: `receiver_id=eq.${userId}` },
-        triggerRefresh
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'contact_requests', filter: `sender_id=eq.${userId}` },
-        triggerRefresh
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-        triggerRefresh
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
-        triggerRefresh
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'conversations', filter: `user_a_id=eq.${userId}` },
-        triggerRefresh
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'conversations', filter: `user_b_id=eq.${userId}` },
-        triggerRefresh
-      )
-      .subscribe();
-  } catch {
-    return () => {};
-  }
-
-  return () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
+  const cleanupChannel = () => {
     if (channel && typeof client.removeChannel === 'function') {
       void client.removeChannel(channel);
     }
+    channel = null;
+  };
+
+  const scheduleReconnect = () => {
+    if (disposed || reconnectTimer) return;
+    const delays = [1000, 2000, 5000, 10000, 30000];
+    const delay = delays[Math.min(retryAttempt, delays.length - 1)];
+    retryAttempt += 1;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (!disposed) {
+        connect();
+      }
+    }, delay);
+  };
+
+  const connect = () => {
+    if (disposed) return;
+    cleanupChannel();
+
+    try {
+      const nextChannel = client
+        .channel(`meow_workspace_${userId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'contact_requests', filter: `receiver_id=eq.${userId}` },
+          () => {
+            if (handlers?.onContactRequestEvent) {
+              handlers.onContactRequestEvent();
+            } else {
+              triggerRefresh();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'contact_requests', filter: `sender_id=eq.${userId}` },
+          () => {
+            if (handlers?.onContactRequestEvent) {
+              handlers.onContactRequestEvent();
+            } else {
+              triggerRefresh();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+          () => {
+            if (handlers?.onNotificationEvent) {
+              handlers.onNotificationEvent();
+            } else {
+              triggerRefresh();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages' },
+          (payload) => {
+            const row = (payload as unknown as { new?: DbMessageRow }).new;
+            if (row && handlers?.onMessageEvent) {
+              handlers.onMessageEvent('INSERT', row);
+            } else {
+              triggerRefresh();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'messages' },
+          (payload) => {
+            const row = (payload as unknown as { new?: DbMessageRow }).new;
+            if (row && handlers?.onMessageEvent) {
+              handlers.onMessageEvent('UPDATE', row);
+            } else {
+              triggerRefresh();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'conversation_user_state', filter: `user_id=eq.${userId}` },
+          (payload) => {
+            const row = (payload as unknown as { new?: DbConversationUserStateRow }).new;
+            if (row && handlers?.onConversationUserStateEvent) {
+              handlers.onConversationUserStateEvent(row);
+            } else {
+              triggerRefresh();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'conversations', filter: `user_a_id=eq.${userId}` },
+          (payload) => {
+            if (handlers?.onConversationEvent) {
+              handlers.onConversationEvent((payload as { eventType?: string }).eventType || '*');
+            } else {
+              triggerRefresh();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'conversations', filter: `user_b_id=eq.${userId}` },
+          (payload) => {
+            if (handlers?.onConversationEvent) {
+              handlers.onConversationEvent((payload as { eventType?: string }).eventType || '*');
+            } else {
+              triggerRefresh();
+            }
+          }
+        );
+
+      channel = nextChannel.subscribe((status) => {
+        if (disposed) return;
+        if (status === 'SUBSCRIBED') {
+          const isReconnect = hasSubscribedOnce || retryAttempt > 0;
+          hasSubscribedOnce = true;
+          retryAttempt = 0;
+          if (isReconnect) {
+            if (handlers?.onReconnectCatchup) {
+              handlers.onReconnectCatchup();
+            } else {
+              triggerRefresh();
+            }
+          }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          scheduleReconnect();
+        }
+      });
+    } catch {
+      scheduleReconnect();
+    }
+  };
+
+  connect();
+
+  return () => {
+    disposed = true;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    cleanupChannel();
   };
 }

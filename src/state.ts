@@ -5,6 +5,8 @@ import {
   ContactRequest,
   Conversation,
   ChatMessage,
+  ChatMessageReply,
+  PetRelationshipState,
   FilterState,
   MainTab,
   PrivacySetting,
@@ -44,7 +46,22 @@ import {
   upsertPetInSupabase,
   withdrawContactRequestInSupabase,
 } from './services/supabaseDataService.ts';
-import type { CustomStickerModel } from './services/supabaseMappers.ts';
+import {
+  markMessagesDeliveredInSupabase,
+  resolveChatMediaSignedUrl,
+  sendExtendedChatMessageInSupabase,
+  setConversationMutedInSupabase,
+  softDeleteMessageInSupabase,
+  uploadChatMediaInSupabase,
+} from './services/supabaseChatService.ts';
+import {
+  type CustomStickerModel,
+  type DbConversationUserStateRow,
+  type DbMessageRow,
+  formatDbMessagePreview,
+  mapDbMessageToModel,
+} from './services/supabaseMappers.ts';
+import { processImageFileForUpload } from './utils/imageUpload.ts';
 import { generateUuid, isValidUuid } from './utils/uuid.ts';
 import {
   normalizeArabic,
@@ -120,6 +137,10 @@ const OFFLINE_CACHE_KEY_PREFIX = 'meow_offline_cache_v1:';
 const OFFLINE_LAST_USER_ID_KEY = 'meow_last_user_id_v1';
 const CLINIC_NOTIFY_STORAGE_KEY = 'meow_clinic_notify_v1';
 const STORE_NOTIFY_STORAGE_KEY = 'meow_store_notify_v1';
+const SENT_MATING_GREETINGS_STORAGE_KEY = 'meow_sent_mating_greetings_v1';
+const RECENT_STICKERS_STORAGE_KEY = 'meow_recent_sticker_ids_v1';
+const FAVORITE_STICKERS_STORAGE_KEY = 'meow_favorite_sticker_ids_v1';
+export const AUTO_MATING_GREETING_TEXT = 'دااووووووووود';
 export const MAIN_TAB_ORDER: MainTab[] = [
   'mating',
   'adoption',
@@ -321,6 +342,46 @@ class AppStateManager {
         })()
       : []
   );
+  private sentMatingGreetingRequestIds: Set<string> = new Set(
+    typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+      ? (() => {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(SENT_MATING_GREETINGS_STORAGE_KEY) || '[]');
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        })()
+      : []
+  );
+  private recentStickerIds: string[] =
+    typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+      ? (() => {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(RECENT_STICKERS_STORAGE_KEY) || '[]');
+            return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+  private favoriteStickerIds: string[] =
+    typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+      ? (() => {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(FAVORITE_STICKERS_STORAGE_KEY) || '[]');
+            return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+  private chatDraftsByConvId: Map<string, string> = new Map();
+  private actionFeedbackToast: {
+    id: number;
+    kind: 'success' | 'error' | 'info';
+    message: string;
+  } | null = null;
   private activeConfettiBurstKey: string | null = null;
   private firestoreNotificationsUnsub: (() => void) | null = null;
   private workspaceRealtimeUnsub: (() => void) | null = null;
@@ -1481,6 +1542,102 @@ class AppStateManager {
     return run;
   }
 
+  private async handleRealtimeMessageEvent(
+    userId: string,
+    eventType: 'INSERT' | 'UPDATE',
+    row: DbMessageRow
+  ): Promise<void> {
+    if (this.supabaseAuthUserId !== userId || !row?.id || !row?.conversation_id) return;
+
+    const conv = this.conversations.find((c) => c.id === row.conversation_id);
+    if (!conv) {
+      // Conversation may have just been created on approval — hydrate to pick up full context
+      void this.hydrateSupabaseWorkspaceForUser(userId);
+      return;
+    }
+
+    const mapped = mapDbMessageToModel(row, userId);
+    mapped.senderName =
+      mapped.senderId === 'system'
+        ? 'Meow'
+        : mapped.isFromUser
+        ? this.user.name || 'أنت'
+        : conv.otherUserName;
+
+    if (mapped.storagePath && !mapped.deletedAt) {
+      const signed = await resolveChatMediaSignedUrl(mapped.storagePath);
+      if (signed) {
+        mapped.fileUrl = signed;
+      }
+    }
+
+    const existingIdx = conv.messages.findIndex((m) => m.id === mapped.id);
+    if (existingIdx !== -1) {
+      const existing = conv.messages[existingIdx];
+      conv.messages[existingIdx] = {
+        ...existing,
+        ...mapped,
+        fileUrl: mapped.fileUrl || existing.fileUrl,
+        replyTo: mapped.replyTo || existing.replyTo,
+      };
+    } else {
+      conv.messages.push(mapped);
+    }
+
+    conv.messages.sort((a, b) => (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0));
+
+    const latestMsg = conv.messages[conv.messages.length - 1];
+    if (latestMsg && latestMsg.id === mapped.id) {
+      conv.lastMessage = formatDbMessagePreview(row);
+      if (eventType === 'INSERT') {
+        conv.lastMessageTime = 'الآن';
+      }
+      conv.updatedAt = mapped.createdAtMs || Date.now();
+    }
+
+    const isViewingThisConv =
+      this.currentTab === 'chat' && this.activeConversationId === conv.id;
+
+    if (eventType === 'INSERT' && !mapped.isFromUser && !row.is_system) {
+      if (isViewingThisConv) {
+        conv.unreadCount = 0;
+        void markConversationReadInSupabase(conv.id);
+      } else {
+        conv.unreadCount = (conv.unreadCount || 0) + 1;
+        void markMessagesDeliveredInSupabase(conv.id);
+      }
+    }
+
+    this.persistOfflineSnapshotForCurrentUser();
+    this.notify();
+  }
+
+  private handleRealtimeConversationUserStateEvent(row: DbConversationUserStateRow): void {
+    if (!row?.conversation_id) return;
+    if (row.is_hidden) {
+      this.conversations = this.conversations.filter((c) => c.id !== row.conversation_id);
+      if (this.activeConversationId === row.conversation_id) {
+        this.activeConversationId = null;
+      }
+      this.notify();
+      return;
+    }
+
+    const conv = this.conversations.find((c) => c.id === row.conversation_id);
+    if (!conv) return;
+
+    const isViewingThisConv =
+      this.currentTab === 'chat' && this.activeConversationId === conv.id;
+
+    conv.isPinned = Boolean(row.is_pinned);
+    conv.pinnedAt = row.pinned_at ? Date.parse(row.pinned_at) : undefined;
+    if (typeof row.is_muted === 'boolean') {
+      conv.isMuted = row.is_muted;
+    }
+    conv.unreadCount = isViewingThisConv ? 0 : row.unread_count ?? conv.unreadCount;
+    this.notify();
+  }
+
   private ensureWorkspaceRealtime(userId: string): void {
     if (!isSupabaseConfigured() || this.isOnboardingPreviewSession || !isValidUuid(userId)) {
       return;
@@ -1490,11 +1647,42 @@ class AppStateManager {
       this.workspaceRealtimeUnsub = null;
     }
     try {
-      this.workspaceRealtimeUnsub = subscribeToSupabaseWorkspaceRealtime(userId, () => {
-        if (this.supabaseAuthUserId === userId) {
-          void this.hydrateSupabaseWorkspaceForUser(userId);
+      this.workspaceRealtimeUnsub = subscribeToSupabaseWorkspaceRealtime(
+        userId,
+        () => {
+          if (this.supabaseAuthUserId === userId) {
+            void this.hydrateSupabaseWorkspaceForUser(userId);
+          }
+        },
+        {
+          onMessageEvent: (eventType, row) => {
+            void this.handleRealtimeMessageEvent(userId, eventType, row);
+          },
+          onConversationUserStateEvent: (row) => {
+            this.handleRealtimeConversationUserStateEvent(row);
+          },
+          onConversationEvent: () => {
+            if (this.supabaseAuthUserId === userId) {
+              void this.hydrateSupabaseWorkspaceForUser(userId);
+            }
+          },
+          onContactRequestEvent: () => {
+            if (this.supabaseAuthUserId === userId) {
+              void this.hydrateSupabaseWorkspaceForUser(userId);
+            }
+          },
+          onNotificationEvent: () => {
+            if (this.supabaseAuthUserId === userId) {
+              void this.hydrateSupabaseWorkspaceForUser(userId);
+            }
+          },
+          onReconnectCatchup: () => {
+            if (this.supabaseAuthUserId === userId) {
+              void this.hydrateSupabaseWorkspaceForUser(userId);
+            }
+          },
         }
-      });
+      );
     } catch {
       this.workspaceRealtimeUnsub = null;
     }
@@ -1542,6 +1730,7 @@ class AppStateManager {
       this.reports = [];
       this.savedPetIds = new Set();
       this.customStickers = [];
+      this.chatDraftsByConvId.clear();
       this.activeConversationId = null;
       this.selectedPetForDetail = null;
       this.selectedPetForRequest = null;
@@ -3212,30 +3401,25 @@ class AppStateManager {
       }
 
       if (interactive) {
-        if (!result.configured) {
+        if (!result.configured || result.status === 'up_to_date') {
           this.updateActionFeedback = {
-            kind: 'info',
-            message: 'أنت تستخدم أحدث إصدار مضمّن حالياً.',
-          };
-        } else if (result.status === 'up_to_date') {
-          this.updateActionFeedback = {
-            kind: 'success',
-            message: `التطبيق محدّث لأحدث إصدار (${result.currentBundleVersion}).`,
+            kind: !result.configured ? 'info' : 'success',
+            message: 'مفيش تحديثات جديدة حاليًا',
           };
         } else if (result.status === 'ota_available' && result.otaUpdate) {
           this.updateActionFeedback = {
             kind: 'info',
-            message: `يتوفر تحديث متوافق جديد (${result.otaUpdate.version}) بدون الحاجة لتنزيل APK.`,
+            message: `في تحديث جديد متاح (${result.otaUpdate.version}) يتنزّل على طول من غير ما تحمل APK.`,
           };
         } else if (result.status === 'apk_required' && result.apkUpdate) {
           this.updateActionFeedback = {
             kind: 'info',
-            message: `يتوفر تحديث APK جديد (${result.apkUpdate.latestVersion}).`,
+            message: `في نسخة APK جديدة متاحة (${result.apkUpdate.latestVersion}).`,
           };
         } else if (result.status === 'error') {
           this.updateActionFeedback = {
             kind: 'error',
-            message: result.errorMessage || 'تعذر التحقق من التحديثات حالياً.',
+            message: result.errorMessage || 'ماقدرناش نطمن على التحديثات دلوقتي.',
           };
         }
       }
@@ -3676,18 +3860,124 @@ class AppStateManager {
     );
   }
 
+  public getActionFeedbackToast(): {
+    id: number;
+    kind: 'success' | 'error' | 'info';
+    message: string;
+  } | null {
+    return this.actionFeedbackToast;
+  }
+
+  public clearActionFeedbackToast(): void {
+    this.actionFeedbackToast = null;
+  }
+
+  private pushActionFeedback(
+    message: string,
+    kind: 'success' | 'error' | 'info' = 'info'
+  ): void {
+    this.actionFeedbackToast = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      kind,
+      message,
+    };
+  }
+
   public getIncomingContactRequests(): ContactRequest[] {
-    return this.getContactRequests().filter((r) => r.senderId !== this.user.id);
+    return this.getContactRequests().filter(
+      (r) =>
+        r.senderId !== this.user.id &&
+        (!r.receiverOwnerId || r.receiverOwnerId === this.user.id) &&
+        r.status !== 'accepted'
+    );
   }
 
   public getOutgoingContactRequests(): ContactRequest[] {
-    return this.getContactRequests().filter((r) => r.senderId === this.user.id);
+    return this.getContactRequests().filter(
+      (r) => r.senderId === this.user.id && r.status !== 'accepted'
+    );
   }
 
   public getPendingRequestsCount(): number {
-    return this.getContactRequests().filter(
-      (r) => r.senderId !== this.user.id && !r.isWithdrawn && r.status === 'pending'
+    return this.getIncomingContactRequests().filter(
+      (r) => !r.isWithdrawn && r.status === 'pending'
     ).length;
+  }
+
+  public getConversationForPet(pet: Pet): Conversation | null {
+    if (!pet?.id) return null;
+    const direct = this.conversations.find(
+      (c) => c.petId === pet.id && !this.isUserBlocked(c.otherUserId)
+    );
+    if (direct) return direct;
+
+    const acceptedReq = this.contactRequests.find(
+      (r) =>
+        r.status === 'accepted' &&
+        (r.receiverPetId === pet.id || r.senderPetId === pet.id)
+    );
+    if (acceptedReq) {
+      return (
+        this.conversations.find(
+          (c) =>
+            (c.requestId === acceptedReq.id || c.otherUserId === acceptedReq.senderId || c.otherUserId === acceptedReq.receiverOwnerId) &&
+            !this.isUserBlocked(c.otherUserId)
+        ) || null
+      );
+    }
+    return null;
+  }
+
+  public getPendingRequestForPet(
+    pet: Pet,
+    direction?: 'incoming' | 'outgoing'
+  ): ContactRequest | null {
+    if (!pet?.id) return null;
+    const requests = this.getContactRequests();
+    if (direction !== 'outgoing') {
+      const incoming = requests.find(
+        (r) =>
+          r.senderId !== this.user.id &&
+          (!r.receiverOwnerId || r.receiverOwnerId === this.user.id) &&
+          r.status === 'pending' &&
+          !r.isWithdrawn &&
+          (r.receiverPetId === pet.id || r.senderPetId === pet.id)
+      );
+      if (incoming || direction === 'incoming') return incoming || null;
+    }
+
+    const outgoing = requests.find(
+      (r) =>
+        r.senderId === this.user.id &&
+        r.status === 'pending' &&
+        !r.isWithdrawn &&
+        r.receiverPetId === pet.id
+    );
+    return outgoing || null;
+  }
+
+  public getPetRelationshipState(pet: Pet): PetRelationshipState {
+    if (pet.ownerId === this.user.id) {
+      return 'owner';
+    }
+    if (this.getConversationForPet(pet)) {
+      return 'accepted';
+    }
+    const acceptedReq = this.getContactRequests().find(
+      (r) =>
+        r.status === 'accepted' &&
+        (r.receiverPetId === pet.id || r.senderPetId === pet.id)
+    );
+    if (acceptedReq) {
+      return 'accepted';
+    }
+    if (this.getPendingRequestForPet(pet, 'incoming')) {
+      return 'incoming_pending';
+    }
+    if (this.getPendingRequestForPet(pet, 'outgoing')) {
+      return 'outgoing_pending';
+    }
+    return 'none';
   }
 
   public getConversations(): Conversation[] {
@@ -3824,6 +4114,11 @@ class AppStateManager {
       const conv = this.conversations.find((c) => c.id === id);
       if (conv) {
         conv.unreadCount = 0;
+        conv.messages.forEach((m) => {
+          if (!m.isFromUser && m.senderId !== 'system' && m.status !== 'read') {
+            m.status = 'read';
+          }
+        });
         this.markNotificationsReadWhere(
           (n) =>
             n.targetConversationId === conv.id ||
@@ -3837,6 +4132,31 @@ class AppStateManager {
       }
     }
     this.notify();
+  }
+
+  public toggleMuteConversation(id: string): boolean {
+    const conv = this.conversations.find((c) => c.id === id);
+    if (!conv) return false;
+    const nextMuted = !conv.isMuted;
+    conv.isMuted = nextMuted;
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void setConversationMutedInSupabase(id, this.user.id, nextMuted);
+    }
+    this.notify();
+    return nextMuted;
+  }
+
+  public getChatDraft(convId: string): string {
+    return this.chatDraftsByConvId.get(convId) ?? '';
+  }
+
+  public setChatDraft(convId: string, text: string): void {
+    if (!convId) return;
+    if (!text) {
+      this.chatDraftsByConvId.delete(convId);
+    } else {
+      this.chatDraftsByConvId.set(convId, text);
+    }
   }
 
   public pinConversation(id: string): void {
@@ -4969,12 +5289,27 @@ class AppStateManager {
 
     const otherAdoptionPets = this.userPets.filter((p) => p.status === 'adoption' && p.id !== petId);
     if (otherAdoptionPets.length === 0 && !this.userGroupAdoptionListing) {
+      const prevStatus = targetPet.status;
+      const prevAdoptionType = targetPet.adoptionType;
+      const prevAlso = targetPet.alsoListedIndividually;
       targetPet.status = 'adoption';
       targetPet.adoptionType = 'individual';
       targetPet.alsoListedIndividually = false;
       this.recalculateAllCompatibilities();
       if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-        void upsertPetInSupabase(targetPet, this.user.id);
+        void upsertPetInSupabase(targetPet, this.user.id).then((res) => {
+          if (!res.success) {
+            targetPet.status = prevStatus;
+            targetPet.adoptionType = prevAdoptionType;
+            targetPet.alsoListedIndividually = prevAlso;
+            this.recalculateAllCompatibilities();
+            this.pushActionFeedback(
+              res.errorMessage || 'ماقدرناش نحدّث حالة الأليف، جرب تاني.',
+              'error'
+            );
+            this.notify();
+          }
+        });
       }
       this.notify();
       return;
@@ -5765,22 +6100,41 @@ class AppStateManager {
 
   public setPetStatus(petId: string, status: PetStatus): void {
     const pet = this.userPets.find((p) => p.id === petId);
-    if (pet) {
-      pet.status = status;
-      if (status !== 'adoption') {
-        pet.adoptionType = undefined;
-        pet.alsoListedIndividually = false;
+    if (!pet) return;
+
+    const prevStatus = pet.status;
+    const prevAdoptionType = pet.adoptionType;
+    const prevAlso = pet.alsoListedIndividually;
+    const hadGroupListing = Boolean(this.userGroupAdoptionListing?.groupPetIds?.includes(petId));
+
+    pet.status = status;
+    if (status !== 'adoption') {
+      pet.adoptionType = undefined;
+      pet.alsoListedIndividually = false;
+      if (hadGroupListing) {
         this.removePetFromGroupListing(petId);
-      } else if (!pet.adoptionType) {
-        pet.adoptionType = 'individual';
-        pet.alsoListedIndividually = false;
       }
-      this.recalculateAllCompatibilities();
-      if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-        void upsertPetInSupabase(pet, this.user.id);
-      }
-      this.notify();
+    } else if (!pet.adoptionType) {
+      pet.adoptionType = 'individual';
+      pet.alsoListedIndividually = false;
     }
+    this.recalculateAllCompatibilities();
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      void upsertPetInSupabase(pet, this.user.id).then((res) => {
+        if (!res.success) {
+          pet.status = prevStatus;
+          pet.adoptionType = prevAdoptionType;
+          pet.alsoListedIndividually = prevAlso;
+          this.recalculateAllCompatibilities();
+          this.pushActionFeedback(
+            res.errorMessage || 'ماقدرناش نحدّث حالة الأليف، جرب تاني.',
+            'error'
+          );
+          this.notify();
+        }
+      });
+    }
+    this.notify();
   }
 
   public getShowPhoneInProfile(): boolean {
@@ -6235,36 +6589,110 @@ class AppStateManager {
     return { success: true, request: newRequest };
   }
 
+  private markMatingGreetingSent(requestId: string): void {
+    if (!requestId) return;
+    this.sentMatingGreetingRequestIds.add(requestId);
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(
+          SENT_MATING_GREETINGS_STORAGE_KEY,
+          JSON.stringify(Array.from(this.sentMatingGreetingRequestIds))
+        );
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }
+
+  private async sendAutoMatingGreetingOnce(
+    req: ContactRequest,
+    conv: Conversation
+  ): Promise<void> {
+    if (req.type !== 'mating' && conv.petType !== 'mating') return;
+    if (this.sentMatingGreetingRequestIds.has(req.id)) return;
+    if (
+      conv.messages.some(
+        (m) => !m.deletedAt && (m.text || '').trim() === AUTO_MATING_GREETING_TEXT
+      )
+    ) {
+      this.markMatingGreetingSent(req.id);
+      return;
+    }
+
+    // Mark sent before sending to prevent duplicate auto-greetings across concurrent triggers
+    this.markMatingGreetingSent(req.id);
+
+    const nowMs = Date.now();
+    const greetingMsg: ChatMessage = {
+      id: generateUuid(),
+      conversationId: conv.id,
+      senderId: this.user.id || conv.otherUserId,
+      senderName: this.user.name || 'Meow',
+      text: AUTO_MATING_GREETING_TEXT,
+      type: 'text',
+      timestamp: new Date(nowMs).toLocaleTimeString('ar-EG', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      createdAtMs: nowMs,
+      isFromUser: true,
+      status: 'sent',
+      localStatus: 'sent',
+    };
+
+    conv.messages.push(greetingMsg);
+    conv.lastMessage = AUTO_MATING_GREETING_TEXT;
+    conv.lastMessageTime = 'الآن';
+    conv.updatedAt = nowMs;
+    this.notify();
+
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      const sendRes = await sendExtendedChatMessageInSupabase({
+        id: greetingMsg.id,
+        conversationId: conv.id,
+        senderId: this.user.id,
+        message: greetingMsg,
+      });
+      if (sendRes.success && sendRes.data) {
+        const target = conv.messages.find((m) => m.id === greetingMsg.id);
+        if (target) {
+          target.timestamp = sendRes.data.timestamp || target.timestamp;
+          target.createdAtMs = sendRes.data.createdAtMs || target.createdAtMs;
+          target.status = sendRes.data.status || 'sent';
+          target.localStatus = 'sent';
+          this.notify();
+        }
+      }
+    } else if (!isSupabaseConfigured()) {
+      void syncChatMessageToFirestore(conv.id, greetingMsg).catch((err) =>
+        console.warn('Firestore auto greeting sync skipped:', err)
+      );
+    }
+  }
+
   public approveContactRequest(requestId: string): void {
     const req = this.contactRequests.find((r) => r.id === requestId);
     if (!req) return;
     if (req.senderId === this.user.id) return;
+    if (req.receiverOwnerId && req.receiverOwnerId !== this.user.id) return;
+    if (req.status !== 'pending' || req.isWithdrawn) return;
 
-    const isOutgoing = req.senderId === this.user.id;
     const allPets = this.getAllPets();
     const receiverPet =
       req.receiverPet || allPets.find((p) => p.id === req.receiverPetId);
     const senderPet =
       req.senderPet || (req.senderPetId ? allPets.find((p) => p.id === req.senderPetId) : undefined);
 
-    const otherUserId = isOutgoing
-      ? receiverPet?.ownerId || `owner_${req.receiverPetId}`
-      : req.senderId;
-
+    const otherUserId = req.senderId;
     if (this.isUserBlocked(otherUserId)) return;
 
-    const otherUserName = isOutgoing
-      ? receiverPet?.ownerName || 'صاحب الأليف'
-      : req.senderName;
-    const otherUserAvatar = isOutgoing
-      ? receiverPet?.ownerAvatar || req.senderAvatar
-      : req.senderAvatar;
-    const otherUserPhone = isOutgoing
-      ? receiverPet?.ownerPhone
-      : req.senderPhone || senderPet?.ownerPhone;
-    const otherUserShowPhone = isOutgoing
-      ? Boolean(receiverPet?.ownerShowPhone === true && receiverPet?.ownerPrivacy === 'public')
-      : Boolean(req.senderShowPhone === true || (senderPet?.ownerShowPhone === true && senderPet?.ownerPrivacy === 'public'));
+    const otherUserName = req.senderName;
+    const otherUserAvatar = req.senderAvatar;
+    const otherUserPhone = req.senderPhone || senderPet?.ownerPhone;
+    const otherUserShowPhone = Boolean(
+      req.senderShowPhone === true ||
+        (senderPet?.ownerShowPhone === true && senderPet?.ownerPrivacy === 'public')
+    );
 
     const subjectPet = receiverPet || senderPet;
     const petPhoto =
@@ -6286,10 +6714,11 @@ class AppStateManager {
       : '';
     const groupRuleText = isGroupSubject
       ? subjectPet.mustAdoptTogether
-        ? 'يُشترط تبني المجموعة كاملة معاً'
-        : 'متاح التبني معاً أو بشكل منفرد'
+        ? 'لازم تبني المجموعة كلها مع بعض'
+        : 'متاح التبني مع بعض أو كل واحد لوحده'
       : '';
 
+    const previousStatus = req.status;
     req.status = 'accepted';
     this.processedRequestStatuses[req.id] = 'accepted';
     this.persistProcessedRequestStatuses();
@@ -6297,15 +6726,28 @@ class AppStateManager {
     if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
       this.markNotificationsReadWhere((n) => n.targetRequestId === req.id, true);
       void respondContactRequestInSupabase(req.id, this.user.id, 'accepted').then(async (res) => {
+        if (!res.success) {
+          req.status = previousStatus;
+          delete this.processedRequestStatuses[req.id];
+          this.persistProcessedRequestStatuses();
+          this.pushActionFeedback(
+            res.errorMessage || 'ماقدرناش نأكد الموافقة على الطلب، جرب تاني.',
+            'error'
+          );
+          this.notify();
+          return;
+        }
         await this.hydrateSupabaseWorkspaceForUser(this.user.id);
         const conv =
           (res.data?.conversationId
             ? this.conversations.find((c) => c.id === res.data?.conversationId)
             : undefined) || this.conversations.find((c) => c.requestId === req.id);
         if (conv) {
+          this.selectedPetForDetail = null;
           this.currentTab = 'chat';
           this.chatSubTab = 'chats';
           this.setActiveConversationId(conv.id);
+          await this.sendAutoMatingGreetingOnce(req, conv);
         } else {
           this.notify();
         }
@@ -6321,8 +6763,8 @@ class AppStateManager {
       const now = Date.now();
       const convId = generateUuid();
       const sysText = isGroupSubject
-        ? `تمت الموافقة على طلب التواصل بخصوص التبني الجماعي «${subjectPet?.name || req.receiverPetName}» (${subjectPet?.groupCount || subjectPet?.groupMembers?.length || 2} حيوانات: ${groupNamesSummary}) • ${groupRuleText}. يمكنك مراجعة تفاصيل كل حيوان من اللوحة بالأعلى.`
-        : 'تمت الموافقة على طلب التواصل بنجاح 🐾. يمكنك التحدث مباشرة داخل التطبيق بأمان، ولا يظهر رقم الهاتف إلا عند تفعيله من إعدادات الخصوصية.';
+        ? `تمت الموافقة على طلب التواصل بخصوص التبني الجماعي «${subjectPet?.name || req.receiverPetName}» (${subjectPet?.groupCount || subjectPet?.groupMembers?.length || 2} حيوانات: ${groupNamesSummary}) • ${groupRuleText}. تقدر تراجع تفاصيل كل حيوان من فوق.`
+        : 'اتوافق على طلب التواصل 🐾. تقدروا تتكلموا هنا مباشرة بأمان، ورقم التليفون مش بيظهر غير لو فعلته من الخصوصية.';
       conv = {
         id: convId,
         requestId: req.id,
@@ -6335,7 +6777,7 @@ class AppStateManager {
         petName: subjectPet?.name || req.receiverPetName,
         petPhoto,
         petType: req.type,
-        lastMessage: 'تمت الموافقة على طلب التواصل! يمكنكما التحدث الآن.',
+        lastMessage: 'اتوافق على طلب التواصل! تقدروا تتكلموا دلوقتي.',
         lastMessageTime: 'الآن',
         unreadCount: 0,
         ownerPrivacy: otherUserShowPhone ? 'public' : 'private',
@@ -6346,9 +6788,17 @@ class AppStateManager {
         mustAdoptTogether: subjectPet?.mustAdoptTogether,
         adoptionReason: subjectPet?.adoptionReason,
         petLocation: petLocation || undefined,
-        groupMembers: subjectPet?.groupMembers ? subjectPet.groupMembers.map((m) => ({ ...m, individualPhotos: [...m.individualPhotos], personality: [...m.personality] })) : undefined,
+        groupMembers: subjectPet?.groupMembers
+          ? subjectPet.groupMembers.map((m) => ({
+              ...m,
+              individualPhotos: [...m.individualPhotos],
+              personality: [...m.personality],
+            }))
+          : undefined,
         sharedGroupPhotos: subjectPet?.sharedGroupPhotos ? [...subjectPet.sharedGroupPhotos] : undefined,
-        photoEntries: subjectPet?.photoEntries ? subjectPet.photoEntries.map((e) => ({ ...e })) : undefined,
+        photoEntries: subjectPet?.photoEntries
+          ? subjectPet.photoEntries.map((e) => ({ ...e }))
+          : undefined,
         messages: [
           {
             id: generateUuid(),
@@ -6357,6 +6807,7 @@ class AppStateManager {
             senderName: 'Meow',
             text: sysText,
             timestamp: 'الآن',
+            createdAtMs: now - 2,
             isFromUser: false,
           },
           {
@@ -6366,13 +6817,15 @@ class AppStateManager {
             senderName: req.senderName,
             text: req.message,
             timestamp: req.timestamp,
-            isFromUser: isOutgoing,
+            createdAtMs: now - 1,
+            isFromUser: false,
           },
         ],
       };
       this.conversations.unshift(conv);
     }
 
+    this.selectedPetForDetail = null;
     this.currentTab = 'chat';
     this.chatSubTab = 'chats';
     this.activeConversationId = conv.id;
@@ -6384,6 +6837,7 @@ class AppStateManager {
       true
     );
     const celebrated = this.triggerMatingCelebrationIfNeeded(conv);
+    void this.sendAutoMatingGreetingOnce(req, conv);
 
     if (!isSupabaseConfigured()) {
       void syncContactRequestToFirestore(req).catch((err) =>
@@ -6403,8 +6857,8 @@ class AppStateManager {
           : 'تمت الموافقة على طلب التبني 🏠',
       body:
         req.type === 'mating'
-          ? `مبارك! تمت الموافقة على طلب التزاوج مع ${otherUserName} بخصوص «${conv.petName}».`
-          : `تمت الموافقة على طلب التبني مع ${otherUserName} بخصوص «${conv.petName}».`,
+          ? `مبروك! اتوافق على طلب التزاوج مع ${otherUserName} بخصوص «${conv.petName}».`
+          : `اتوافق على طلب التبني مع ${otherUserName} بخصوص «${conv.petName}».`,
       read: true,
       celebrated,
       targetTab: 'chat',
@@ -6418,12 +6872,27 @@ class AppStateManager {
   public rejectContactRequest(requestId: string): void {
     const req = this.contactRequests.find((r) => r.id === requestId);
     if (!req || req.senderId === this.user.id) return;
+    if (req.receiverOwnerId && req.receiverOwnerId !== this.user.id) return;
+    if (req.status !== 'pending' || req.isWithdrawn) return;
+
+    const prevStatus = req.status;
     req.status = 'rejected';
     this.processedRequestStatuses[req.id] = 'rejected';
     this.persistProcessedRequestStatuses();
     this.markNotificationsReadWhere((n) => n.targetRequestId === req.id, true);
     if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-      void respondContactRequestInSupabase(req.id, this.user.id, 'rejected');
+      void respondContactRequestInSupabase(req.id, this.user.id, 'rejected').then((res) => {
+        if (!res.success) {
+          req.status = prevStatus;
+          delete this.processedRequestStatuses[req.id];
+          this.persistProcessedRequestStatuses();
+          this.pushActionFeedback(
+            res.errorMessage || 'ماقدرناش نرفض الطلب دلوقتي، جرب تاني.',
+            'error'
+          );
+          this.notify();
+        }
+      });
     } else if (!isSupabaseConfigured()) {
       void syncContactRequestToFirestore(req).catch((err) =>
         console.warn('Firestore reject request sync skipped:', err)
@@ -6440,7 +6909,17 @@ class AppStateManager {
     req.isWithdrawn = true;
     req.status = 'rejected';
     if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-      void withdrawContactRequestInSupabase(req.id, this.user.id);
+      void withdrawContactRequestInSupabase(req.id, this.user.id).then((res) => {
+        if (!res.success) {
+          req.isWithdrawn = false;
+          req.status = 'pending';
+          this.pushActionFeedback(
+            res.errorMessage || 'ماقدرناش نلغي الطلب دلوقتي، جرب تاني.',
+            'error'
+          );
+          this.notify();
+        }
+      });
     }
     this.notify();
   }
@@ -6450,20 +6929,46 @@ class AppStateManager {
     return this.savedPetIds.has(petId);
   }
 
-  public toggleSavePet(petId: string): boolean {
-    const isSaved = this.savedPetIds.has(petId);
-    const shouldSave = !isSaved;
-    if (isSaved) {
+  public getSavedCount(): number {
+    return this.savedPetIds.size;
+  }
+
+  public toggleSavePet(
+    petId: string,
+    opts?: { silent?: boolean; onErrorRollback?: (savedNow: boolean) => void }
+  ): boolean {
+    const wasSaved = this.savedPetIds.has(petId);
+    const shouldSave = !wasSaved;
+    if (wasSaved) {
       this.savedPetIds.delete(petId);
     } else {
       this.savedPetIds.add(petId);
     }
     if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-      void toggleSavedPetInSupabase(this.user.id, petId, shouldSave);
+      void toggleSavedPetInSupabase(this.user.id, petId, shouldSave).then((res) => {
+        if (!res.success) {
+          if (wasSaved) {
+            this.savedPetIds.add(petId);
+          } else {
+            this.savedPetIds.delete(petId);
+          }
+          this.pushActionFeedback(
+            res.errorMessage || 'ماقدرناش نحدّث المحفوظات دلوقتي، جرب تاني.',
+            'error'
+          );
+          if (opts?.onErrorRollback) {
+            opts.onErrorRollback(wasSaved);
+          } else {
+            this.notify();
+          }
+        }
+      });
     } else if (typeof window !== 'undefined') {
       localStorage.setItem('meow_saved_pets', JSON.stringify(Array.from(this.savedPetIds)));
     }
-    this.notify();
+    if (!opts?.silent) {
+      this.notify();
+    }
     return shouldSave;
   }
 
@@ -6554,12 +7059,18 @@ class AppStateManager {
     this.notify();
   }
 
-  public sendMessage(payload: string | Partial<ChatMessage>): void {
+  public sendMessage(
+    payload: string | Partial<ChatMessage>,
+    replyTo?: ChatMessageReply
+  ): void {
     if (!this.activeConversationId) return;
     const conv = this.conversations.find((c) => c.id === this.activeConversationId);
     if (!conv || this.isUserBlocked(conv.otherUserId)) return;
 
     const msgId = generateUuid();
+    const nowMs = Date.now();
+    const resolvedReply =
+      typeof payload === 'string' ? replyTo : payload.replyTo ?? replyTo;
     let newMsg: ChatMessage;
 
     if (typeof payload === 'string') {
@@ -6571,9 +7082,18 @@ class AppStateManager {
         senderName: this.user.name,
         text: payload.trim(),
         type: 'text',
-        timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        replyTo: resolvedReply,
+        timestamp: new Date(nowMs).toLocaleTimeString('ar-EG', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        createdAtMs: nowMs,
         isFromUser: true,
         status: 'sent',
+        localStatus:
+          this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession
+            ? 'sending'
+            : 'sent',
       };
     } else {
       newMsg = {
@@ -6584,6 +7104,7 @@ class AppStateManager {
         text: payload.text || '',
         type: payload.type || 'text',
         fileUrl: payload.fileUrl,
+        storagePath: payload.storagePath,
         fileName: payload.fileName,
         fileSize: payload.fileSize,
         audioDuration: payload.audioDuration,
@@ -6591,9 +7112,18 @@ class AppStateManager {
         stickerUrl: payload.stickerUrl,
         stickerEmoji: payload.stickerEmoji,
         stickerTitle: payload.stickerTitle,
-        timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        replyTo: resolvedReply,
+        timestamp: new Date(nowMs).toLocaleTimeString('ar-EG', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        createdAtMs: nowMs,
         isFromUser: true,
         status: 'sent',
+        localStatus:
+          this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession
+            ? 'sending'
+            : 'sent',
       };
     }
 
@@ -6609,23 +7139,29 @@ class AppStateManager {
         ? `📎 ${newMsg.fileName || 'ملف مرفق'}`
         : newMsg.text || '';
     conv.lastMessageTime = 'الآن';
-    conv.updatedAt = Date.now();
+    conv.updatedAt = nowMs;
 
     if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
-      void sendMessageInSupabase({
+      void sendExtendedChatMessageInSupabase({
         id: newMsg.id,
         conversationId: conv.id,
         senderId: this.user.id,
         message: newMsg,
       }).then((res) => {
+        const targetMsg = conv.messages.find((m) => m.id === newMsg.id);
+        if (!targetMsg) return;
         if (res.success && res.data) {
-          const targetMsg = conv.messages.find((m) => m.id === newMsg.id);
-          if (targetMsg) {
-            targetMsg.status = res.data.status || 'sent';
-            targetMsg.timestamp = res.data.timestamp || targetMsg.timestamp;
-            this.notify();
-          }
+          targetMsg.status = res.data.status || 'sent';
+          targetMsg.localStatus = 'sent';
+          targetMsg.localError = undefined;
+          targetMsg.timestamp = res.data.timestamp || targetMsg.timestamp;
+          targetMsg.createdAtMs = res.data.createdAtMs || targetMsg.createdAtMs;
+          if (res.data.fileUrl) targetMsg.fileUrl = res.data.fileUrl;
+        } else {
+          targetMsg.localStatus = 'failed';
+          targetMsg.localError = res.errorMessage || 'فشل إرسال الرسالة، اضغط لإعادة المحاولة.';
         }
+        this.notify();
       });
     } else if (!isSupabaseConfigured()) {
       void syncChatMessageToFirestore(conv.id, newMsg).catch((err) =>
@@ -6643,13 +7179,14 @@ class AppStateManager {
         ) {
           const replyText =
             newMsg.type === 'sticker'
-              ? 'ملصق لطيف ومميز جداً! 😻 محادثة ممتعة ومبشرة بالخير.'
+              ? 'ملصق لطيف وجميل أوي 😻!'
               : newMsg.type === 'audio'
-              ? 'سمعت رسالتك الصوتية! صوتك واضح وشاكر لاهتمامك ومحبتك للمياو 🐾.'
+              ? 'سمعت رسالتك الصوتية، صوتك واضح 🐾.'
               : newMsg.type === 'image'
-              ? 'ما شاء الله! الصورة جميلة جداً، أليف مميز ورائع 💛.'
-              : 'أهلاً بك! شاكر لاهتمامك وتواصلك الراقي، أنا جاهز لأي استفسار أو لترتيب موعد المقابلة المناسبة.';
+              ? 'ما شاء الله! الصورة حلوة جدًا 💛.'
+              : 'أهلاً بيك! أنا موجود لو حابب نرتب معاد أو تستفسر عن أي حاجة.';
 
+          const replyMs = Date.now();
           const replyMsg: ChatMessage = {
             id: generateUuid(),
             conversationId: conv.id,
@@ -6657,14 +7194,19 @@ class AppStateManager {
             senderName: conv.otherUserName,
             text: replyText,
             type: 'text',
-            timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+            timestamp: new Date(replyMs).toLocaleTimeString('ar-EG', {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            createdAtMs: replyMs,
             isFromUser: false,
             status: 'read',
+            localStatus: 'sent',
           };
           conv.messages.push(replyMsg);
           conv.lastMessage = replyMsg.text || '';
           conv.lastMessageTime = 'الآن';
-          conv.updatedAt = Date.now();
+          conv.updatedAt = replyMs;
           const isViewingConv =
             this.currentTab === 'chat' && this.activeConversationId === conv.id;
           if (!isViewingConv) {
@@ -6684,6 +7226,238 @@ class AppStateManager {
         }
       }, 1200);
     }
+  }
+
+  public async sendChatImageAttachmentAsync(params: {
+    conversationId: string;
+    file: File;
+    caption?: string;
+    replyTo?: ChatMessageReply;
+  }): Promise<{ success: boolean; errorMessage?: string }> {
+    const conv = this.conversations.find((c) => c.id === params.conversationId);
+    if (!conv || this.isUserBlocked(conv.otherUserId)) {
+      return { success: false, errorMessage: 'المحادثة غير متاحة حاليًا.' };
+    }
+
+    const compressed = await processImageFileForUpload(params.file, {
+      maxDimension: 1280,
+      quality: 0.82,
+    });
+    if (!compressed.success) {
+      return {
+        success: false,
+        errorMessage: compressed.errorMessage || 'ماقدرناش نجهز الصورة، جرب صورة تانية.',
+      };
+    }
+
+    const dataUrlMatch = compressed.dataUrl.match(/^data:([^;,]+);base64,(.*)$/);
+    const mimeType = dataUrlMatch?.[1] || 'image/jpeg';
+    let blob: Blob = params.file;
+    if (dataUrlMatch?.[2]) {
+      try {
+        const binary = atob(dataUrlMatch[2]);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        blob = new Blob([bytes], { type: mimeType });
+      } catch {
+        blob = params.file;
+      }
+    }
+
+    const fileSizeLabel =
+      blob.size >= 1024 * 1024
+        ? `${(blob.size / (1024 * 1024)).toFixed(1)} MB`
+        : `${Math.max(1, Math.round(blob.size / 1024))} KB`;
+
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      const uploadRes = await uploadChatMediaInSupabase({
+        conversationId: conv.id,
+        senderId: this.user.id,
+        blob,
+        mimeType,
+      });
+      if (!uploadRes.success || !uploadRes.storagePath) {
+        return {
+          success: false,
+          errorMessage: uploadRes.errorMessage || 'فشل رفع الصورة، جرب تاني.',
+        };
+      }
+
+      this.sendMessage(
+        {
+          type: 'image',
+          text: (params.caption || '').trim(),
+          fileUrl: uploadRes.signedUrl || compressed.dataUrl,
+          storagePath: uploadRes.storagePath,
+          fileName: params.file.name || 'image.jpg',
+          fileSize: fileSizeLabel,
+        },
+        params.replyTo
+      );
+      return { success: true };
+    }
+
+    this.sendMessage(
+      {
+        type: 'image',
+        text: (params.caption || '').trim(),
+        fileUrl: compressed.dataUrl,
+        fileName: params.file.name || 'image.jpg',
+        fileSize: fileSizeLabel,
+      },
+      params.replyTo
+    );
+    return { success: true };
+  }
+
+  public async retryFailedMessage(
+    conversationId: string,
+    messageId: string
+  ): Promise<void> {
+    const conv = this.conversations.find((c) => c.id === conversationId);
+    const targetMsg = conv?.messages.find((m) => m.id === messageId);
+    if (!conv || !targetMsg || targetMsg.localStatus !== 'failed') return;
+
+    targetMsg.localStatus = 'sending';
+    targetMsg.localError = undefined;
+    this.notify();
+
+    if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      const res = await sendExtendedChatMessageInSupabase({
+        id: targetMsg.id,
+        conversationId: conv.id,
+        senderId: this.user.id,
+        message: targetMsg,
+      });
+      if (res.success && res.data) {
+        targetMsg.status = res.data.status || 'sent';
+        targetMsg.localStatus = 'sent';
+        targetMsg.localError = undefined;
+        targetMsg.timestamp = res.data.timestamp || targetMsg.timestamp;
+        targetMsg.createdAtMs = res.data.createdAtMs || targetMsg.createdAtMs;
+        if (res.data.fileUrl) targetMsg.fileUrl = res.data.fileUrl;
+      } else {
+        targetMsg.localStatus = 'failed';
+        targetMsg.localError = res.errorMessage || 'فشل إرسال الرسالة، جرب تاني.';
+      }
+      this.notify();
+      return;
+    }
+
+    targetMsg.localStatus = 'sent';
+    this.notify();
+  }
+
+  public async softDeleteMessage(
+    conversationId: string,
+    messageId: string
+  ): Promise<{ success: boolean; errorMessage?: string }> {
+    const conv = this.conversations.find((c) => c.id === conversationId);
+    const msg = conv?.messages.find((m) => m.id === messageId);
+    if (!conv || !msg || !msg.isFromUser || msg.senderId === 'system' || msg.deletedAt) {
+      return { success: false, errorMessage: 'مش متاح مسح الرسالة دي.' };
+    }
+
+    if (
+      this.isSupabaseAuthenticated() &&
+      !this.isOnboardingPreviewSession &&
+      msg.localStatus !== 'failed'
+    ) {
+      const res = await softDeleteMessageInSupabase(msg.id, this.user.id);
+      if (!res.success) {
+        this.pushActionFeedback(
+          res.errorMessage || 'تعذر مسح الرسالة من السيرفر.',
+          'error'
+        );
+        this.notify();
+        return res;
+      }
+    }
+
+    msg.deletedAt = new Date().toISOString();
+    msg.text = 'اتمسحت الرسالة دي';
+    msg.type = 'text';
+    msg.fileUrl = undefined;
+    msg.storagePath = undefined;
+    msg.fileName = undefined;
+    msg.stickerUrl = undefined;
+    msg.replyTo = undefined;
+
+    const last = conv.messages[conv.messages.length - 1];
+    if (last && last.id === msg.id) {
+      conv.lastMessage = 'تم مسح الرسالة';
+    }
+    this.notify();
+    return { success: true };
+  }
+
+  public async ensureMessageMediaUrl(
+    conversationId: string,
+    messageId: string
+  ): Promise<string | null> {
+    const conv = this.conversations.find((c) => c.id === conversationId);
+    const msg = conv?.messages.find((m) => m.id === messageId);
+    if (!msg?.storagePath) return msg?.fileUrl || null;
+    const signed = await resolveChatMediaSignedUrl(msg.storagePath);
+    if (signed) {
+      msg.fileUrl = signed;
+      this.notify();
+      return signed;
+    }
+    return null;
+  }
+
+  public getRecentStickerIds(): string[] {
+    return [...this.recentStickerIds];
+  }
+
+  public getFavoriteStickerIds(): string[] {
+    return [...this.favoriteStickerIds];
+  }
+
+  public isStickerFavorite(stickerId: string): boolean {
+    return this.favoriteStickerIds.includes(stickerId);
+  }
+
+  public recordRecentSticker(stickerId: string): void {
+    if (!stickerId) return;
+    this.recentStickerIds = [
+      stickerId,
+      ...this.recentStickerIds.filter((id) => id !== stickerId),
+    ].slice(0, 18);
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(
+          RECENT_STICKERS_STORAGE_KEY,
+          JSON.stringify(this.recentStickerIds)
+        );
+      } catch {
+        // Ignore storage write error
+      }
+    }
+  }
+
+  public toggleFavoriteSticker(stickerId: string): boolean {
+    if (!stickerId) return false;
+    const exists = this.favoriteStickerIds.includes(stickerId);
+    if (exists) {
+      this.favoriteStickerIds = this.favoriteStickerIds.filter((id) => id !== stickerId);
+    } else {
+      this.favoriteStickerIds = [stickerId, ...this.favoriteStickerIds];
+    }
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(
+          FAVORITE_STICKERS_STORAGE_KEY,
+          JSON.stringify(this.favoriteStickerIds)
+        );
+      } catch {
+        // Ignore storage write error
+      }
+    }
+    return !exists;
   }
 
   public addHealthRecord(record: Omit<HealthRecordItem, 'id'>): void {

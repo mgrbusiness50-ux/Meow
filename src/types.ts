@@ -165,6 +165,20 @@ export interface AppNotification {
   timestampLabel: string;
 }
 
+export type PetRelationshipState =
+  | 'owner'
+  | 'outgoing_pending'
+  | 'incoming_pending'
+  | 'accepted'
+  | 'none';
+
+export interface ChatMessageReply {
+  messageId: string;
+  senderName: string;
+  text: string;
+  type?: 'text' | 'image' | 'file' | 'audio' | 'sticker';
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;
@@ -173,6 +187,7 @@ export interface ChatMessage {
   text?: string;
   type?: 'text' | 'image' | 'file' | 'audio' | 'sticker';
   fileUrl?: string;
+  storagePath?: string;
   fileName?: string;
   fileSize?: string;
   audioDuration?: number;
@@ -180,9 +195,14 @@ export interface ChatMessage {
   stickerUrl?: string;
   stickerEmoji?: string;
   stickerTitle?: string;
+  replyTo?: ChatMessageReply;
+  deletedAt?: string;
   timestamp: string;
+  createdAtMs?: number;
   isFromUser: boolean;
   status?: 'sent' | 'delivered' | 'read';
+  localStatus?: 'sending' | 'sent' | 'failed';
+  localError?: string;
 }
 
 export interface Conversation {
@@ -203,6 +223,7 @@ export interface Conversation {
   ownerPrivacy: PrivacySetting;
   messages: ChatMessage[];
   isPinned?: boolean;
+  isMuted?: boolean;
   pinnedAt?: number;
   updatedAt?: number;
   adoptionType?: AdoptionType;

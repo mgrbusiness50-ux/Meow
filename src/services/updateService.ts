@@ -194,7 +194,15 @@ export async function getInstalledBundleVersion(): Promise<string> {
   return APP_VERSION_INFO.appVersion;
 }
 
-async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 8000): Promise<T | null> {
+type ManifestFetchResult<T> =
+  | { outcome: 'ok'; data: T }
+  | { outcome: 'not_found'; data: null }
+  | { outcome: 'error'; data: null };
+
+async function fetchJsonWithTimeoutDetailed<T>(
+  url: string,
+  timeoutMs = 8000
+): Promise<ManifestFetchResult<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -203,34 +211,57 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 8000): Promise<T
       cache: 'no-store',
       signal: controller.signal,
     });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+    if (res.status === 404) {
+      return { outcome: 'not_found', data: null };
+    }
+    if (!res.ok) {
+      return { outcome: 'error', data: null };
+    }
+    return { outcome: 'ok', data: (await res.json()) as T };
   } catch {
-    return null;
+    return { outcome: 'error', data: null };
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchOtaManifestDetailed(
+  baseUrl: string,
+  channel: UpdateChannel = APP_VERSION_INFO.channel
+): Promise<ManifestFetchResult<OtaManifest>> {
+  if (!baseUrl) return { outcome: 'not_found', data: null };
+  if (channel === 'testing') {
+    const testingManifest = await fetchJsonWithTimeoutDetailed<OtaManifest>(
+      `${baseUrl}/ota-manifest-testing.json`
+    );
+    if (testingManifest.outcome === 'ok') return testingManifest;
+    const prodFallback = await fetchJsonWithTimeoutDetailed<OtaManifest>(
+      `${baseUrl}/ota-manifest.json`
+    );
+    if (prodFallback.outcome === 'ok' || testingManifest.outcome === 'not_found') {
+      return prodFallback;
+    }
+    return testingManifest;
+  }
+  return fetchJsonWithTimeoutDetailed<OtaManifest>(`${baseUrl}/ota-manifest.json`);
 }
 
 export async function fetchOtaManifest(
   baseUrl: string,
   channel: UpdateChannel = APP_VERSION_INFO.channel
 ): Promise<OtaManifest | null> {
-  if (!baseUrl) return null;
-  if (channel === 'testing') {
-    const testingManifest = await fetchJsonWithTimeout<OtaManifest>(
-      `${baseUrl}/ota-manifest-testing.json`
-    );
-    if (testingManifest) return testingManifest;
-  }
-  return fetchJsonWithTimeout<OtaManifest>(`${baseUrl}/ota-manifest.json`);
+  const res = await fetchOtaManifestDetailed(baseUrl, channel);
+  return res.data;
 }
 
 export async function fetchApkReleaseManifest(
   baseUrl: string
 ): Promise<ApkReleaseManifest | null> {
   if (!baseUrl) return null;
-  return fetchJsonWithTimeout<ApkReleaseManifest>(`${baseUrl}/apk-release.json`);
+  const res = await fetchJsonWithTimeoutDetailed<ApkReleaseManifest>(
+    `${baseUrl}/apk-release.json`
+  );
+  return res.data;
 }
 
 export async function checkForUpdates(opts?: {
@@ -262,10 +293,13 @@ export async function checkForUpdates(opts?: {
   }
 
   try {
-    const [apkManifest, otaManifest] = await Promise.all([
-      fetchApkReleaseManifest(baseUrl),
-      fetchOtaManifest(baseUrl, channel),
+    const [apkRes, otaRes] = await Promise.all([
+      fetchJsonWithTimeoutDetailed<ApkReleaseManifest>(`${baseUrl}/apk-release.json`),
+      fetchOtaManifestDetailed(baseUrl, channel),
     ]);
+
+    const apkManifest = apkRes.data;
+    const otaManifest = otaRes.data;
 
     const apkUpdate = evaluateApkRelease(
       apkManifest,
@@ -306,7 +340,14 @@ export async function checkForUpdates(opts?: {
       };
     }
 
-    if (!apkManifest && !otaManifest) {
+    // Only treat as connection failure if neither manifest succeeded AND at least one had a real network/5xx failure
+    if (
+      !apkManifest &&
+      !otaManifest &&
+      (apkRes.outcome === 'error' || otaRes.outcome === 'error') &&
+      apkRes.outcome !== 'not_found' &&
+      otaRes.outcome !== 'not_found'
+    ) {
       return {
         configured: true,
         status: 'error',
@@ -315,7 +356,7 @@ export async function checkForUpdates(opts?: {
         currentBundleVersion,
         otaUpdate: null,
         apkUpdate: null,
-        errorMessage: 'تعذر الاتصال بخادم التحديثات حاليًا.',
+        errorMessage: 'مش قادرين نوصل لسيرفر التحديثات دلوقتي.',
       };
     }
 
@@ -340,7 +381,7 @@ export async function checkForUpdates(opts?: {
       errorMessage:
         err instanceof Error
           ? err.message
-          : 'حدث خطأ أثناء التحقق من التحديثات.',
+          : 'حصلت مشكلة وقت التشييك على التحديثات.',
     };
   }
 }

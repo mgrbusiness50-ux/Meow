@@ -429,20 +429,23 @@ a[role="button"]:not(.no-active-scale):active,
   .meow-tab-enter-prev,
   .meow-drawer-enter-rtl,
   .meow-drawer-exit-rtl,
-  .meow-splash-exit {
+  .meow-splash-exit,
+  .meow-ambient-heart,
+  .meow-ptr-dots.is-spinning span {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
 
-/* Pull-to-refresh circular 3-dots loader */
-@keyframes meow-ptr-dot-bounce {
+/* Pull-to-refresh free 3-dots loader (no circular container) */
+@keyframes meow-ptr-dot-down {
   0%, 80%, 100% {
-    transform: scale(0.55);
-    opacity: 0.4;
+    transform: translate3d(0, -2px, 0) scale(0.75);
+    opacity: 0.42;
   }
   40% {
-    transform: scale(1.1);
+    transform: translate3d(0, 5px, 0) scale(1.12);
     opacity: 1;
   }
 }
@@ -451,20 +454,22 @@ a[role="button"]:not(.no-active-scale):active,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
+  padding: 2px 4px;
 }
 
 .meow-ptr-dots span {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 9999px;
   background-color: #E67E22;
   display: inline-block;
   transition: transform 0.16s ease, opacity 0.16s ease;
+  will-change: transform, opacity;
 }
 
 .meow-ptr-dots.is-spinning span {
-  animation: meow-ptr-dot-bounce 0.9s infinite ease-in-out both;
+  animation: meow-ptr-dot-down 0.9s infinite ease-in-out both;
 }
 
 .meow-ptr-dots.is-spinning span:nth-child(1) {
@@ -479,7 +484,55 @@ a[role="button"]:not(.no-active-scale):active,
   animation-delay: 0s;
 }
 
-/* WhatsApp-style speech bubble tails */
+/* Ambient celebratory floating hearts for Mating & Adoption feeds */
+@keyframes meow-heart-float {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.75) rotate(-8deg);
+  }
+  20% {
+    opacity: 0.24;
+  }
+  75% {
+    opacity: 0.18;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--heart-drift, 10px), -42px, 0) scale(1.08) rotate(10deg);
+  }
+}
+
+.meow-floating-hearts {
+  position: relative;
+}
+
+.meow-ambient-heart {
+  position: absolute;
+  pointer-events: none;
+  color: #E67E22;
+  opacity: 0;
+  animation: meow-heart-float var(--heart-dur, 4.6s) ease-in-out var(--heart-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+/* Suppress @tailwindcss/forms default blue ring on chat inputs */
+#chat-message-input:focus,
+#chat-media-caption-input:focus,
+#chat-inroom-search-input:focus,
+#sticker-search-input:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+}
+
+#chat-inroom-search-input:focus,
+#sticker-search-input:focus,
+#chat-media-caption-input:focus {
+  border-color: #E67E22 !important;
+}
+
+/* WhatsApp-style speech bubble tails & consecutive grouping */
 .meow-bubble-out,
 .meow-bubble-in {
   position: relative;
@@ -519,6 +572,15 @@ a[role="button"]:not(.no-active-scale):active,
 
 .dark .meow-bubble-in::after {
   background-color: #261E19;
+}
+
+.meow-bubble-grouped-out,
+.meow-bubble-grouped-in {
+  border-radius: 1rem !important;
+}
+
+.meow-chat-search-hit {
+  box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.55);
 }
 
 
