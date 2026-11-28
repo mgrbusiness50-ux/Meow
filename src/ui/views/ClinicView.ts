@@ -46,11 +46,11 @@ export function renderClinicView(): string {
         <button
           type="button"
           id="clinic-notify-btn"
-          class="h-11 px-5 sm:px-6 rounded-full ${
+          class="h-11 max-w-full px-4 min-[360px]:px-5 sm:px-6 rounded-full ${
             isRequested
               ? 'bg-emerald-600 border-emerald-600'
               : 'bg-brand-orange border-brand-orange hover:bg-brand-orangeHover'
-          } text-white font-black text-xs sm:text-sm shadow-soft active:scale-95 transition-all inline-flex items-center justify-center gap-2 border cursor-pointer font-baloo whitespace-nowrap"
+          } text-white font-black text-[11px] min-[360px]:text-xs sm:text-sm shadow-soft active:scale-95 transition-all inline-flex items-center justify-center gap-1.5 min-[360px]:gap-2 border cursor-pointer font-baloo whitespace-nowrap"
         >
           <i class="fa-solid ${isRequested ? 'fa-circle-check' : 'fa-bell'} text-xs shrink-0"></i>
           <span id="clinic-notify-text" class="whitespace-nowrap">${

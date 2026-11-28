@@ -57,11 +57,16 @@ export function renderAdoptionView(): string {
         </div>
 
         <!-- Filter pills for Individual vs Group -->
-        <div class="flex items-center gap-2 mt-3 pt-3 border-t border-brand-peachBorder/40 dark:border-warm-darkBorder/40 overflow-x-auto no-scrollbar">
+        <div id="adoption-type-switcher" class="relative flex items-center gap-2 mt-3 pt-3 border-t border-brand-peachBorder/40 dark:border-warm-darkBorder/40 overflow-x-auto no-scrollbar">
+          <div
+            id="adoption-type-pill"
+            aria-hidden="true"
+            class="meow-sliding-pill pointer-events-none absolute top-3 bottom-0 rounded-full bg-brand-orange shadow-soft opacity-0"
+          ></div>
           <button
             data-adopt-type="all"
             type="button"
-            class="adopt-type-btn text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap font-baloo ${
+            class="adopt-type-btn relative z-10 text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-colors duration-200 cursor-pointer whitespace-nowrap font-baloo ${
               filters.adoptionType === 'all'
                 ? 'bg-brand-orange text-white shadow-soft'
                 : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/80 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
@@ -72,7 +77,7 @@ export function renderAdoptionView(): string {
           <button
             data-adopt-type="individual"
             type="button"
-            class="adopt-type-btn text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap font-baloo ${
+            class="adopt-type-btn relative z-10 text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-colors duration-200 cursor-pointer whitespace-nowrap font-baloo ${
               filters.adoptionType === 'individual'
                 ? 'bg-brand-orange text-white shadow-soft'
                 : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/80 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
@@ -83,7 +88,7 @@ export function renderAdoptionView(): string {
           <button
             data-adopt-type="group"
             type="button"
-            class="adopt-type-btn text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap font-baloo ${
+            class="adopt-type-btn relative z-10 text-xs sm:text-sm font-black px-4 py-2 rounded-full transition-colors duration-200 cursor-pointer whitespace-nowrap font-baloo ${
               filters.adoptionType === 'group'
                 ? 'bg-brand-orange text-white shadow-soft'
                 : 'bg-white dark:bg-[#342A24] text-brand-dark dark:text-[#D1C7BD] border border-brand-peachBorder/80 dark:border-warm-darkBorder hover:bg-brand-peachBorder/20'
@@ -593,11 +598,83 @@ export function attachAdoptionEvents(): void {
     });
   }
 
-  // Adoption Type Filter Buttons
+  // Adoption Type Filter Buttons (with smooth indicator glide across re-renders)
+  const switcher = document.getElementById('adoption-type-switcher');
+  const pill = document.getElementById('adoption-type-pill');
   const typeButtons = document.querySelectorAll<HTMLButtonElement>('.adopt-type-btn');
+  const syncAdoptionPill = (animateFromPrevious: boolean) => {
+    if (!switcher || !pill) return;
+    const activeType = state.getAdoptionFilters().adoptionType || 'all';
+    const activeBtn = switcher.querySelector<HTMLButtonElement>(
+      `.adopt-type-btn[data-adopt-type="${activeType}"]`
+    );
+    if (!activeBtn || activeBtn.offsetWidth <= 0) return;
+
+    const prevLeft = switcher.dataset.prevPillLeft;
+    const prevWidth = switcher.dataset.prevPillWidth;
+    const targetLeft = `${activeBtn.offsetLeft}px`;
+    const targetWidth = `${activeBtn.offsetWidth}px`;
+
+    pill.style.top = `${activeBtn.offsetTop}px`;
+    pill.style.height = `${activeBtn.offsetHeight}px`;
+
+    if (animateFromPrevious && prevLeft && prevWidth) {
+      pill.style.transition = 'none';
+      pill.style.left = prevLeft;
+      pill.style.width = prevWidth;
+      pill.style.opacity = '1';
+      void pill.offsetWidth;
+      pill.style.transition = '';
+      pill.style.left = targetLeft;
+      pill.style.width = targetWidth;
+    } else {
+      pill.style.left = targetLeft;
+      pill.style.width = targetWidth;
+      pill.style.opacity = '1';
+    }
+    activeBtn.classList.remove('bg-brand-orange');
+    activeBtn.classList.add('bg-transparent');
+  };
+
+  if (switcher) {
+    const hadPrev = Boolean(sessionStorage.getItem('meow_adopt_pill_prev'));
+    if (hadPrev) {
+      try {
+        const parsed = JSON.parse(sessionStorage.getItem('meow_adopt_pill_prev') || '{}');
+        if (parsed.left && parsed.width) {
+          switcher.dataset.prevPillLeft = parsed.left;
+          switcher.dataset.prevPillWidth = parsed.width;
+        }
+      } catch {
+        // Ignore storage error
+      }
+      sessionStorage.removeItem('meow_adopt_pill_prev');
+    }
+    syncAdoptionPill(hadPrev);
+  }
+
   typeButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const type = btn.getAttribute('data-adopt-type') as any;
+      if (switcher) {
+        const currentType = state.getAdoptionFilters().adoptionType || 'all';
+        const currentBtn = switcher.querySelector<HTMLButtonElement>(
+          `.adopt-type-btn[data-adopt-type="${currentType}"]`
+        );
+        if (currentBtn && currentBtn.offsetWidth > 0) {
+          try {
+            sessionStorage.setItem(
+              'meow_adopt_pill_prev',
+              JSON.stringify({
+                left: `${currentBtn.offsetLeft}px`,
+                width: `${currentBtn.offsetWidth}px`,
+              })
+            );
+          } catch {
+            // Ignore storage error
+          }
+        }
+      }
       state.applyAdoptionFiltersWithLoading({ adoptionType: type }, 'جاري تحديث حالات التبني...');
     });
   });

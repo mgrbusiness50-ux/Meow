@@ -14,6 +14,20 @@ let activeModalType: 'settings' | 'blocked' | 'contact' | 'notifications' | 'pri
 let isSignOutConfirmOpen = false;
 let isSigningOut = false;
 let signOutErrorMessage = '';
+let previousBodyOverflow: string | null = null;
+
+export function setProfileDrawerScrollLock(locked: boolean): void {
+  if (typeof document === 'undefined' || !document.body) return;
+  if (locked) {
+    if (previousBodyOverflow === null) {
+      previousBodyOverflow = document.body.style.overflow;
+    }
+    document.body.style.overflow = 'hidden';
+  } else if (previousBodyOverflow !== null) {
+    document.body.style.overflow = previousBodyOverflow;
+    previousBodyOverflow = null;
+  }
+}
 
 export function renderProfileView(): string {
   const user = state.getUser();
@@ -348,10 +362,14 @@ export function renderProfileView(): string {
   `;
 }
 
-export function renderProfileOverlayModals(): string {
+export function renderProfileDrawerHtml(animateEntry = true): string {
+  const user = state.getUser();
+  return renderProfileSideDrawer(user, animateEntry);
+}
+
+export function renderProfileSubModalsHtml(): string {
   const user = state.getUser();
   return `
-    ${renderProfileSideDrawer(user)}
     ${renderActiveDrawerModal(user)}
     ${renderDeletePetConfirmModal()}
     ${renderStatusChangeConfirmModal()}
@@ -360,11 +378,14 @@ export function renderProfileOverlayModals(): string {
   `;
 }
 
-// Side Drawer: الإعدادات (Compact Bubble Style strictly contained inside drawer frame)
-function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string {
-  if (!state.isSettingsOpen()) return '';
-  const notificationsEnabled = state.getNotificationsEnabled();
-  const showPhone = state.getShowPhoneInProfile();
+export function renderProfileOverlayModals(): string {
+  return `
+    ${renderProfileDrawerHtml(true)}
+    ${renderProfileSubModalsHtml()}
+  `;
+}
+
+function renderDrawerOtaCardInnerHtml(): string {
   const updateState = state.getUpdateState();
   const ota = updateState.result.otaUpdate;
   const liveBundleVer =
@@ -375,12 +396,81 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
       : `v${liveBundleVer}`;
 
   return `
-    <div id="profile-drawer-backdrop" class="fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="w-8 h-8 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
+          <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+        </div>
+        <div class="min-w-0">
+          <span class="text-xs font-black font-baloo text-brand-dark block leading-tight">إصدار التطبيق</span>
+          <span class="text-[11px] font-mono font-bold text-brand-subtleGray block truncate" dir="ltr">${escapeHtml(currentVersionLabel)}</span>
+        </div>
+      </div>
+      <button
+        id="drawer-check-updates-btn"
+        type="button"
+        ${updateState.isChecking || updateState.isApplyingOta ? 'disabled' : ''}
+        class="h-8 px-3 rounded-full bg-brand-cream hover:bg-brand-orange hover:text-white border border-brand-peachBorder text-brand-orange text-[11px] font-black transition cursor-pointer active:scale-95 shrink-0 font-baloo ${
+          updateState.isChecking ? 'opacity-65 cursor-wait' : ''
+        }"
+      >
+        ${updateState.isChecking ? 'جاري الفحص...' : 'فحص التحديثات'}
+      </button>
+    </div>
+    ${
+      updateState.feedback
+        ? `<p class="text-[11px] font-bold ${
+            updateState.feedback.kind === 'error'
+              ? 'text-rose-600'
+              : updateState.feedback.kind === 'success'
+              ? 'text-emerald-700'
+              : 'text-brand-subtleGray'
+          } m-0 leading-snug">${escapeHtml(updateState.feedback.message)}</p>`
+        : ''
+    }
+    ${
+      updateState.isOtaStagedForRestart
+        ? `
+        <button
+          id="drawer-restart-ota-btn"
+          type="button"
+          class="w-full h-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-soft transition cursor-pointer active:scale-95 font-baloo"
+        >
+          تطبيق التحديث المجهز (${escapeHtml(updateState.stagedOtaVersion || ota?.version || '')}) الآن
+        </button>
+        `
+        : ota
+        ? `
+        <button
+          id="drawer-apply-ota-btn"
+          type="button"
+          ${updateState.isApplyingOta ? 'disabled' : ''}
+          class="w-full h-9 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white text-xs font-black shadow-soft transition cursor-pointer active:scale-95 font-baloo"
+        >
+          ${updateState.isApplyingOta ? 'جاري التنزيل في الخلفية...' : `تثبيت التحديث السريع (${escapeHtml(ota.version)})`}
+        </button>
+        `
+        : ''
+    }
+  `;
+}
+
+// Side Drawer: الإعدادات (Compact Bubble Style strictly contained inside drawer frame)
+function renderProfileSideDrawer(
+  user: ReturnType<typeof state.getUser>,
+  animateEntry = true
+): string {
+  if (!state.isSettingsOpen()) return '';
+  const notificationsEnabled = state.getNotificationsEnabled();
+  const showPhone = state.getShowPhoneInProfile();
+
+  return `
+    <div id="profile-drawer-backdrop" class="fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm animate-fade-in pointer-events-auto" dir="rtl">
       <div class="w-full max-w-md mx-auto h-full relative flex justify-start pointer-events-none">
         <!-- Drawer Panel clipped cleanly to rounded bounds (no protruding bar) -->
         <div 
           id="profile-drawer-panel" 
-          class="pointer-events-auto relative w-[84%] max-w-[330px] h-full max-h-[100dvh] bg-[#FFF9E9] text-[#2d221b] shadow-2xl border-l-2 border-brand-peachBorder/90 rounded-l-[32px] overflow-hidden flex flex-col meow-drawer-enter-rtl text-right z-[86]"
+          class="pointer-events-auto relative w-[84%] max-w-[330px] h-full max-h-[100dvh] bg-[#FFF9E9] text-[#2d221b] shadow-2xl border-l-2 border-brand-peachBorder/90 rounded-l-[32px] overflow-hidden flex flex-col ${animateEntry ? 'meow-drawer-enter-rtl' : ''} text-right z-[86]"
         >
           <!-- Subtle Edge Grip Bar inside RTL left border for Swipe-to-Close -->
           <div class="w-1 h-12 rounded-full bg-brand-peachBorder/70 absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none z-20"></div>
@@ -424,7 +514,7 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                 </div>
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
-                <span class="px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-500 text-xs font-black font-baloo">
+                <span id="drawer-saved-pets-count" class="px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-500 text-xs font-black font-baloo">
                   ${state.getSavedPets().length}
                 </span>
                 <i class="fa-solid fa-chevron-left text-[11px] text-brand-subtleGray group-hover:text-brand-orange transition"></i>
@@ -447,11 +537,7 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                 </div>
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
-                ${
-                  state.getBlockedUsers().length > 0
-                    ? `<span class="px-2.5 py-0.5 rounded-full bg-red-100 text-red-600 text-xs font-black font-baloo">${state.getBlockedUsers().length}</span>`
-                    : ''
-                }
+                <span id="drawer-blocked-count-badge" class="${state.getBlockedUsers().length > 0 ? '' : 'hidden '}px-2.5 py-0.5 rounded-full bg-red-100 text-red-600 text-xs font-black font-baloo">${state.getBlockedUsers().length}</span>
                 <i class="fa-solid fa-chevron-left text-[11px] text-brand-subtleGray group-hover:text-brand-orange transition"></i>
               </div>
             </button>
@@ -477,7 +563,7 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
             <!-- 4. الإشعارات -->
             <div class="px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/80 shadow-sm flex items-center justify-between gap-2">
               <div class="flex items-center gap-2.5 min-w-0">
-                <div class="w-9 h-9 rounded-full ${notificationsEnabled ? 'bg-emerald-500/15 text-emerald-600 border-emerald-200' : 'bg-brand-orange/15 text-brand-orange border-brand-peachBorder/80'} border flex items-center justify-center shrink-0">
+                <div id="drawer-notifications-icon-wrap" class="w-9 h-9 rounded-full ${notificationsEnabled ? 'bg-emerald-500/15 text-emerald-600 border-emerald-200' : 'bg-brand-orange/15 text-brand-orange border-brand-peachBorder/80'} border flex items-center justify-center shrink-0">
                   <span class="material-symbols-outlined text-lg">notifications</span>
                 </div>
                 <div class="min-w-0">
@@ -496,7 +582,7 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                 aria-label="تبديل الإشعارات"
                 class="w-12 h-7 rounded-full p-1 transition-colors duration-200 relative shrink-0 cursor-pointer shadow-inner overflow-hidden ${notificationsEnabled ? 'bg-emerald-500' : 'bg-gray-300'}"
               >
-                <div class="w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${notificationsEnabled ? 'translate-x-0' : '-translate-x-5'}"></div>
+                <div id="drawer-notifications-knob" class="w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${notificationsEnabled ? 'translate-x-0' : '-translate-x-5'}"></div>
               </button>
             </div>
 
@@ -507,8 +593,8 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
               </span>
               <div class="px-3.5 py-2.5 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/85 flex items-center justify-between gap-2 shadow-sm">
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <div class="w-9 h-9 rounded-full ${showPhone ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-200' : 'bg-brand-orange/15 text-brand-orange border border-brand-peachBorder/80'} flex items-center justify-center shrink-0">
-                    <span class="material-symbols-outlined text-lg">${showPhone ? 'visibility' : 'visibility_off'}</span>
+                  <div id="drawer-show-phone-icon-wrap" class="w-9 h-9 rounded-full ${showPhone ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-200' : 'bg-brand-orange/15 text-brand-orange border border-brand-peachBorder/80'} flex items-center justify-center shrink-0">
+                    <span id="drawer-show-phone-icon" class="material-symbols-outlined text-lg">${showPhone ? 'visibility' : 'visibility_off'}</span>
                   </div>
                   <div class="min-w-0">
                     <span class="text-xs font-black font-baloo text-brand-dark block leading-snug">
@@ -533,7 +619,7 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
                     showPhone ? 'bg-emerald-500' : 'bg-gray-300'
                   }"
                 >
-                  <div class="w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                  <div id="drawer-show-phone-knob" class="w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
                     showPhone ? 'translate-x-0' : '-translate-x-5'
                   }"></div>
                 </button>
@@ -611,63 +697,8 @@ function renderProfileSideDrawer(user: ReturnType<typeof state.getUser>): string
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/90 border border-brand-peachBorder text-[11px] font-black text-brand-subtleGray font-baloo">
                 الإصدار والتحديثات
               </span>
-              <div class="px-3.5 py-3 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/85 space-y-2.5 shadow-sm">
-                <div class="flex items-center justify-between gap-2">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <div class="w-8 h-8 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
-                      <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
-                    </div>
-                    <div class="min-w-0">
-                      <span class="text-xs font-black font-baloo text-brand-dark block leading-tight">إصدار التطبيق</span>
-                      <span class="text-[11px] font-mono font-bold text-brand-subtleGray block truncate" dir="ltr">${escapeHtml(currentVersionLabel)}</span>
-                    </div>
-                  </div>
-                  <button
-                    id="drawer-check-updates-btn"
-                    type="button"
-                    ${updateState.isChecking || updateState.isApplyingOta ? 'disabled' : ''}
-                    class="h-8 px-3 rounded-full bg-brand-cream hover:bg-brand-orange hover:text-white border border-brand-peachBorder text-brand-orange text-[11px] font-black transition cursor-pointer active:scale-95 shrink-0 font-baloo ${
-                      updateState.isChecking ? 'opacity-65 cursor-wait' : ''
-                    }"
-                  >
-                    ${updateState.isChecking ? 'جاري الفحص...' : 'فحص التحديثات'}
-                  </button>
-                </div>
-                ${
-                  updateState.feedback
-                    ? `<p class="text-[11px] font-bold ${
-                        updateState.feedback.kind === 'error'
-                          ? 'text-rose-600'
-                          : updateState.feedback.kind === 'success'
-                          ? 'text-emerald-700'
-                          : 'text-brand-subtleGray'
-                      } m-0 leading-snug">${escapeHtml(updateState.feedback.message)}</p>`
-                    : ''
-                }
-                ${
-                  updateState.isOtaStagedForRestart
-                    ? `
-                    <button
-                      id="drawer-restart-ota-btn"
-                      type="button"
-                      class="w-full h-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-soft transition cursor-pointer active:scale-95 font-baloo"
-                    >
-                      تطبيق التحديث المجهز (${escapeHtml(updateState.stagedOtaVersion || ota?.version || '')}) الآن
-                    </button>
-                    `
-                    : ota
-                    ? `
-                    <button
-                      id="drawer-apply-ota-btn"
-                      type="button"
-                      ${updateState.isApplyingOta ? 'disabled' : ''}
-                      class="w-full h-9 rounded-full bg-brand-orange hover:bg-brand-orangeHover text-white text-xs font-black shadow-soft transition cursor-pointer active:scale-95 font-baloo"
-                    >
-                      ${updateState.isApplyingOta ? 'جاري التنزيل في الخلفية...' : `تثبيت التحديث السريع (${escapeHtml(ota.version)})`}
-                    </button>
-                    `
-                    : ''
-                }
+              <div id="drawer-ota-card-slot" class="px-3.5 py-3 rounded-[22px] bg-white/95 border-2 border-brand-peachBorder/85 space-y-2.5 shadow-sm">
+                ${renderDrawerOtaCardInnerHtml()}
               </div>
             </div>
 
@@ -955,7 +986,238 @@ export function attachProfileEvents(): void {
   }
 }
 
-export function attachProfileOverlayEvents(): void {
+function bindDrawerOtaButtons(): void {
+  const checkUpdatesBtn = document.getElementById('drawer-check-updates-btn');
+  if (checkUpdatesBtn) {
+    checkUpdatesBtn.addEventListener('click', () => {
+      void state.checkForAppUpdates(true);
+    });
+  }
+  const applyOtaDrawerBtn = document.getElementById('drawer-apply-ota-btn');
+  if (applyOtaDrawerBtn) {
+    applyOtaDrawerBtn.addEventListener('click', () => {
+      void state.applyOtaUpdateNow();
+    });
+  }
+  const restartOtaDrawerBtn = document.getElementById('drawer-restart-ota-btn');
+  if (restartOtaDrawerBtn) {
+    restartOtaDrawerBtn.addEventListener('click', () => {
+      void state.restartForStagedOtaUpdate();
+    });
+  }
+}
+
+export function syncProfileDrawerContentInPlace(): void {
+  const drawerPanel = document.getElementById('profile-drawer-panel');
+  if (!drawerPanel) return;
+  drawerPanel.classList.remove('meow-drawer-enter-rtl');
+
+  const savedCountEl = document.getElementById('drawer-saved-pets-count');
+  if (savedCountEl) {
+    savedCountEl.textContent = String(state.getSavedPets().length);
+  }
+
+  const blockedBadge = document.getElementById('drawer-blocked-count-badge');
+  if (blockedBadge) {
+    const blockedCount = state.getBlockedUsers().length;
+    blockedBadge.textContent = String(blockedCount);
+    blockedBadge.classList.toggle('hidden', blockedCount === 0);
+  }
+
+  const notificationsEnabled = state.getNotificationsEnabled();
+  const notifIconWrap = document.getElementById('drawer-notifications-icon-wrap');
+  if (notifIconWrap) {
+    notifIconWrap.className = `w-9 h-9 rounded-full ${
+      notificationsEnabled
+        ? 'bg-emerald-500/15 text-emerald-600 border-emerald-200'
+        : 'bg-brand-orange/15 text-brand-orange border-brand-peachBorder/80'
+    } border flex items-center justify-center shrink-0`;
+  }
+  const notifStatusText = document.getElementById('notifications-status-text');
+  if (notifStatusText) {
+    notifStatusText.textContent = notificationsEnabled ? 'الإشعارات مفعلة' : 'الإشعارات متوقفة';
+  }
+  const notifToggle = document.getElementById('drawer-notifications-toggle');
+  if (notifToggle) {
+    notifToggle.setAttribute('aria-checked', notificationsEnabled ? 'true' : 'false');
+    notifToggle.className = `w-12 h-7 rounded-full p-1 transition-colors duration-200 relative shrink-0 cursor-pointer shadow-inner overflow-hidden ${
+      notificationsEnabled ? 'bg-emerald-500' : 'bg-gray-300'
+    }`;
+  }
+  const notifKnob = document.getElementById('drawer-notifications-knob');
+  if (notifKnob) {
+    notifKnob.className = `w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+      notificationsEnabled ? 'translate-x-0' : '-translate-x-5'
+    }`;
+  }
+
+  const showPhone = state.getShowPhoneInProfile();
+  const showPhoneWrap = document.getElementById('drawer-show-phone-icon-wrap');
+  if (showPhoneWrap) {
+    showPhoneWrap.className = `w-9 h-9 rounded-full ${
+      showPhone
+        ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-200'
+        : 'bg-brand-orange/15 text-brand-orange border border-brand-peachBorder/80'
+    } flex items-center justify-center shrink-0`;
+  }
+  const showPhoneIcon = document.getElementById('drawer-show-phone-icon');
+  if (showPhoneIcon) {
+    showPhoneIcon.textContent = showPhone ? 'visibility' : 'visibility_off';
+  }
+  const showPhoneText = document.getElementById('show-phone-privacy-status-text');
+  if (showPhoneText) {
+    showPhoneText.textContent = showPhone
+      ? 'مفعل • رقم الهاتف ظاهر في ملفات حيواناتك والمحادثات'
+      : 'مغلق افتراضياً • رقم الهاتف مخفي عن الآخرين';
+  }
+  const showPhoneToggle = document.getElementById('drawer-show-phone-toggle');
+  if (showPhoneToggle) {
+    showPhoneToggle.setAttribute('aria-checked', showPhone ? 'true' : 'false');
+    showPhoneToggle.className = `w-12 h-7 rounded-full p-1 transition-colors duration-200 relative shrink-0 cursor-pointer shadow-inner overflow-hidden ${
+      showPhone ? 'bg-emerald-500' : 'bg-gray-300'
+    }`;
+  }
+  const showPhoneKnob = document.getElementById('drawer-show-phone-knob');
+  if (showPhoneKnob) {
+    showPhoneKnob.className = `w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+      showPhone ? 'translate-x-0' : '-translate-x-5'
+    }`;
+  }
+
+  const otaSlot = document.getElementById('drawer-ota-card-slot');
+  if (otaSlot) {
+    const nextOtaHtml = renderDrawerOtaCardInnerHtml();
+    if (otaSlot.innerHTML !== nextOtaHtml) {
+      otaSlot.innerHTML = nextOtaHtml;
+      bindDrawerOtaButtons();
+    }
+  }
+}
+
+export function attachProfileDrawerEvents(): void {
+  const closeDrawerBtn = document.getElementById('close-profile-drawer-btn');
+  const drawerBackdrop = document.getElementById('profile-drawer-backdrop');
+  const drawerPanel = document.getElementById('profile-drawer-panel');
+  let isClosingDrawer = false;
+
+  if (drawerPanel) {
+    drawerPanel.addEventListener(
+      'animationend',
+      (e) => {
+        if (e.animationName === 'meow-drawer-enter-rtl') {
+          drawerPanel.classList.remove('meow-drawer-enter-rtl');
+        }
+      },
+      { once: true }
+    );
+  }
+
+  const closeDrawer = () => {
+    if (isClosingDrawer) return;
+    isClosingDrawer = true;
+    if (drawerPanel) {
+      drawerPanel.classList.remove('meow-drawer-enter-rtl');
+      drawerPanel.classList.add('meow-drawer-exit-rtl');
+      if (drawerBackdrop) {
+        drawerBackdrop.classList.add('pointer-events-auto');
+        drawerBackdrop.style.transition = 'opacity 180ms ease-out';
+        drawerBackdrop.style.opacity = '0';
+      }
+      window.setTimeout(() => {
+        setProfileDrawerScrollLock(false);
+        state.setSettingsOpen(false);
+      }, 200);
+    } else {
+      setProfileDrawerScrollLock(false);
+      state.setSettingsOpen(false);
+    }
+  };
+
+  if (drawerPanel) {
+    attachSwipeToCloseDrawer(
+      drawerPanel,
+      drawerBackdrop,
+      () => {
+        setProfileDrawerScrollLock(false);
+        state.setSettingsOpen(false);
+      },
+      'right'
+    );
+  }
+
+  if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', closeDrawer);
+  if (drawerBackdrop) {
+    drawerBackdrop.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement | null;
+      if (e.target === drawerBackdrop || !target?.closest('#profile-drawer-panel')) {
+        closeDrawer();
+      }
+    });
+  }
+
+  bindDrawerOtaButtons();
+
+  // Notifications Toggle in Drawer
+  const notificationsToggle = document.getElementById('drawer-notifications-toggle');
+  if (notificationsToggle) {
+    notificationsToggle.addEventListener('click', () => {
+      state.setNotificationsEnabled(!state.getNotificationsEnabled());
+    });
+  }
+
+  // Phone Visibility Toggle in Drawer Privacy Section
+  const showPhoneToggle = document.getElementById('drawer-show-phone-toggle');
+  if (showPhoneToggle) {
+    showPhoneToggle.addEventListener('click', () => {
+      state.setShowPhoneInProfile(!state.getShowPhoneInProfile());
+    });
+  }
+
+  // Saved Pets Button in Drawer
+  const savedPetsBtn = document.getElementById('drawer-saved-pets-btn');
+  if (savedPetsBtn) {
+    savedPetsBtn.addEventListener('click', () => {
+      setProfileDrawerScrollLock(false);
+      state.setSettingsOpen(false);
+      state.openSavedPetsView();
+    });
+  }
+
+  // Contact Us Button in Drawer
+  const contactUsBtn = document.getElementById('drawer-contact-us-btn');
+  if (contactUsBtn) {
+    contactUsBtn.addEventListener('click', () => {
+      setProfileDrawerScrollLock(false);
+      state.setSettingsOpen(false);
+      state.openContactView();
+    });
+  }
+
+  // Drawer Action Items (Blocked, Privacy, Terms)
+  const drawerActionBtns = document.querySelectorAll<HTMLButtonElement>('[data-drawer-action]');
+  drawerActionBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = btn.getAttribute('data-drawer-action') as any;
+      if (action) {
+        activeModalType = action;
+        state.setCurrentTab('profile');
+      }
+    });
+  });
+
+  // Sign Out Button in Drawer
+  const signOutBtn = document.getElementById('drawer-sign-out-btn');
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', () => {
+      isSignOutConfirmOpen = true;
+      isSigningOut = false;
+      signOutErrorMessage = '';
+      state.setCurrentTab('profile');
+    });
+  }
+}
+
+export function attachProfileSubModalEvents(): void {
   // Delete Pet Confirmation Modal Events
   const confirmDeletePetBtn = document.getElementById('confirm-delete-pet-btn');
   const cancelDeletePetBtn = document.getElementById('cancel-delete-pet-btn');
@@ -1003,110 +1265,6 @@ export function attachProfileOverlayEvents(): void {
     });
   }
 
-  // Settings Drawer Closing (with smooth slide-out)
-  const closeDrawerBtn = document.getElementById('close-profile-drawer-btn');
-  const drawerBackdrop = document.getElementById('profile-drawer-backdrop');
-  const drawerPanel = document.getElementById('profile-drawer-panel');
-  let isClosingDrawer = false;
-
-  const closeDrawer = () => {
-    if (isClosingDrawer) return;
-    isClosingDrawer = true;
-    if (drawerPanel) {
-      drawerPanel.classList.remove('meow-drawer-enter-rtl');
-      drawerPanel.classList.add('meow-drawer-exit-rtl');
-      if (drawerBackdrop) {
-        drawerBackdrop.style.transition = 'opacity 180ms ease-out';
-        drawerBackdrop.style.opacity = '0';
-      }
-      window.setTimeout(() => {
-        state.setSettingsOpen(false);
-      }, 200);
-    } else {
-      state.setSettingsOpen(false);
-    }
-  };
-
-  if (drawerPanel) {
-    attachSwipeToCloseDrawer(drawerPanel, drawerBackdrop, () => state.setSettingsOpen(false), 'right');
-  }
-
-  if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', closeDrawer);
-  if (drawerBackdrop) {
-    drawerBackdrop.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement | null;
-      if (e.target === drawerBackdrop || !target?.closest('#profile-drawer-panel')) {
-        closeDrawer();
-      }
-    });
-  }
-
-  // Check / Apply OTA updates inside Drawer
-  const checkUpdatesBtn = document.getElementById('drawer-check-updates-btn');
-  if (checkUpdatesBtn) {
-    checkUpdatesBtn.addEventListener('click', () => {
-      void state.checkForAppUpdates(true);
-    });
-  }
-  const applyOtaDrawerBtn = document.getElementById('drawer-apply-ota-btn');
-  if (applyOtaDrawerBtn) {
-    applyOtaDrawerBtn.addEventListener('click', () => {
-      void state.applyOtaUpdateNow();
-    });
-  }
-  const restartOtaDrawerBtn = document.getElementById('drawer-restart-ota-btn');
-  if (restartOtaDrawerBtn) {
-    restartOtaDrawerBtn.addEventListener('click', () => {
-      void state.restartForStagedOtaUpdate();
-    });
-  }
-
-  // Notifications Toggle in Drawer
-  const notificationsToggle = document.getElementById('drawer-notifications-toggle');
-  if (notificationsToggle) {
-    notificationsToggle.addEventListener('click', () => {
-      state.setNotificationsEnabled(!state.getNotificationsEnabled());
-    });
-  }
-
-  // Phone Visibility Toggle in Drawer Privacy Section
-  const showPhoneToggle = document.getElementById('drawer-show-phone-toggle');
-  if (showPhoneToggle) {
-    showPhoneToggle.addEventListener('click', () => {
-      state.setShowPhoneInProfile(!state.getShowPhoneInProfile());
-    });
-  }
-
-  // Saved Pets Button in Drawer
-  const savedPetsBtn = document.getElementById('drawer-saved-pets-btn');
-  if (savedPetsBtn) {
-    savedPetsBtn.addEventListener('click', () => {
-      state.setSettingsOpen(false);
-      state.openSavedPetsView();
-    });
-  }
-
-  // Contact Us Button in Drawer
-  const contactUsBtn = document.getElementById('drawer-contact-us-btn');
-  if (contactUsBtn) {
-    contactUsBtn.addEventListener('click', () => {
-      state.setSettingsOpen(false);
-      state.openContactView();
-    });
-  }
-
-  // Drawer Action Items (Blocked, Privacy, Terms)
-  const drawerActionBtns = document.querySelectorAll<HTMLButtonElement>('[data-drawer-action]');
-  drawerActionBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const action = btn.getAttribute('data-drawer-action') as any;
-      if (action) {
-        activeModalType = action;
-        state.setCurrentTab('profile');
-      }
-    });
-  });
-
   // Close Sub-modal
   const closeSubmodalBtn = document.getElementById('close-drawer-submodal-btn');
   const confirmSubmodalBtn = document.getElementById('confirm-drawer-submodal-btn');
@@ -1145,17 +1303,6 @@ export function attachProfileOverlayEvents(): void {
     });
   });
 
-  // Sign Out Button in Drawer
-  const signOutBtn = document.getElementById('drawer-sign-out-btn');
-  if (signOutBtn) {
-    signOutBtn.addEventListener('click', () => {
-      isSignOutConfirmOpen = true;
-      isSigningOut = false;
-      signOutErrorMessage = '';
-      state.setCurrentTab('profile');
-    });
-  }
-
   const confirmSignOutBtn = document.getElementById('confirm-sign-out-btn') as HTMLButtonElement | null;
   const cancelSignOutBtn = document.getElementById('cancel-sign-out-btn') as HTMLButtonElement | null;
   const signOutBackdrop = document.getElementById('sign-out-confirm-backdrop');
@@ -1185,6 +1332,7 @@ export function attachProfileOverlayEvents(): void {
       const result = await state.signOutSupabaseAccount();
       isSigningOut = false;
       if (result.success) {
+        setProfileDrawerScrollLock(false);
         isSignOutConfirmOpen = false;
         activeModalType = null;
         signOutErrorMessage = '';
@@ -1195,6 +1343,11 @@ export function attachProfileOverlayEvents(): void {
       }
     });
   }
+}
+
+export function attachProfileOverlayEvents(): void {
+  attachProfileDrawerEvents();
+  attachProfileSubModalEvents();
 }
 
 function renderSignOutConfirmModal(user: ReturnType<typeof state.getUser>): string {

@@ -34,7 +34,12 @@ import {
   escapeHtml,
   sanitizeImageSrc,
 } from '../../utils/sanitize.ts';
-import { processImageFileForUpload } from '../../utils/imageUpload.ts';
+import {
+  createSafeObjectPreviewUrl,
+  processImageFileForUpload,
+  revokeSafeObjectPreviewUrl,
+} from '../../utils/imageUpload.ts';
+import { sanitizeOAuthDisplayName } from '../../utils/authHelpers.ts';
 
 const SPLASH_LOGO_URL = '/assets/meow-logo.png';
 
@@ -185,6 +190,37 @@ const uploadedPetPhotos: (string | null)[] = [null, null, null];
 const uploadingPetPhotoSlots: [boolean, boolean, boolean] = [false, false, false];
 const petPhotoSlotErrors: [string, string, string] = ['', '', ''];
 const petPhotoRetryFiles: [File | null, File | null, File | null] = [null, null, null];
+const petPhotoUploadProgress: [number, number, number] = [0, 0, 0];
+const petPhotoPreviewUrls: [string | null, string | null, string | null] = [null, null, null];
+
+function getOnboardingPreviewUrl(file: File): string | null {
+  try {
+    if (typeof createSafeObjectPreviewUrl === 'function') {
+      return createSafeObjectPreviewUrl(file);
+    }
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      return URL.createObjectURL(file);
+    }
+  } catch {
+    // ignore preview errors
+  }
+  return null;
+}
+
+function releaseOnboardingPreviewUrl(url: string | null): void {
+  if (!url) return;
+  try {
+    if (typeof revokeSafeObjectPreviewUrl === 'function') {
+      revokeSafeObjectPreviewUrl(url);
+      return;
+    }
+    if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(url);
+    }
+  } catch {
+    // ignore cleanup errors
+  }
+}
 
 function getSafeSessionStorage(): Storage | null {
   try {
@@ -197,19 +233,63 @@ function getSafeSessionStorage(): Storage | null {
   return null;
 }
 
-function persistOnboardingOwnerDraft(): void {
-  const storage = getSafeSessionStorage();
-  if (!storage) return;
+function getSafeLocalStorage(): Storage | null {
   try {
-    storage.setItem(OWNER_DRAFT_STORAGE_KEY, JSON.stringify(onboardingOwnerFormState));
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage;
+    }
   } catch {
-    // ignore storage quota errors
+    // ignore storage access errors
+  }
+  return null;
+}
+
+function getOnboardingDraftOwnerKey(): string {
+  try {
+    return (state.getUser()?.id || '').trim();
+  } catch {
+    return '';
   }
 }
 
+function writeOnboardingStorageKey(key: string, serialized: string): boolean {
+  let wroteAny = false;
+  const targets = [getSafeLocalStorage(), getSafeSessionStorage()];
+  for (const storage of targets) {
+    if (!storage) continue;
+    try {
+      storage.setItem(key, serialized);
+      wroteAny = true;
+    } catch {
+      // ignore individual storage quota errors
+    }
+  }
+  return wroteAny;
+}
+
+function readOnboardingStorageKey(key: string): string | null {
+  const targets = [getSafeLocalStorage(), getSafeSessionStorage()];
+  for (const storage of targets) {
+    if (!storage) continue;
+    try {
+      const val = storage.getItem(key);
+      if (val) return val;
+    } catch {
+      // ignore storage read errors
+    }
+  }
+  return null;
+}
+
+function persistOnboardingOwnerDraft(): void {
+  const payload = {
+    draftUserId: getOnboardingDraftOwnerKey(),
+    ...onboardingOwnerFormState,
+  };
+  writeOnboardingStorageKey(OWNER_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+}
+
 function restoreOnboardingOwnerDraft(): void {
-  const storage = getSafeSessionStorage();
-  if (!storage) return;
   if (
     onboardingOwnerFormState.name ||
     onboardingOwnerFormState.phone ||
@@ -219,10 +299,17 @@ function restoreOnboardingOwnerDraft(): void {
     return;
   }
   try {
-    const raw = storage.getItem(OWNER_DRAFT_STORAGE_KEY);
+    const raw = readOnboardingStorageKey(OWNER_DRAFT_STORAGE_KEY);
     if (!raw) return;
-    const parsed = JSON.parse(raw) as Partial<OwnerDetailsFormValues>;
+    const parsed = JSON.parse(raw) as Partial<OwnerDetailsFormValues> & {
+      draftUserId?: unknown;
+    };
     if (!parsed || typeof parsed !== 'object') return;
+    const currentOwnerId = getOnboardingDraftOwnerKey();
+    const draftOwnerId = typeof parsed.draftUserId === 'string' ? parsed.draftUserId.trim() : '';
+    if (currentOwnerId && draftOwnerId && currentOwnerId !== draftOwnerId) {
+      return;
+    }
     if (typeof parsed.name === 'string') onboardingOwnerFormState.name = parsed.name;
     if (typeof parsed.phone === 'string') onboardingOwnerFormState.phone = parsed.phone;
     if (parsed.gender === 'male' || parsed.gender === 'female') {
@@ -238,9 +325,8 @@ function restoreOnboardingOwnerDraft(): void {
 }
 
 function persistOnboardingPetDraft(): void {
-  const storage = getSafeSessionStorage();
-  if (!storage) return;
-  const payload = {
+  const basePayload = {
+    draftUserId: getOnboardingDraftOwnerKey(),
     selectedPetSpecies,
     selectedPetGender,
     selectedVaccination,
@@ -252,26 +338,34 @@ function persistOnboardingPetDraft(): void {
     draftPetAgeMonths,
     draftPetNotes,
     selectedTraits: Array.from(selectedTraits),
-    uploadedPetPhotos,
   };
-  try {
-    storage.setItem(PET_DRAFT_STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // Fallback without photo data URLs if sessionStorage quota is exceeded
-    try {
-      storage.setItem(
-        PET_DRAFT_STORAGE_KEY,
-        JSON.stringify({ ...payload, uploadedPetPhotos: [null, null, null] })
-      );
-    } catch {
-      // ignore storage quota errors
+
+  // Try preserving all photos first; on quota pressure trim secondary slots before falling back
+  const photoCandidates: (string | null)[][] = [
+    [uploadedPetPhotos[0] || null, uploadedPetPhotos[1] || null, uploadedPetPhotos[2] || null],
+    [uploadedPetPhotos[0] || null, uploadedPetPhotos[1] || null, null],
+    [uploadedPetPhotos[0] || null, null, null],
+    [null, null, null],
+  ];
+
+  const storages = [getSafeLocalStorage(), getSafeSessionStorage()];
+  for (const storage of storages) {
+    if (!storage) continue;
+    for (const candidatePhotos of photoCandidates) {
+      try {
+        storage.setItem(
+          PET_DRAFT_STORAGE_KEY,
+          JSON.stringify({ ...basePayload, uploadedPetPhotos: candidatePhotos })
+        );
+        break;
+      } catch {
+        // try next smaller photo array on quota exceeded
+      }
     }
   }
 }
 
 function restoreOnboardingPetDraft(): void {
-  const storage = getSafeSessionStorage();
-  if (!storage) return;
   const hasActiveDraft =
     Boolean(selectedPetSpecies) ||
     Boolean(selectedPetGender) ||
@@ -287,9 +381,10 @@ function restoreOnboardingPetDraft(): void {
   if (hasActiveDraft) return;
 
   try {
-    const raw = storage.getItem(PET_DRAFT_STORAGE_KEY);
+    const raw = readOnboardingStorageKey(PET_DRAFT_STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as {
+      draftUserId?: unknown;
       selectedPetSpecies?: unknown;
       selectedPetGender?: unknown;
       selectedVaccination?: unknown;
@@ -304,6 +399,11 @@ function restoreOnboardingPetDraft(): void {
       uploadedPetPhotos?: unknown;
     };
     if (!parsed || typeof parsed !== 'object') return;
+    const currentOwnerId = getOnboardingDraftOwnerKey();
+    const draftOwnerId = typeof parsed.draftUserId === 'string' ? parsed.draftUserId.trim() : '';
+    if (currentOwnerId && draftOwnerId && currentOwnerId !== draftOwnerId) {
+      return;
+    }
     if (parsed.selectedPetSpecies === 'cat' || parsed.selectedPetSpecies === 'dog') {
       selectedPetSpecies = parsed.selectedPetSpecies;
     }
@@ -338,13 +438,15 @@ function restoreOnboardingPetDraft(): void {
 }
 
 function clearOnboardingDraftStorage(): void {
-  const storage = getSafeSessionStorage();
-  if (!storage) return;
-  try {
-    storage.removeItem(OWNER_DRAFT_STORAGE_KEY);
-    storage.removeItem(PET_DRAFT_STORAGE_KEY);
-  } catch {
-    // ignore storage errors
+  const targets = [getSafeLocalStorage(), getSafeSessionStorage()];
+  for (const storage of targets) {
+    if (!storage) continue;
+    try {
+      storage.removeItem(OWNER_DRAFT_STORAGE_KEY);
+      storage.removeItem(PET_DRAFT_STORAGE_KEY);
+    } catch {
+      // ignore storage errors
+    }
   }
 }
 
@@ -356,13 +458,28 @@ function renderOnboardingSlotInner(idx: number): string {
   const isLoading = uploadingPetPhotoSlots[idx];
   const hasError = Boolean(petPhotoSlotErrors[idx]);
   const photo = uploadedPetPhotos[idx];
+  const previewUrl = petPhotoPreviewUrls[idx];
+  const progress = Math.max(0, Math.min(100, Math.round(petPhotoUploadProgress[idx] || 0)));
   const isPrimary = idx === 0;
 
   if (isLoading) {
+    const activePreview = previewUrl || photo;
     return `
-      <div class="flex flex-col items-center justify-center gap-1 px-1.5 text-center">
-        <i class="fa-solid fa-circle-notch fa-spin text-lg sm:text-xl text-[#e67e22]"></i>
-        <span class="text-[10px] font-black text-[#786555] leading-tight">جاري التجهيز...</span>
+      <div class="relative w-full h-full flex flex-col items-center justify-center overflow-hidden">
+        ${
+          activePreview
+            ? `<img src="${escapeAttr(sanitizeImageSrc(activePreview, SAFE_FALLBACK_PET_SVG))}" alt="معاينة الصورة ${idx + 1}" class="absolute inset-0 w-full h-full object-cover opacity-65" />`
+            : ''
+        }
+        <div class="relative z-10 w-[86%] rounded-xl bg-black/65 backdrop-blur-xs px-2 py-1.5 flex flex-col items-center gap-1 text-center text-white shadow-sm">
+          <div class="flex items-center gap-1.5">
+            <i class="fa-solid fa-circle-notch fa-spin text-xs text-[#ffb066]"></i>
+            <span class="text-[10px] font-black leading-tight">${progress > 0 ? `${progress}%` : 'جاري التجهيز'}</span>
+          </div>
+          <div class="w-full h-1.5 rounded-full bg-white/25 overflow-hidden">
+            <div class="h-full bg-[#e67e22] transition-all duration-150" style="width: ${Math.max(progress, 12)}%;"></div>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -465,6 +582,13 @@ function resetTransientFormState(): void {
   petPhotoRetryFiles[0] = null;
   petPhotoRetryFiles[1] = null;
   petPhotoRetryFiles[2] = null;
+  petPhotoUploadProgress[0] = 0;
+  petPhotoUploadProgress[1] = 0;
+  petPhotoUploadProgress[2] = 0;
+  for (let i = 0; i < 3; i += 1) {
+    releaseOnboardingPreviewUrl(petPhotoPreviewUrls[i]);
+    petPhotoPreviewUrls[i] = null;
+  }
   clearOnboardingDraftStorage();
 }
 
@@ -492,7 +616,11 @@ function syncOnboardingOwnerDraftIfEmpty(): void {
     village: user.village,
   });
 
-  onboardingOwnerFormState.name = user.name || '';
+  onboardingOwnerFormState.name = sanitizeOAuthDisplayName(
+    user.name,
+    user.email,
+    state.getSupabaseSession()?.user ?? null
+  );
   onboardingOwnerFormState.phone = user.phone ? formatOwnerPhoneForInput(user.phone) : '';
   onboardingOwnerFormState.gender =
     user.gender === 'female' ? 'female' : user.gender === 'male' ? 'male' : null;
@@ -560,12 +688,12 @@ export function renderOnboardingView(): string {
   }
 
   return `
-    <div class="min-h-[100dvh] w-full flex flex-col items-center justify-between px-4 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-[#FFF9E9] text-[#3E2723] relative overflow-x-hidden" dir="rtl">
+    <div class="min-h-[100dvh] w-full flex flex-col items-center justify-between px-4 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-[#FFF9E9] text-[#3E2723] relative overflow-x-clip" dir="rtl">
       
       ${renderPawBackdrop()}
 
       <!-- Minimal Step Dots Navigation (no skip button) -->
-      <div class="w-full max-w-md flex items-center justify-center pt-1 pb-1 sm:pb-2 relative z-10">
+      <div class="w-full max-w-md flex items-center justify-center pt-1 pb-1 sm:pb-2 relative z-10 shrink-0">
         <div class="flex items-center gap-1.5">
           ${renderStepDots(step)}
         </div>
@@ -577,7 +705,7 @@ export function renderOnboardingView(): string {
       </div>
 
       <!-- Footer Handle Only (@Meow2026) -->
-      <footer class="w-full max-w-md pt-2 sm:pt-4 pb-1 sm:pb-4 text-center relative z-0">
+      <footer class="w-full max-w-md pt-2 sm:pt-4 pb-1 sm:pb-4 text-center relative z-0 shrink-0 mt-auto pointer-events-none select-none">
         <span dir="ltr" class="inline-block text-[11px] sm:text-xs font-bold text-[#8C827A] tracking-wide font-baloo">@Meow2026</span>
       </footer>
 
@@ -1492,9 +1620,16 @@ function renderOwnerDetailsFormContent(
               <input
                 type="text"
                 id="owner-full-name-input"
+                name="meow_owner_display_name"
                 placeholder="اكتب اسمك الكامل"
                 value="${escapeAttr(values.name)}"
                 autocomplete="off"
+                autocorrect="off"
+                autocapitalize="words"
+                spellcheck="false"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
                 class="w-full h-[52px] sm:h-16 px-4 sm:px-6 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-base sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
               />
             </div>
@@ -1508,11 +1643,17 @@ function renderOwnerDetailsFormContent(
               <input
                 type="tel"
                 id="owner-phone-number-input"
+                name="meow_owner_mobile"
                 inputmode="tel"
                 placeholder="01xxxxxxxxx"
                 value="${escapeAttr(values.phone)}"
                 dir="ltr"
                 autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
                 class="w-full min-w-0 h-full px-3.5 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-r-[22px] sm:rounded-r-[28px] text-base sm:text-lg font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm text-left"
               />
             </div>
@@ -1880,8 +2021,14 @@ function renderPetDetailsStep(): string {
                 <input
                   type="text"
                   id="pet-name-input"
+                  name="meow_pet_name"
                   value="${escapeAttr(draftPetName)}"
                   autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-form-type="other"
                   class="w-full min-w-0 h-[52px] sm:h-16 py-3 sm:py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
@@ -1893,8 +2040,14 @@ function renderPetDetailsStep(): string {
                 <input
                   type="text"
                   id="pet-color-input"
+                  name="meow_pet_color"
                   value="${escapeAttr(draftPetColor)}"
                   autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-form-type="other"
                   class="w-full min-w-0 h-[52px] sm:h-16 py-3 sm:py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
@@ -1953,11 +2106,16 @@ function renderPetDetailsStep(): string {
                   <input
                     type="number"
                     id="pet-age-years-input"
+                    name="meow_pet_age_years"
                     inputmode="numeric"
                     min="0"
                     max="25"
                     placeholder="سنة"
                     value="${escapeAttr(draftPetAgeYears)}"
+                    autocomplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
                     class="w-full h-[52px] sm:h-16 py-3 sm:py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-base sm:text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                   />
                 </div>
@@ -1965,11 +2123,16 @@ function renderPetDetailsStep(): string {
                   <input
                     type="number"
                     id="pet-age-months-input"
+                    name="meow_pet_age_months"
                     inputmode="numeric"
                     min="0"
                     max="11"
                     placeholder="شهر (اختياري)"
                     value="${escapeAttr(draftPetAgeMonths)}"
+                    autocomplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
                     class="w-full h-[52px] sm:h-16 py-3 sm:py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                   />
                 </div>
@@ -2085,7 +2248,12 @@ function renderPetDetailsStep(): string {
             <div class="relative flex items-center">
               <textarea
                 id="pet-notes-input"
+                name="meow_pet_notes"
                 rows="3"
+                autocomplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
                 class="w-full p-3.5 sm:p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[22px] sm:rounded-[28px] text-sm sm:text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
               >${escapeHtml(draftPetNotes)}</textarea>
             </div>
@@ -3300,6 +3468,9 @@ function attachRemainingOnboardingEvents(): void {
     inputEl?: HTMLInputElement
   ) => {
     if (slot < 0 || slot > 2) return;
+    releaseOnboardingPreviewUrl(petPhotoPreviewUrls[slot]);
+    petPhotoPreviewUrls[slot] = getOnboardingPreviewUrl(file);
+    petPhotoUploadProgress[slot] = 10;
     uploadingPetPhotoSlots[slot] = true;
     petPhotoSlotErrors[slot] = '';
     petPhotoRetryFiles[slot] = file;
@@ -3307,7 +3478,14 @@ function attachRemainingOnboardingEvents(): void {
     syncOnboardingPhotoErrorsUI();
 
     try {
-      const result = await processImageFileForUpload(file);
+      const result = await processImageFileForUpload(file, {
+        onProgress: (percent) => {
+          petPhotoUploadProgress[slot] = percent;
+          if (uploadingPetPhotoSlots[slot]) {
+            renderOnboardingSlotDOM(slot);
+          }
+        },
+      });
       if (!result.success) {
         petPhotoSlotErrors[slot] = result.errorMessage;
         if (inputEl) inputEl.value = '';
@@ -3329,8 +3507,13 @@ function attachRemainingOnboardingEvents(): void {
         petFormError.classList.add('hidden');
       }
       photosGroup?.classList.remove('ring-2', 'ring-rose-400', 'p-1');
+    } catch {
+      petPhotoSlotErrors[slot] = 'تعذر قراءة الصورة المختارة. يمكنك إعادة المحاولة أو اختيار صورة أخرى.';
     } finally {
       uploadingPetPhotoSlots[slot] = false;
+      petPhotoUploadProgress[slot] = 0;
+      releaseOnboardingPreviewUrl(petPhotoPreviewUrls[slot]);
+      petPhotoPreviewUrls[slot] = null;
       renderOnboardingSlotDOM(slot);
       syncOnboardingPhotoErrorsUI();
     }

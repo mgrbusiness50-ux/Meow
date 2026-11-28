@@ -1,30 +1,92 @@
+export function isExplicitAuthInvalidError(input?: unknown): boolean {
+  const obj = input && typeof input === 'object' ? (input as { code?: unknown; status?: unknown; errorCode?: unknown; message?: unknown; errorMessage?: unknown }) : null;
+  const code = String(obj?.code || obj?.errorCode || '').trim().toLowerCase();
+  const status = typeof obj?.status === 'number' ? obj.status : Number(obj?.status || 0);
+  const message =
+    typeof input === 'string'
+      ? input
+      : obj
+      ? String(obj.message || obj.errorMessage || '')
+      : '';
+  const lower = message.trim().toLowerCase();
+
+  if (status === 401 || status === 403) {
+    return true;
+  }
+
+  if (
+    code === 'invalid_grant' ||
+    code === 'refresh_token_not_found' ||
+    code === 'session_not_found' ||
+    code === 'user_not_found' ||
+    code === 'user_banned' ||
+    code === 'bad_jwt'
+  ) {
+    return true;
+  }
+
+  if (!lower) return false;
+  return (
+    lower.includes('invalid refresh token') ||
+    lower.includes('refresh token not found') ||
+    lower.includes('refresh_token_not_found') ||
+    lower.includes('invalid_grant') ||
+    lower.includes('jwt expired') ||
+    lower.includes('session_not_found') ||
+    lower.includes('user_not_found') ||
+    lower.includes('user_banned') ||
+    lower.includes('account_deleted') ||
+    lower.includes('invalid claim')
+  );
+}
+
 export function isNetworkOrOfflineError(input?: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return true;
   }
+  const obj = input && typeof input === 'object' ? (input as { name?: unknown; status?: unknown; code?: unknown; message?: unknown; errorMessage?: unknown }) : null;
+  const name = String(obj?.name || '').trim().toLowerCase();
+  const code = String(obj?.code || '').trim().toLowerCase();
+  const status = typeof obj?.status === 'number' ? obj.status : Number(obj?.status || 0);
   const message =
     typeof input === 'string'
       ? input
-      : input && typeof input === 'object'
-      ? String(
-          (input as { message?: unknown; errorMessage?: unknown }).message ||
-            (input as { message?: unknown; errorMessage?: unknown }).errorMessage ||
-            ''
-        )
+      : obj
+      ? String(obj.message || obj.errorMessage || '')
       : '';
   const lower = message.trim().toLowerCase();
+
+  if (name === 'aborterror' || code === 'econnrefused' || code === 'enotfound' || code === 'etimedout' || code === 'err_network') {
+    return true;
+  }
+  if (status === 0 && obj && ('status' in obj) && lower.length > 0 && !isExplicitAuthInvalidError(input)) {
+    return true;
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return true;
+  }
   if (!lower) return false;
   return (
     lower.includes('failed to fetch') ||
+    lower.includes('fetch failed') ||
     lower.includes('networkerror') ||
     lower.includes('network request failed') ||
+    lower.includes('network error') ||
     lower.includes('err_internet_disconnected') ||
+    lower.includes('err_network') ||
+    lower.includes('err_connection') ||
+    lower.includes('err_name_not_resolved') ||
+    lower.includes('net::err') ||
     lower.includes('load failed') ||
     lower.includes('timeout') ||
     lower.includes('timed out') ||
     lower.includes('aborted') ||
+    lower.includes('socket hang up') ||
+    lower.includes('econnreset') ||
+    lower.includes('offline') ||
     lower.includes('مشكلة في الاتصال بالإنترنت') ||
     lower.includes('انقطع الاتصال') ||
+    lower.includes('لا يوجد اتصال') ||
     lower.includes('تعذر الاتصال')
   );
 }
@@ -110,4 +172,42 @@ export function sanitizeOAuthDisplayName(
   }
 
   return trimmed;
+}
+
+/**
+ * Extracts a user's real display name from Google / OAuth metadata without
+ * ever falling back to usernames, handles, nicknames, or email local-parts.
+ */
+export function extractGoogleRealName(sessionUser?: {
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+  identities?: Array<{ identity_data?: Record<string, unknown> | null }>;
+} | null): string {
+  if (!sessionUser) return '';
+  const meta = (sessionUser.user_metadata || {}) as Record<string, unknown>;
+  const candidates: unknown[] = [
+    meta.full_name,
+    [meta.given_name, meta.family_name]
+      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      .join(' '),
+    meta.name,
+  ];
+  if (Array.isArray(sessionUser.identities)) {
+    for (const identity of sessionUser.identities) {
+      const data = identity?.identity_data;
+      if (!data) continue;
+      candidates.push(
+        data.full_name,
+        [data.given_name, data.family_name]
+          .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+          .join(' '),
+        data.name
+      );
+    }
+  }
+  for (const candidate of candidates) {
+    const cleaned = sanitizeOAuthDisplayName(candidate, sessionUser.email, sessionUser);
+    if (cleaned) return cleaned;
+  }
+  return '';
 }

@@ -1,7 +1,12 @@
 import { MAIN_TAB_ORDER, OnboardingStep, state } from '../state.ts';
 import { MainTab } from '../types.ts';
 import { renderHeader, attachHeaderEvents } from './components/Header.ts';
-import { renderTabBar, attachTabBarEvents, shouldHideTabBar } from './components/TabBar.ts';
+import {
+  renderTabBar,
+  attachTabBarEvents,
+  shouldHideTabBar,
+  syncTabBarActiveIndicator,
+} from './components/TabBar.ts';
 import { renderMatingView, attachMatingEvents } from './views/MatingView.ts';
 import { renderAdoptionView, attachAdoptionEvents } from './views/AdoptionView.ts';
 import {
@@ -16,13 +21,21 @@ import { renderStoreView, attachStoreEvents } from './views/StoreView.ts';
 import {
   renderProfileView,
   attachProfileEvents,
-  renderProfileOverlayModals,
-  attachProfileOverlayEvents,
+  renderProfileDrawerHtml,
+  renderProfileSubModalsHtml,
+  attachProfileDrawerEvents,
+  attachProfileSubModalEvents,
+  syncProfileDrawerContentInPlace,
+  setProfileDrawerScrollLock,
 } from './views/ProfileView.ts';
 import { attachHorizontalTabSwipe, showMobileToast } from '../utils/touchGestures.ts';
 import { renderPetDetailModal, attachPetDetailModalEvents } from './modals/PetDetailModal.ts';
 import { renderContactRequestModal, attachContactRequestModalEvents } from './modals/ContactRequestModal.ts';
-import { renderAddPetModal, attachAddPetModalEvents } from './modals/AddPetModal.ts';
+import {
+  renderAddPetModal,
+  attachAddPetModalEvents,
+  restoreAddPetModalDraftOnStartup,
+} from './modals/AddPetModal.ts';
 import {
   renderOnboardingView,
   renderSplashLoadingIndicatorHtml,
@@ -59,6 +72,12 @@ export class MeowApp {
   private lastRenderedChatConvId: string | null = null;
   private tabScrollPositions = new Map<MainTab, number>();
   private activeTabSwipeCleanup: (() => void) | null = null;
+  private hasRestoredAddPetDraft = false;
+  private lastHeaderHtml = '';
+  private lastOfflineBannerHtml = '';
+  private lastTabBarHtml = '';
+  private lastProfileSubModalsHtml = '';
+  private lastSharedModalsHtml = '';
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -249,6 +268,12 @@ export class MeowApp {
           state.setCurrentTab(MAIN_TAB_ORDER[idx - 1]);
         }
       },
+      onSwipeProgress: (normalizedOffset) => {
+        syncTabBarActiveIndicator(normalizedOffset);
+      },
+      onSwipeCancel: () => {
+        syncTabBarActiveIndicator(0);
+      },
     });
   }
 
@@ -261,11 +286,17 @@ export class MeowApp {
 
     // 1. If user is in the onboarding / registration flow, show the exact sequential registration screens
     if (onboardingStep !== 'completed') {
+      setProfileDrawerScrollLock(false);
       this.activeTabSwipeCleanup?.();
       this.activeTabSwipeCleanup = null;
       this.lastRenderedTab = null;
       this.lastRenderedInsideChatRoom = false;
       this.lastRenderedChatConvId = null;
+      this.lastHeaderHtml = '';
+      this.lastOfflineBannerHtml = '';
+      this.lastTabBarHtml = '';
+      this.lastProfileSubModalsHtml = '';
+      this.lastSharedModalsHtml = '';
 
       if (onboardingStep === 'splash') {
         state.markSplashViewMounted();
@@ -300,6 +331,14 @@ export class MeowApp {
       this.triggerSplashExitFade();
     }
     this.currentRenderedStep = 'completed';
+
+    if (!this.hasRestoredAddPetDraft) {
+      this.hasRestoredAddPetDraft = true;
+      restoreAddPetModalDraftOnStartup();
+      if (state.isAddPetModalVisible() && this.container.querySelector('#app-shell-root')) {
+        return;
+      }
+    }
 
     // 2. Main App Shell (Persistent slots to prevent whole-screen flashing)
     const currentTab = state.getCurrentTab();
@@ -355,13 +394,22 @@ export class MeowApp {
     }
 
     if (!shellAlreadyMounted) {
+      this.lastHeaderHtml = '';
+      this.lastOfflineBannerHtml = '';
+      this.lastTabBarHtml = '';
+      this.lastProfileSubModalsHtml = '';
+      this.lastSharedModalsHtml = '';
       this.container.innerHTML = `
         <div id="app-shell-root" class="min-h-full flex flex-col justify-between bg-warm-bg dark:bg-warm-darkBg text-warm-text dark:text-white transition-colors duration-200">
           <div id="app-header-slot"></div>
           <div id="app-offline-banner-slot"></div>
           <main id="app-main-slot" class="flex-1 flex flex-col"></main>
           <div id="app-tabbar-slot"></div>
-          <div id="app-overlays-slot"></div>
+          <div id="app-overlays-slot">
+            <div id="app-profile-drawer-slot"></div>
+            <div id="app-profile-submodals-slot"></div>
+            <div id="app-shared-modals-slot"></div>
+          </div>
         </div>
       `;
     }
@@ -370,19 +418,27 @@ export class MeowApp {
     const offlineBannerSlot = this.container.querySelector<HTMLElement>('#app-offline-banner-slot');
     const mainSlot = this.container.querySelector<HTMLElement>('#app-main-slot');
     const tabbarSlot = this.container.querySelector<HTMLElement>('#app-tabbar-slot');
-    const overlaysSlot = this.container.querySelector<HTMLElement>('#app-overlays-slot');
+    const drawerSlot = this.container.querySelector<HTMLElement>('#app-profile-drawer-slot');
+    const profileSubModalsSlot = this.container.querySelector<HTMLElement>('#app-profile-submodals-slot');
+    const sharedModalsSlot = this.container.querySelector<HTMLElement>('#app-shared-modals-slot');
 
     if (headerSlot) {
-      if (isInsideChatRoom) {
-        headerSlot.innerHTML = '';
-      } else {
-        headerSlot.innerHTML = renderHeader();
-        attachHeaderEvents();
+      const nextHeaderHtml = isInsideChatRoom ? '' : renderHeader();
+      if (nextHeaderHtml !== this.lastHeaderHtml) {
+        headerSlot.innerHTML = nextHeaderHtml;
+        this.lastHeaderHtml = nextHeaderHtml;
+        if (nextHeaderHtml) {
+          attachHeaderEvents();
+        }
       }
     }
 
     if (offlineBannerSlot) {
-      offlineBannerSlot.innerHTML = isInsideChatRoom ? '' : this.renderOfflineStatusBanner();
+      const nextOfflineHtml = isInsideChatRoom ? '' : this.renderOfflineStatusBanner();
+      if (nextOfflineHtml !== this.lastOfflineBannerHtml) {
+        offlineBannerSlot.innerHTML = nextOfflineHtml;
+        this.lastOfflineBannerHtml = nextOfflineHtml;
+      }
     }
 
     let chatPatchedInPlace = false;
@@ -417,17 +473,49 @@ export class MeowApp {
     }
 
     if (tabbarSlot) {
-      if (hideBottomBar) {
-        tabbarSlot.innerHTML = '';
-      } else {
-        tabbarSlot.innerHTML = renderTabBar();
-        attachTabBarEvents();
+      const nextTabBarHtml = hideBottomBar ? '' : renderTabBar();
+      if (nextTabBarHtml !== this.lastTabBarHtml) {
+        tabbarSlot.innerHTML = nextTabBarHtml;
+        this.lastTabBarHtml = nextTabBarHtml;
+        if (nextTabBarHtml) {
+          attachTabBarEvents();
+        }
+      } else if (nextTabBarHtml) {
+        syncTabBarActiveIndicator(0);
       }
     }
 
-    if (overlaysSlot) {
-      overlaysSlot.innerHTML = `
-        ${renderProfileOverlayModals()}
+    if (drawerSlot) {
+      if (state.isSettingsOpen()) {
+        setProfileDrawerScrollLock(true);
+        const existingDrawer = drawerSlot.querySelector('#profile-drawer-panel');
+        if (!existingDrawer) {
+          drawerSlot.innerHTML = renderProfileDrawerHtml(true);
+          attachProfileDrawerEvents();
+        } else {
+          syncProfileDrawerContentInPlace();
+        }
+      } else {
+        setProfileDrawerScrollLock(false);
+        if (drawerSlot.innerHTML !== '') {
+          drawerSlot.innerHTML = '';
+        }
+      }
+    }
+
+    let profileSubModalsUpdated = false;
+    if (profileSubModalsSlot) {
+      const nextSubModalsHtml = renderProfileSubModalsHtml();
+      if (nextSubModalsHtml !== this.lastProfileSubModalsHtml) {
+        profileSubModalsSlot.innerHTML = nextSubModalsHtml;
+        this.lastProfileSubModalsHtml = nextSubModalsHtml;
+        profileSubModalsUpdated = true;
+      }
+    }
+
+    let sharedModalsUpdated = false;
+    if (sharedModalsSlot) {
+      const nextSharedHtml = `
         ${renderContactRequestModal(selectedPetRequest)}
         ${isAddPetOpen ? renderAddPetModal(editingPet) : ''}
         ${state.isEditOwnerModalVisible() ? renderOwnerEditView() : ''}
@@ -444,6 +532,11 @@ export class MeowApp {
         ${this.renderOtaUpdateNotice()}
         ${this.renderApkUpdateModal()}
       `;
+      if (nextSharedHtml !== this.lastSharedModalsHtml) {
+        sharedModalsSlot.innerHTML = nextSharedHtml;
+        this.lastSharedModalsHtml = nextSharedHtml;
+        sharedModalsUpdated = true;
+      }
     }
 
     if (tabChanged || insideChatRoomChanged) {
@@ -485,24 +578,31 @@ export class MeowApp {
 
     this.ensureTabSwipeAttached(mainSlot);
 
-    // Overlay & Modal events
-    attachProfileOverlayEvents();
-    if (selectedPetDetail) attachPetDetailModalEvents(selectedPetDetail);
-    if (selectedPetRequest) attachContactRequestModalEvents(selectedPetRequest);
-    if (isAddPetOpen) attachAddPetModalEvents(editingPet);
-    if (state.isEditOwnerModalVisible()) attachOwnerEditEvents();
-    if (state.getIsFilterModalOpen()) attachFilterModalEvents(() => this.render());
-    if (state.isSavedPetsVisible()) attachSavedPetsEvents();
-    if (state.isContactOpen()) attachContactEvents();
-    attachThreeDotsMenuEvents();
-    attachGroupAdoptionModalEvents();
-    if (state.getPendingBlockTarget()) attachBlockConfirmModalEvents();
-    if (state.getPendingDeleteConversation()) attachDeleteConversationModalEvents();
-    if (state.getPendingReportTarget()) attachReportModalEvents();
-    if (state.isNotificationsOpen()) attachNotificationsModalEvents();
-    if (state.getLastSubmittedReportNotice()) attachReportToastEvents();
-    this.attachOtaUpdateNoticeEvents();
-    this.attachApkUpdateModalEvents();
+    // Overlay & Modal events (only rebind sections that changed DOM)
+    if (profileSubModalsUpdated) {
+      attachProfileSubModalEvents();
+    }
+    if (sharedModalsUpdated) {
+      if (selectedPetDetail) attachPetDetailModalEvents(selectedPetDetail);
+      if (selectedPetRequest) attachContactRequestModalEvents(selectedPetRequest);
+      if (isAddPetOpen) attachAddPetModalEvents(editingPet);
+      if (state.isEditOwnerModalVisible()) attachOwnerEditEvents();
+      if (state.getIsFilterModalOpen()) attachFilterModalEvents(() => this.render());
+      if (state.isSavedPetsVisible()) attachSavedPetsEvents();
+      if (state.isContactOpen()) attachContactEvents();
+      attachThreeDotsMenuEvents(sharedModalsSlot ?? document);
+      attachGroupAdoptionModalEvents();
+      if (state.getPendingBlockTarget()) attachBlockConfirmModalEvents();
+      if (state.getPendingDeleteConversation()) attachDeleteConversationModalEvents();
+      if (state.getPendingReportTarget()) attachReportModalEvents();
+      if (state.isNotificationsOpen()) attachNotificationsModalEvents();
+      if (state.getLastSubmittedReportNotice()) attachReportToastEvents();
+      this.attachOtaUpdateNoticeEvents();
+      this.attachApkUpdateModalEvents();
+    }
+    if (!chatPatchedInPlace) {
+      attachThreeDotsMenuEvents(mainSlot ?? document);
+    }
 
     const actionToast = state.getActionFeedbackToast();
     if (actionToast) {

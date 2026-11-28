@@ -111,28 +111,28 @@ export function renderHeader(): string {
         ${
           isBrowseTab
             ? `
-            <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5" data-no-ptr="true">
-              <!-- Filter Button: ONLY filter icon in square box, no text -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" data-no-ptr="true">
+              <!-- Filter Button: ONLY filter icon in compact rounded box, no text -->
               <div class="relative shrink-0">
                 <button
                   aria-label="تصفية"
-                  class="h-9 w-9 sm:h-10 sm:w-10 rounded-xl sm:rounded-2xl border-2 border-brand-peachBorder dark:border-warm-darkBorder bg-white dark:bg-[#342A24] flex items-center justify-center text-brand-orange font-bold shadow-sm transition hover:bg-brand-peachBorder/20 dark:hover:bg-[#3D312A] cursor-pointer"
+                  class="h-9 w-9 min-h-[36px] min-w-[36px] rounded-xl border-2 border-brand-peachBorder dark:border-warm-darkBorder bg-white dark:bg-[#342A24] flex items-center justify-center text-brand-orange font-bold shadow-sm transition hover:bg-brand-peachBorder/20 dark:hover:bg-[#3D312A] cursor-pointer"
                   id="filter-toggle-btn"
                   type="button"
                   title="تصفية وفلاتر"
                 >
-                  <i class="fa-solid fa-sliders text-base"></i>
+                  <i class="fa-solid fa-sliders text-sm"></i>
                 </button>
               </div>
 
               <!-- 1. Category: All (الكل) - الأول دائماً -->
               <button
                 data-species-tab="all"
-                class="category-species-btn h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl sm:rounded-2xl ${
+                class="category-species-btn min-h-[36px] h-9 px-3 sm:px-3.5 rounded-xl ${
                   selectedSpecies === 'all'
                     ? 'bg-brand-orange text-white font-black shadow-soft border-2 border-brand-orange'
                     : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-[#D1C7BD] font-black hover:bg-white/80 dark:hover:bg-[#3D312A]'
-                } text-xs sm:text-sm flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
+                } text-[11px] sm:text-xs flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
                 type="button"
               >
                 <span>الكل</span>
@@ -141,11 +141,11 @@ export function renderHeader(): string {
               <!-- 2. Category: Cats (قطط) - الثاني -->
               <button
                 data-species-tab="cat"
-                class="category-species-btn h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl sm:rounded-2xl ${
+                class="category-species-btn min-h-[36px] h-9 px-3 sm:px-3.5 rounded-xl ${
                   selectedSpecies === 'cat'
                     ? 'bg-brand-orange text-white font-black shadow-soft border-2 border-brand-orange'
                     : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-[#D1C7BD] font-black hover:bg-white/80 dark:hover:bg-[#3D312A]'
-                } text-xs sm:text-sm flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
+                } text-[11px] sm:text-xs flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
                 type="button"
               >
                 <span>قطط</span>
@@ -154,11 +154,11 @@ export function renderHeader(): string {
               <!-- 3. Category: Dogs (كلاب) - الثالث -->
               <button
                 data-species-tab="dog"
-                class="category-species-btn h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl sm:rounded-2xl ${
+                class="category-species-btn min-h-[36px] h-9 px-3 sm:px-3.5 rounded-xl ${
                   selectedSpecies === 'dog'
                     ? 'bg-brand-orange text-white font-black shadow-soft border-2 border-brand-orange'
                     : 'bg-white dark:bg-[#342A24] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-brand-dark dark:text-[#D1C7BD] font-black hover:bg-white/80 dark:hover:bg-[#3D312A]'
-                } text-xs sm:text-sm flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
+                } text-[11px] sm:text-xs flex items-center justify-center shrink-0 transition-all cursor-pointer font-baloo"
                 type="button"
               >
                 <span>كلاب</span>

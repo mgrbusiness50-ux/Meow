@@ -30,20 +30,27 @@ let draftReportDetails = '';
 
 export function renderThreeDotsMenu(opts: ThreeDotsMenuOptions): string {
   const alignClass = opts.dropdownAlign === 'right' ? 'right-0' : 'left-0';
-  const btnClass =
+  const rawBtnClass =
     opts.buttonClass ||
-    'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 opacity-95 hover:opacity-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]';
+    'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 rounded-none shadow-none ring-0 p-0 text-white inline-flex items-center justify-center leading-none transition-all cursor-pointer active:scale-90 opacity-95 hover:opacity-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]';
+  const btnClass = rawBtnClass
+    .replace(/\brounded-(?:full|xl|2xl|lg|md|sm)\b/g, '')
+    .replace(/\bbg-black\/\d+\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const targetType = opts.reportTargetType || (opts.conversationId ? 'chat' : 'pet');
 
   return `
-    <div class="meow-more-menu-container relative inline-flex">
+    <div class="meow-more-menu-container relative inline-flex items-center justify-center">
       <button
         type="button"
         aria-label="خيارات إضافية"
         title="خيارات"
-        class="meow-more-btn ${btnClass}"
+        class="meow-more-btn bg-transparent border-0 rounded-none shadow-none ring-0 p-0 inline-flex items-center justify-center leading-none ${btnClass}"
       >
-        <i class="fa-solid fa-ellipsis-vertical text-base pointer-events-none"></i>
+        <span class="inline-flex items-center justify-center w-5 h-5 leading-none pointer-events-none">
+          <i class="fa-solid fa-ellipsis-vertical text-base leading-none pointer-events-none"></i>
+        </span>
       </button>
 
       <div

@@ -71,14 +71,21 @@ export function renderSearchableSelect(config: {
       <!-- Anchored Searchable Popover -->
       <div
         id="${escapeAttr(id)}-panel"
-        class="ss-panel hidden absolute top-full mt-2 right-0 min-w-[min(220px,calc(100vw-24px))] w-full max-w-[calc(100vw-24px)] z-[60] bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] shadow-xl p-2.5 text-right"
+        class="ss-panel hidden absolute top-full mt-2 right-0 min-w-[min(220px,calc(100vw-24px))] w-full max-w-[calc(100vw-24px)] z-[80] bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[24px] shadow-xl p-2.5 text-right"
       >
         <div class="relative mb-2">
           <input
             type="text"
             id="${escapeAttr(id)}-search"
+            name="${escapeAttr(id)}-search"
             placeholder="${escapeAttr(searchPlaceholder)}"
             autocomplete="off"
+            autocorrect="off"
+            autocapitalize="none"
+            spellcheck="false"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
             class="ss-search w-full h-11 pr-9 pl-3 bg-[#FFF9E9]/80 border border-[#d6c7b2] rounded-2xl text-sm font-bold text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:border-[#e67e22]"
           />
           <i class="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#786555]"></i>
@@ -134,7 +141,7 @@ function resetPanelPositionStyles(panel: HTMLElement): void {
   panel.classList.remove('bottom-full', 'mb-2');
   panel.classList.add('top-full', 'mt-2');
   const root = panel.closest('.searchable-select-root');
-  root?.classList.remove('z-50');
+  root?.classList.remove('z-[75]', 'z-50');
 }
 
 function positionAndClampPanel(
@@ -144,7 +151,7 @@ function positionAndClampPanel(
 ): void {
   if (typeof window === 'undefined') return;
   resetPanelPositionStyles(panel);
-  root.classList.add('z-50');
+  root.classList.add('z-[75]');
 
   if (trigger) {
     const triggerRect = trigger.getBoundingClientRect();

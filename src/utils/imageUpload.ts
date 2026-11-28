@@ -7,15 +7,49 @@ export type ImageUploadResult =
 export interface ImageUploadProcessOptions {
   maxDimension?: number;
   quality?: number;
+  onProgress?: (percent: number, stageLabel: string) => void;
+}
+
+export function createSafeObjectPreviewUrl(file: File | null | undefined): string | null {
+  if (!file || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+    return null;
+  }
+  try {
+    return URL.createObjectURL(file);
+  } catch {
+    return null;
+  }
+}
+
+export function revokeSafeObjectPreviewUrl(url: string | null | undefined): void {
+  if (!url || typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') {
+    return;
+  }
+  if (url.startsWith('blob:')) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore object URL revocation errors
+    }
+  }
 }
 
 const DEFAULT_MAX_DIMENSION = 1200;
 const DEFAULT_JPEG_QUALITY = 0.82;
 const MAX_STORED_DATA_URL_CHARS = 2_400_000;
 
-function readFileAsDataUrl(file: File): Promise<string> {
+function readFileAsDataUrl(
+  file: File,
+  onProgress?: (percent: number, stageLabel: string) => void
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    reader.onprogress = (ev) => {
+      if (ev.lengthComputable && ev.total > 0) {
+        const pct = Math.min(58, Math.max(15, Math.round(15 + (ev.loaded / ev.total) * 43)));
+        onProgress?.(pct, 'جاري قراءة الصورة...');
+      }
+    };
     reader.onload = () => {
       if (typeof reader.result === 'string' && reader.result.length > 0) {
         resolve(reader.result);
@@ -120,6 +154,9 @@ export async function processImageFileForUpload(
   file: File | null | undefined,
   options: ImageUploadProcessOptions = {}
 ): Promise<ImageUploadResult> {
+  const onProgress = options.onProgress;
+  onProgress?.(12, 'جاري فحص الصورة...');
+
   const validation = validateUploadedFile(file, 'image');
   if (!validation.valid || !file) {
     return {
@@ -128,9 +165,10 @@ export async function processImageFileForUpload(
     };
   }
 
+  onProgress?.(22, 'جاري قراءة الصورة...');
   let rawDataUrl = '';
   try {
-    rawDataUrl = await readFileAsDataUrl(file);
+    rawDataUrl = await readFileAsDataUrl(file, onProgress);
   } catch {
     return {
       success: false,
@@ -138,6 +176,7 @@ export async function processImageFileForUpload(
     };
   }
 
+  onProgress?.(64, 'جاري ضغط وتجهيز الصورة...');
   // Some Android WebView content:// picks return data:application/octet-stream;base64,...
   // Normalize unknown base64 prefix to image mime guess before canvas decoding if needed.
   if (rawDataUrl.startsWith('data:application/octet-stream;base64,')) {
@@ -166,11 +205,13 @@ export async function processImageFileForUpload(
     if (compressed) {
       const safeCompressed = sanitizeImageSrc(compressed, '');
       if (safeCompressed) {
+        onProgress?.(100, 'تم تجهيز الصورة');
         return { success: true, dataUrl: safeCompressed };
       }
     }
   }
 
+  onProgress?.(90, 'جاري التحقق النهائي...');
   const safeRaw = sanitizeImageSrc(rawDataUrl, '');
   if (!safeRaw) {
     return {
@@ -187,5 +228,6 @@ export async function processImageFileForUpload(
     };
   }
 
+  onProgress?.(100, 'تم تجهيز الصورة');
   return { success: true, dataUrl: safeRaw };
 }

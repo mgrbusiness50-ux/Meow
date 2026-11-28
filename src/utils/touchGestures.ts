@@ -850,10 +850,20 @@ export function attachHorizontalTabSwipe(
     onSwipePrev: () => void;
     canSwipeNext?: () => boolean;
     canSwipePrev?: () => boolean;
+    onSwipeProgress?: (normalizedOffset: number) => void;
+    onSwipeCancel?: () => void;
   }
 ): () => void {
   if (!container) return () => {};
-  const { isBlocked, onSwipeNext, onSwipePrev, canSwipeNext, canSwipePrev } = options;
+  const {
+    isBlocked,
+    onSwipeNext,
+    onSwipePrev,
+    canSwipeNext,
+    canSwipePrev,
+    onSwipeProgress,
+    onSwipeCancel,
+  } = options;
 
   let startX = 0;
   let startY = 0;
@@ -865,12 +875,13 @@ export function attachHorizontalTabSwipe(
     if (!el) return false;
     return Boolean(
       el.closest(
-        'input, textarea, select, [contenteditable="true"], [data-no-tab-swipe="true"], [data-no-ptr="true"], #pet-gallery-viewport, [data-member-gallery], .ss-panel, .overflow-x-auto'
+        'input, textarea, select, [contenteditable="true"], [data-no-tab-swipe="true"], [data-no-ptr="true"], #pet-gallery-viewport, [data-member-gallery], .ss-panel, .meow-more-dropdown, [role="menu"], .overflow-x-auto'
       )
     );
   };
 
   const resetVisual = () => {
+    onSwipeCancel?.();
     container.style.transition = 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
     container.style.transform = '';
     window.setTimeout(() => {
@@ -898,6 +909,7 @@ export function attachHorizontalTabSwipe(
       mode = 'idle';
       container.style.transform = '';
       container.style.transition = '';
+      onSwipeCancel?.();
       return;
     }
 
@@ -925,6 +937,12 @@ export function attachHorizontalTabSwipe(
       const allowed = dx > 0 ? canSwipeNext?.() ?? true : canSwipePrev?.() ?? true;
       const dampened = allowed ? Math.max(-44, Math.min(44, dx * 0.24)) : Math.max(-14, Math.min(14, dx * 0.08));
       container.style.transform = `translate3d(${dampened}px, 0, 0)`;
+      if (allowed) {
+        const progress = dx > 0 ? Math.min(0.85, dx / 180) : -Math.min(0.85, -dx / 180);
+        onSwipeProgress?.(progress);
+      } else {
+        onSwipeProgress?.(0);
+      }
     }
   };
 

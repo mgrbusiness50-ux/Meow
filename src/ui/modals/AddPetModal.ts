@@ -7,14 +7,24 @@ import {
   escapeHtml,
   sanitizeImageSrc,
 } from '../../utils/sanitize.ts';
-import { processImageFileForUpload } from '../../utils/imageUpload.ts';
+import {
+  createSafeObjectPreviewUrl,
+  processImageFileForUpload,
+  revokeSafeObjectPreviewUrl,
+} from '../../utils/imageUpload.ts';
 import { attachSheetDragToDismiss, showMobileToast } from '../../utils/touchGestures.ts';
+
+const ADD_PET_MODAL_DRAFT_KEY = 'meow_add_pet_modal_draft_v1';
 
 interface AddPetModalDraft {
   key: string | null;
+  editingPetId: string | null;
+  ownerUserId: string;
   species: PetSpecies | null;
   photos: (string | undefined)[];
   loadingSlots: [boolean, boolean, boolean];
+  loadingProgress: [number, number, number];
+  previewUrls: [string | undefined, string | undefined, string | undefined];
   slotErrors: [string, string, string];
   retryFiles: [File | null, File | null, File | null];
   name: string;
@@ -31,11 +41,55 @@ interface AddPetModalDraft {
   isSaving: boolean;
 }
 
+function getSafeLocalStorage(): Storage | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage;
+    }
+  } catch {
+    // ignore storage access errors
+  }
+  return null;
+}
+
+function getModalPreviewUrl(file: File): string | undefined {
+  try {
+    if (typeof createSafeObjectPreviewUrl === 'function') {
+      return createSafeObjectPreviewUrl(file) || undefined;
+    }
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      return URL.createObjectURL(file);
+    }
+  } catch {
+    // ignore preview errors
+  }
+  return undefined;
+}
+
+function releaseModalPreviewUrl(url?: string): void {
+  if (!url) return;
+  try {
+    if (typeof revokeSafeObjectPreviewUrl === 'function') {
+      revokeSafeObjectPreviewUrl(url);
+      return;
+    }
+    if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(url);
+    }
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
 let addPetDraft: AddPetModalDraft = {
   key: null,
+  editingPetId: null,
+  ownerUserId: '',
   species: null,
   photos: [undefined, undefined, undefined],
   loadingSlots: [false, false, false],
+  loadingProgress: [0, 0, 0],
+  previewUrls: [undefined, undefined, undefined],
   slotErrors: ['', '', ''],
   retryFiles: [null, null, null],
   name: '',
@@ -52,12 +106,182 @@ let addPetDraft: AddPetModalDraft = {
   isSaving: false,
 };
 
+function clearAddPetDraftStorage(): void {
+  const storage = getSafeLocalStorage();
+  if (!storage) return;
+  try {
+    storage.removeItem(ADD_PET_MODAL_DRAFT_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function persistAddPetDraft(isOpen = true): void {
+  const storage = getSafeLocalStorage();
+  if (!storage || !addPetDraft.key) return;
+  const ownerUserId = (addPetDraft.ownerUserId || state.getUser()?.id || '').trim();
+  const basePayload = {
+    isOpen,
+    key: addPetDraft.key,
+    editingPetId: addPetDraft.editingPetId,
+    ownerUserId,
+    species: addPetDraft.species,
+    name: addPetDraft.name,
+    color: addPetDraft.color,
+    breed: addPetDraft.breed,
+    hybridBreed: addPetDraft.hybridBreed,
+    ageYears: addPetDraft.ageYears,
+    ageMonths: addPetDraft.ageMonths,
+    gender: addPetDraft.gender,
+    vaccination: addPetDraft.vaccination,
+    traits: addPetDraft.traits,
+    healthNotes: addPetDraft.healthNotes,
+  };
+
+  const photoCandidates: (string | null)[][] = [
+    [addPetDraft.photos[0] || null, addPetDraft.photos[1] || null, addPetDraft.photos[2] || null],
+    [addPetDraft.photos[0] || null, addPetDraft.photos[1] || null, null],
+    [addPetDraft.photos[0] || null, null, null],
+    [null, null, null],
+  ];
+
+  for (const photos of photoCandidates) {
+    try {
+      storage.setItem(ADD_PET_MODAL_DRAFT_KEY, JSON.stringify({ ...basePayload, photos }));
+      return;
+    } catch {
+      // retry with fewer photos if quota exceeded
+    }
+  }
+}
+
+function readStoredAddPetModalDraft(): {
+  isOpen: boolean;
+  key: string;
+  editingPetId: string | null;
+  ownerUserId: string;
+  species: PetSpecies | null;
+  photos: (string | undefined)[];
+  name: string;
+  color: string;
+  breed: string;
+  hybridBreed: string;
+  ageYears: string;
+  ageMonths: string;
+  gender: PetGender | null;
+  vaccination: 'yes' | 'no' | 'partial' | null;
+  traits: string[];
+  healthNotes: string;
+} | null {
+  const storage = getSafeLocalStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(ADD_PET_MODAL_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.key !== 'string') return null;
+
+    const currentUserId = (state.getUser()?.id || '').trim();
+    const draftOwnerId = typeof parsed.ownerUserId === 'string' ? parsed.ownerUserId.trim() : '';
+    if (currentUserId && draftOwnerId && currentUserId !== draftOwnerId) {
+      return null;
+    }
+
+    const photos: (string | undefined)[] = [undefined, undefined, undefined];
+    if (Array.isArray(parsed.photos)) {
+      for (let i = 0; i < 3; i += 1) {
+        const val = parsed.photos[i];
+        photos[i] = typeof val === 'string' && val ? val : undefined;
+      }
+    }
+
+    return {
+      isOpen: Boolean(parsed.isOpen),
+      key: parsed.key,
+      editingPetId: typeof parsed.editingPetId === 'string' ? parsed.editingPetId : null,
+      ownerUserId: draftOwnerId,
+      species: parsed.species === 'cat' || parsed.species === 'dog' ? parsed.species : null,
+      photos,
+      name: typeof parsed.name === 'string' ? parsed.name : '',
+      color: typeof parsed.color === 'string' ? parsed.color : '',
+      breed: typeof parsed.breed === 'string' ? parsed.breed : '',
+      hybridBreed: typeof parsed.hybridBreed === 'string' ? parsed.hybridBreed : '',
+      ageYears: typeof parsed.ageYears === 'string' ? parsed.ageYears : '',
+      ageMonths: typeof parsed.ageMonths === 'string' ? parsed.ageMonths : '',
+      gender: parsed.gender === 'male' || parsed.gender === 'female' ? parsed.gender : null,
+      vaccination:
+        parsed.vaccination === 'yes' ||
+        parsed.vaccination === 'no' ||
+        parsed.vaccination === 'partial'
+          ? parsed.vaccination
+          : null,
+      traits: Array.isArray(parsed.traits)
+        ? parsed.traits.filter((t): t is string => typeof t === 'string' && Boolean(t)).slice(0, 6)
+        : [],
+      healthNotes: typeof parsed.healthNotes === 'string' ? parsed.healthNotes : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+let restoredDraftStartupChecked = false;
+export function restoreAddPetModalDraftOnStartup(): void {
+  if (restoredDraftStartupChecked) return;
+  restoredDraftStartupChecked = true;
+  if (state.getOnboardingStep() !== 'completed' || state.isAddPetModalVisible()) return;
+  const stored = readStoredAddPetModalDraft();
+  if (!stored || !stored.isOpen) return;
+
+  let editingPet: Pet | null = null;
+  if (stored.editingPetId) {
+    editingPet = state.getUserPets().find((p) => p.id === stored.editingPetId) ?? null;
+    if (!editingPet) {
+      clearAddPetDraftStorage();
+      return;
+    }
+  }
+
+  addPetDraft = {
+    key: stored.key,
+    editingPetId: stored.editingPetId,
+    ownerUserId: stored.ownerUserId || (state.getUser()?.id || '').trim(),
+    species: stored.species,
+    photos: stored.photos,
+    loadingSlots: [false, false, false],
+    loadingProgress: [0, 0, 0],
+    previewUrls: [undefined, undefined, undefined],
+    slotErrors: ['', '', ''],
+    retryFiles: [null, null, null],
+    name: stored.name,
+    color: stored.color,
+    breed: stored.breed,
+    hybridBreed: stored.hybridBreed,
+    ageYears: stored.ageYears,
+    ageMonths: stored.ageMonths,
+    gender: stored.gender,
+    vaccination: stored.vaccination,
+    traits: stored.traits,
+    healthNotes: stored.healthNotes,
+    formSaveError: '',
+    isSaving: false,
+  };
+  state.setAddPetModalVisible(true, editingPet);
+}
+
 export function resetAddPetModalDraft(): void {
+  for (let i = 0; i < 3; i += 1) {
+    releaseModalPreviewUrl(addPetDraft.previewUrls[i]);
+  }
   addPetDraft = {
     key: null,
+    editingPetId: null,
+    ownerUserId: '',
     species: null,
     photos: [undefined, undefined, undefined],
     loadingSlots: [false, false, false],
+    loadingProgress: [0, 0, 0],
+    previewUrls: [undefined, undefined, undefined],
     slotErrors: ['', '', ''],
     retryFiles: [null, null, null],
     name: '',
@@ -73,6 +297,7 @@ export function resetAddPetModalDraft(): void {
     formSaveError: '',
     isSaving: false,
   };
+  clearAddPetDraftStorage();
 }
 
 export function isAddPetModalBusy(): boolean {
@@ -85,8 +310,39 @@ function ensureAddPetDraft(petToEdit: Pet | null): AddPetModalDraft {
     return addPetDraft;
   }
 
+  const stored = readStoredAddPetModalDraft();
+  if (stored && stored.key === key) {
+    addPetDraft = {
+      key: stored.key,
+      editingPetId: stored.editingPetId,
+      ownerUserId: stored.ownerUserId || (state.getUser()?.id || '').trim(),
+      species: stored.species,
+      photos: stored.photos,
+      loadingSlots: [false, false, false],
+      loadingProgress: [0, 0, 0],
+      previewUrls: [undefined, undefined, undefined],
+      slotErrors: ['', '', ''],
+      retryFiles: [null, null, null],
+      name: stored.name,
+      color: stored.color,
+      breed: stored.breed,
+      hybridBreed: stored.hybridBreed,
+      ageYears: stored.ageYears,
+      ageMonths: stored.ageMonths,
+      gender: stored.gender,
+      vaccination: stored.vaccination,
+      traits: stored.traits,
+      healthNotes: stored.healthNotes,
+      formSaveError: '',
+      isSaving: false,
+    };
+    return addPetDraft;
+  }
+
   addPetDraft = {
     key,
+    editingPetId: petToEdit?.id || null,
+    ownerUserId: (state.getUser()?.id || '').trim(),
     species: petToEdit ? petToEdit.species : null,
     photos: [
       petToEdit?.photos?.[0],
@@ -94,6 +350,8 @@ function ensureAddPetDraft(petToEdit: Pet | null): AddPetModalDraft {
       petToEdit?.photos?.[2],
     ],
     loadingSlots: [false, false, false],
+    loadingProgress: [0, 0, 0],
+    previewUrls: [undefined, undefined, undefined],
     slotErrors: ['', '', ''],
     retryFiles: [null, null, null],
     name: petToEdit?.name || '',
@@ -119,16 +377,38 @@ function ensureAddPetDraft(petToEdit: Pet | null): AddPetModalDraft {
     formSaveError: '',
     isSaving: false,
   };
+  persistAddPetDraft(true);
   return addPetDraft;
 }
 
-function renderSlotInnerMarkup(idx: number, photo?: string, isLoading = false, hasError = false): string {
+function renderSlotInnerMarkup(
+  idx: number,
+  photo?: string,
+  isLoading = false,
+  hasError = false,
+  progress = 0,
+  previewUrl?: string
+): string {
   const isPrimary = idx === 0;
+  const pct = Math.max(0, Math.min(100, Math.round(progress || 0)));
   if (isLoading) {
+    const activePreview = previewUrl || photo;
     return `
-      <div class="flex flex-col items-center justify-center gap-1.5 px-2 text-center">
-        <i class="fa-solid fa-circle-notch fa-spin text-xl text-[#e67e22]"></i>
-        <span class="text-[10px] font-black text-[#786555] leading-tight">جاري التجهيز...</span>
+      <div class="relative w-full h-full flex flex-col items-center justify-center overflow-hidden">
+        ${
+          activePreview
+            ? `<img src="${escapeAttr(sanitizeImageSrc(activePreview))}" alt="معاينة الصورة ${idx + 1}" class="absolute inset-0 w-full h-full object-cover opacity-65" />`
+            : ''
+        }
+        <div class="relative z-10 w-[86%] rounded-xl bg-black/65 backdrop-blur-xs px-2 py-1.5 flex flex-col items-center gap-1 text-center text-white shadow-sm">
+          <div class="flex items-center gap-1.5">
+            <i class="fa-solid fa-circle-notch fa-spin text-xs text-[#ffb066]"></i>
+            <span class="text-[10px] font-black leading-tight">${pct > 0 ? `${pct}%` : 'جاري التجهيز'}</span>
+          </div>
+          <div class="w-full h-1.5 rounded-full bg-white/25 overflow-hidden">
+            <div class="h-full bg-[#e67e22] transition-all duration-150" style="width: ${Math.max(pct, 12)}%;"></div>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -321,7 +601,14 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                       <label class="w-full h-full flex items-center justify-center cursor-pointer">
                         <input accept="image/*" class="hidden add-pet-photo-input" data-photo-slot="${idx}" type="file" />
                         <div class="modal-photo-slot-preview w-full h-full flex items-center justify-center">
-                          ${renderSlotInnerMarkup(idx, photo, isLoading, hasError)}
+                          ${renderSlotInnerMarkup(
+                            idx,
+                            photo,
+                            isLoading,
+                            hasError,
+                            draft.loadingProgress[idx],
+                            draft.previewUrls[idx]
+                          )}
                         </div>
                       </label>
                       ${
@@ -356,8 +643,14 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                 <input
                   type="text"
                   id="form-pet-name"
+                  name="meow_modal_pet_name"
                   value="${escapeAttr(petName)}"
                   autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-form-type="other"
                   class="w-full min-w-0 h-16 py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base sm:text-lg font-black text-center ${petNameColorClass} focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
@@ -369,8 +662,14 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                 <input
                   type="text"
                   id="form-pet-color"
+                  name="meow_modal_pet_color"
                   value="${escapeAttr(petColor)}"
                   autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-form-type="other"
                   class="w-full min-w-0 h-16 py-4 px-3 sm:px-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base sm:text-lg font-black text-center text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                 />
               </div>
@@ -429,11 +728,16 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                   <input
                     type="number"
                     id="form-pet-age-years"
+                    name="meow_modal_pet_age_years"
                     inputmode="numeric"
                     min="0"
                     max="25"
                     placeholder="سنة"
                     value="${escapeAttr(petAgeYears)}"
+                    autocomplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
                     class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                   />
                 </div>
@@ -441,11 +745,16 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
                   <input
                     type="number"
                     id="form-pet-age-months"
+                    name="meow_modal_pet_age_months"
                     inputmode="numeric"
                     min="0"
                     max="11"
                     placeholder="شهر (اختياري)"
                     value="${escapeAttr(petAgeMonths)}"
+                    autocomplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
                     class="w-full h-16 py-4 px-2 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-base font-black text-center text-[#1a1612] placeholder:text-[#998b7c] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm"
                   />
                 </div>
@@ -571,7 +880,12 @@ export function renderAddPetModal(petToEdit: Pet | null): string {
             <div class="relative flex items-center">
               <textarea
                 id="form-pet-health-notes"
+                name="meow_modal_pet_notes"
                 rows="3"
+                autocomplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
                 class="w-full p-5 bg-[#fffefc] border-2 border-[#d6c7b2] rounded-[28px] text-lg font-black text-[#1a1612] focus:outline-none focus:ring-4 focus:ring-[#e67e22]/20 focus:border-[#e67e22] transition-all shadow-sm resize-none"
               >${escapeHtml(petNotes)}</textarea>
             </div>
@@ -663,27 +977,32 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   const petNotesInput = document.getElementById('form-pet-health-notes') as HTMLTextAreaElement | null;
   const formError = document.getElementById('modal-pet-form-error');
 
-  // Live sync inputs into draft so background state updates never erase typed fields
+  // Live sync inputs into draft + localStorage so Android WebView pause/reload never loses edits
   petNameInput?.addEventListener('input', () => {
     draft.name = petNameInput.value;
     draft.formSaveError = '';
+    persistAddPetDraft(true);
     petNameInput.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
   });
   petColorInput?.addEventListener('input', () => {
     draft.color = petColorInput.value;
     draft.formSaveError = '';
+    persistAddPetDraft(true);
     petColorInput.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
   });
   breedSelect?.addEventListener('change', () => {
     draft.breed = breedSelect.value;
     draft.formSaveError = '';
+    persistAddPetDraft(true);
     breedSelect.classList.remove('border-[#e67e22]', 'ring-2', 'ring-[#e67e22]/40');
   });
   hybridSelect?.addEventListener('change', () => {
     draft.hybridBreed = hybridSelect.value;
+    persistAddPetDraft(true);
   });
   petNotesInput?.addEventListener('input', () => {
     draft.healthNotes = petNotesInput.value;
+    persistAddPetDraft(true);
   });
 
   // 1. Species toggle + dynamic breed dropdowns
@@ -713,6 +1032,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     const nextHybridVal = speciesChanged ? '' : hybridSelect?.value || '';
     draft.breed = nextBreedVal;
     draft.hybridBreed = nextHybridVal;
+    persistAddPetDraft(true);
 
     if (breedSelect) {
       breedSelect.disabled = false;
@@ -766,7 +1086,14 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
 
     const preview = slotEl.querySelector<HTMLElement>('.modal-photo-slot-preview');
     if (preview) {
-      preview.innerHTML = renderSlotInnerMarkup(idx, photoUrl, isLoading, hasError);
+      preview.innerHTML = renderSlotInnerMarkup(
+        idx,
+        photoUrl,
+        isLoading,
+        hasError,
+        draft.loadingProgress[idx],
+        draft.previewUrls[idx]
+      );
     }
 
     const existingClear = slotEl.querySelector('.clear-pet-photo-btn');
@@ -784,6 +1111,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
         uploadedSlots[idx] = undefined;
         draft.slotErrors[idx] = '';
         draft.retryFiles[idx] = null;
+        persistAddPetDraft(true);
         const inputEl = slotEl.querySelector<HTMLInputElement>('.add-pet-photo-input');
         if (inputEl) inputEl.value = '';
         renderSlotState(slotEl, idx, undefined);
@@ -799,6 +1127,9 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     if (slot < 0 || slot > 2) return;
     const slotWrapper = document.querySelector<HTMLElement>(`[data-photo-slot-card="${slot}"]`);
 
+    releaseModalPreviewUrl(draft.previewUrls[slot]);
+    draft.previewUrls[slot] = getModalPreviewUrl(file);
+    draft.loadingProgress[slot] = 10;
     draft.loadingSlots[slot] = true;
     draft.slotErrors[slot] = '';
     draft.retryFiles[slot] = file;
@@ -808,7 +1139,19 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     syncPhotoErrorsUI();
 
     try {
-      const result = await processImageFileForUpload(file);
+      const result = await processImageFileForUpload(file, {
+        onProgress: (percent) => {
+          draft.loadingProgress[slot] = percent;
+          if (draft.loadingSlots[slot]) {
+            const latestWrapper = document.querySelector<HTMLElement>(
+              `[data-photo-slot-card="${slot}"]`
+            );
+            if (latestWrapper) {
+              renderSlotState(latestWrapper, slot, uploadedSlots[slot]);
+            }
+          }
+        },
+      });
       if (!result.success) {
         draft.slotErrors[slot] = result.errorMessage;
         if (inputEl) inputEl.value = '';
@@ -825,14 +1168,22 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
       draft.slotErrors[slot] = '';
       draft.retryFiles[slot] = null;
       draft.formSaveError = '';
+      persistAddPetDraft(true);
       photosGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       if (formError) {
         formError.innerHTML = '';
         formError.classList.add('hidden');
       }
       if (inputEl) inputEl.value = '';
+    } catch {
+      const fallbackMsg = 'تعذر قراءة الصورة المختارة. يمكنك إعادة المحاولة أو اختيار صورة أخرى.';
+      draft.slotErrors[slot] = fallbackMsg;
+      showMobileToast(fallbackMsg, 'danger', 2400);
     } finally {
       draft.loadingSlots[slot] = false;
+      draft.loadingProgress[slot] = 0;
+      releaseModalPreviewUrl(draft.previewUrls[slot]);
+      draft.previewUrls[slot] = undefined;
       const latestSlotWrapper = document.querySelector<HTMLElement>(`[data-photo-slot-card="${slot}"]`);
       if (latestSlotWrapper) {
         renderSlotState(latestSlotWrapper, slot, uploadedSlots[slot]);
@@ -861,6 +1212,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
       uploadedSlots[slot] = undefined;
       draft.slotErrors[slot] = '';
       draft.retryFiles[slot] = null;
+      persistAddPetDraft(true);
       const slotWrapper = btn.closest<HTMLElement>('[data-photo-slot-card]');
       if (slotWrapper) {
         const inputEl = slotWrapper.querySelector<HTMLInputElement>('.add-pet-photo-input');
@@ -876,11 +1228,13 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
   ageYearsInput?.addEventListener('input', () => {
     ageYearsInput.value = ageYearsInput.value.replace(/[^0-9]/g, '');
     draft.ageYears = ageYearsInput.value;
+    persistAddPetDraft(true);
     petAgeGroup?.classList.remove('ring-2', 'ring-[#e67e22]');
   });
   ageMonthsInput?.addEventListener('input', () => {
     ageMonthsInput.value = ageMonthsInput.value.replace(/[^0-9]/g, '');
     draft.ageMonths = ageMonthsInput.value;
+    persistAddPetDraft(true);
     petAgeGroup?.classList.remove('ring-2', 'ring-[#e67e22]');
   });
 
@@ -895,6 +1249,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     maleBtn.addEventListener('click', () => {
       currentGender = 'male';
       draft.gender = 'male';
+      persistAddPetDraft(true);
       if (genderInput) genderInput.value = 'male';
       petGenderGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       maleBtn.className =
@@ -906,6 +1261,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     femaleBtn.addEventListener('click', () => {
       currentGender = 'female';
       draft.gender = 'female';
+      persistAddPetDraft(true);
       if (genderInput) genderInput.value = 'female';
       petGenderGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       femaleBtn.className =
@@ -921,6 +1277,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     vaxYesBtn.addEventListener('click', () => {
       currentVaccination = 'yes';
       draft.vaccination = 'yes';
+      persistAddPetDraft(true);
       document.getElementById('modal-vax-partial-note')?.classList.add('hidden');
       petVaxGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       vaxYesBtn.className =
@@ -931,6 +1288,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
     vaxNoBtn.addEventListener('click', () => {
       currentVaccination = 'no';
       draft.vaccination = 'no';
+      persistAddPetDraft(true);
       document.getElementById('modal-vax-partial-note')?.classList.add('hidden');
       petVaxGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-1');
       vaxNoBtn.className =
@@ -965,6 +1323,7 @@ export function attachAddPetModalEvents(petToEdit: Pet | null): void {
         if (limitMsg) limitMsg.classList.add('hidden');
       }
       draft.traits = Array.from(selectedTraits);
+      persistAddPetDraft(true);
 
       if (selectedTraits.size >= 3) {
         petTraitsGroup?.classList.remove('ring-2', 'ring-[#e67e22]', 'p-2');

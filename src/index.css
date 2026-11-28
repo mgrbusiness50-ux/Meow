@@ -419,6 +419,15 @@ a[role="button"]:not(.no-active-scale):active,
   pointer-events: none;
 }
 
+.meow-sliding-pill {
+  transition:
+    right 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: right, left, width, transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-slide-up,
@@ -431,7 +440,16 @@ a[role="button"]:not(.no-active-scale):active,
   .meow-drawer-exit-rtl,
   .meow-splash-exit,
   .meow-ambient-heart,
-  .meow-ptr-dots.is-spinning span {
+  .meow-sliding-pill,
+  .meow-ptr-dots.is-spinning span,
+  button:not(.no-active-scale),
+  a[role="button"]:not(.no-active-scale),
+  .tab-btn,
+  .fav-btn,
+  .category-species-btn,
+  .btn-brand-primary,
+  .btn-brand-secondary,
+  .btn-bubbly {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

@@ -126,6 +126,8 @@ import {
   updateSupabaseAccountPreferences,
 } from './services/supabaseAuthService.ts';
 import {
+  extractGoogleRealName,
+  isExplicitAuthInvalidError,
   isNetworkOrOfflineError,
   sanitizeOAuthDisplayName,
 } from './utils/authHelpers.ts';
@@ -1111,7 +1113,19 @@ class AppStateManager {
     }
 
     if (result.errorMessage && !result.session) {
-      if (isNetworkOrOfflineError(result.errorMessage) && this.tryRestoreLastCompletedOfflineSession()) {
+      const offlineLike =
+        isNetworkOrOfflineError(result.errorMessage) ||
+        (!isExplicitAuthInvalidError(result.errorMessage) &&
+          typeof navigator !== 'undefined' &&
+          navigator.onLine === false);
+      if (offlineLike && this.tryRestoreLastCompletedOfflineSession()) {
+        this.isOfflineState = true;
+        this.tryFinalizeSplashTransition();
+        this.notify();
+        return;
+      }
+      if (!isExplicitAuthInvalidError(result.errorMessage) && this.tryRestoreLastCompletedOfflineSession()) {
+        this.isOfflineState = isNetworkOrOfflineError(result.errorMessage);
         this.tryFinalizeSplashTransition();
         this.notify();
         return;
@@ -1128,6 +1142,7 @@ class AppStateManager {
     }
 
     if (!result.session && isNetworkOrOfflineError() && this.tryRestoreLastCompletedOfflineSession()) {
+      this.isOfflineState = true;
       this.tryFinalizeSplashTransition();
       this.notify();
       return;
@@ -1160,10 +1175,14 @@ class AppStateManager {
       ) {
         return;
       }
+      const isOfflineNow =
+        isNetworkOrOfflineError() ||
+        this.isOfflineState ||
+        (typeof navigator !== 'undefined' && navigator.onLine === false);
       if (
         event !== 'SIGNED_OUT' &&
         !this.isSigningOutSupabase &&
-        isNetworkOrOfflineError() &&
+        isOfflineNow &&
         ((this.loadedSupabaseUserId && this.supabaseAccountBundle?.onboardingDone) ||
           this.tryRestoreLastCompletedOfflineSession())
       ) {
@@ -1263,8 +1282,17 @@ class AppStateManager {
       this.isSupabaseAuthReady = true;
 
       if (!res.success || !res.bundle) {
-        if (isNetworkOrOfflineError(res.errorMessage)) {
+        const shouldUseOfflineFallback =
+          !isExplicitAuthInvalidError(res.errorMessage) &&
+          (isNetworkOrOfflineError(res.errorMessage) ||
+            this.isOfflineState ||
+            (typeof navigator !== 'undefined' && navigator.onLine === false));
+        if (shouldUseOfflineFallback) {
           if (this.loadedSupabaseUserId === userId && this.supabaseAccountBundle?.onboardingDone) {
+            this.isOfflineState =
+              this.isOfflineState ||
+              isNetworkOrOfflineError(res.errorMessage) ||
+              (typeof navigator !== 'undefined' && navigator.onLine === false);
             this.isUsingOfflineCacheState = true;
             this.supabaseAuthError = null;
             this.deferOrSetOnboardingStep('completed');
@@ -1273,6 +1301,10 @@ class AppStateManager {
             return { success: true, bundle: this.supabaseAccountBundle };
           }
           if (this.tryRestoreOfflineSnapshotForUser(userId)) {
+            this.isOfflineState =
+              this.isOfflineState ||
+              isNetworkOrOfflineError(res.errorMessage) ||
+              (typeof navigator !== 'undefined' && navigator.onLine === false);
             this.tryFinalizeSplashTransition();
             this.notify();
             return { success: true, bundle: this.supabaseAccountBundle };
@@ -1283,12 +1315,7 @@ class AppStateManager {
         this.supabaseAuthError =
           res.errorMessage || 'تعذر تحميل بيانات الحساب من قاعدة البيانات.';
         const sessionUser = opts?.session?.user ?? this.supabaseSession?.user ?? null;
-        const resolvedName = sanitizeOAuthDisplayName(
-          (sessionUser?.user_metadata?.full_name as string | undefined) ||
-            (sessionUser?.user_metadata?.name as string | undefined),
-          sessionUser?.email,
-          sessionUser
-        );
+        const resolvedName = extractGoogleRealName(sessionUser);
         this.user = {
           ...createUnauthenticatedUserProfile(this.notificationsEnabled),
           id: userId,
@@ -1311,12 +1338,7 @@ class AppStateManager {
         // Brand-new Auth user whose profiles row hasn't been created yet: let them complete owner_details (upsert creates the row)
         const sessionUser = opts?.session?.user ?? this.supabaseSession?.user ?? null;
         const metaAvatar = this.extractGoogleAvatarFromSessionUser(sessionUser);
-        const resolvedName = sanitizeOAuthDisplayName(
-          (sessionUser?.user_metadata?.full_name as string | undefined) ||
-            (sessionUser?.user_metadata?.name as string | undefined),
-          sessionUser?.email,
-          sessionUser
-        );
+        const resolvedName = extractGoogleRealName(sessionUser);
         this.rawSupabaseAvatarUrl = metaAvatar;
         this.loadedSupabaseUserId = userId;
         this.supabaseAccountBundle = res.bundle;
@@ -1932,11 +1954,14 @@ class AppStateManager {
     }
     const targetUserId = this.supabaseAuthUserId || this.loadedSupabaseUserId;
     if (targetUserId && isValidUuid(targetUserId)) {
-      await this.loadSupabaseAccountForUser(targetUserId, {
+      const bundleRes = await this.loadSupabaseAccountForUser(targetUserId, {
         session: this.supabaseSession,
         isPasswordRecovery: this.isSupabasePasswordRecoveryState,
         forceReload: true,
       });
+      if (bundleRes.success) {
+        await this.hydrateSupabaseWorkspaceForUser(targetUserId);
+      }
     } else if (this.onboardingStep === 'completed' || this.onboardingStep === 'auth_method') {
       await this.retrySupabaseAccountLoad();
     }
@@ -2117,7 +2142,19 @@ class AppStateManager {
     if (!isSupabaseConfigured()) return false;
     const sessionRes = await getCurrentSupabaseSession();
     if (!sessionRes.session || !sessionRes.user?.id) {
-      if (isNetworkOrOfflineError(sessionRes.errorMessage) && this.tryRestoreLastCompletedOfflineSession()) {
+      const offlineRetry =
+        !isExplicitAuthInvalidError(sessionRes.errorMessage) &&
+        (isNetworkOrOfflineError(sessionRes.errorMessage) ||
+          this.isOfflineState ||
+          (typeof navigator !== 'undefined' && navigator.onLine === false));
+      if (offlineRetry && this.tryRestoreLastCompletedOfflineSession()) {
+        this.isOfflineState = true;
+        this.notify();
+        return true;
+      }
+      if (this.onboardingStep === 'completed' && this.loadedSupabaseUserId && this.supabaseAccountBundle?.onboardingDone) {
+        this.isOfflineState = true;
+        this.isUsingOfflineCacheState = true;
         this.notify();
         return true;
       }
@@ -3032,6 +3069,14 @@ class AppStateManager {
       };
     }
 
+    if (this.isOfflineState || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+      return {
+        success: false,
+        errorMessage:
+          'لا يوجد اتصال بالإنترنت حاليًا. تم الاحتفاظ ببياناتك التي كتبتها محليًا، يرجى إعادة المحاولة فور عودة الاتصال.',
+      };
+    }
+
     const baseSnapshot = this.getPersistableSupabaseUserProfile();
     const resolved = this.buildResolvedOwnerSnapshot(
       baseSnapshot,
@@ -3052,19 +3097,24 @@ class AppStateManager {
       if (res.success && res.bundle) {
         this.supabaseAccountBundle = res.bundle;
         this.supabaseAuthError = null;
-      } else if (!res.success && res.errorMessage) {
+      } else if (!res.success && res.errorMessage && !isNetworkOrOfflineError(res.errorMessage)) {
         this.supabaseAuthError = res.errorMessage;
       }
       return res;
     });
 
     if (!writeRes || !writeRes.success) {
+      const isOfflineErr = isNetworkOrOfflineError(writeRes?.errorMessage);
+      if (isOfflineErr) {
+        this.isOfflineState = true;
+      }
       this.notify();
       return {
         success: false,
-        errorMessage:
-          writeRes?.errorMessage ||
-          'تعذر حفظ بيانات المالك في قاعدة البيانات. يرجى المحاولة مرة أخرى.',
+        errorMessage: isOfflineErr
+          ? 'تعذر الاتصال بالإنترنت. تم الاحتفاظ ببياناتك ولن تضيع، أعد المحاولة عند استقرار الاتصال.'
+          : writeRes?.errorMessage ||
+            'تعذر حفظ بيانات المالك في قاعدة البيانات. يرجى المحاولة مرة أخرى.',
       };
     }
 
@@ -6108,8 +6158,26 @@ class AppStateManager {
     const { candidate, isEdit } = this.buildPetCandidate(petData);
 
     if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      if (this.isOfflineState || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+        this.isOfflineState = true;
+        this.notify();
+        return {
+          success: false,
+          errorMessage:
+            'لا يوجد اتصال بالإنترنت حاليًا — تم الاحتفاظ ببيانات وصور أليفك مؤقتًا داخل النموذج حتى عودة الاتصال.',
+        };
+      }
       const res = await upsertPetInSupabase(candidate, this.user.id);
       if (!res.success) {
+        if (isNetworkOrOfflineError(res.errorMessage)) {
+          this.isOfflineState = true;
+          this.notify();
+          return {
+            success: false,
+            errorMessage:
+              'تعذر حفظ بيانات الأليف بسبب انقطاع الإنترنت. تم الاحتفاظ بكل ما أدخلته، أعد المحاولة عند عودة الاتصال.',
+          };
+        }
         // Keep AddPetModal open & draft untouched so user never loses entered fields/photos
         return {
           success: false,
@@ -6118,6 +6186,7 @@ class AppStateManager {
       }
       const finalPet = res.data ? { ...candidate, ...res.data } : candidate;
       this.commitPetLocally(finalPet, isEdit);
+      this.persistOfflineSnapshotForCurrentUser();
       this.notify();
       return { success: true, pet: finalPet };
     }
@@ -6700,6 +6769,14 @@ class AppStateManager {
     };
 
     if (this.isSupabaseAuthenticated() && !this.isOnboardingPreviewSession) {
+      if (this.isOfflineState || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+        this.isOfflineState = true;
+        this.notify();
+        return {
+          success: false,
+          errorMessage: 'لا يوجد اتصال بالإنترنت حاليًا. تعذر إرسال الطلب، حاول مرة أخرى عند عودة الاتصال.',
+        };
+      }
       const res = await createContactRequestInSupabase({
         id: reqId,
         senderId: this.user.id,
@@ -6710,13 +6787,20 @@ class AppStateManager {
         message,
       });
       if (!res.success) {
+        if (isNetworkOrOfflineError(res.errorMessage)) {
+          this.isOfflineState = true;
+          this.notify();
+        }
         return {
           success: false,
-          errorMessage: res.errorMessage || 'تعذر إرسال طلب التواصل. حاول مرة أخرى.',
+          errorMessage: isNetworkOrOfflineError(res.errorMessage)
+            ? 'تعذر إرسال الطلب لعدم توفر اتصال بالإنترنت. حاول مرة أخرى عند عودة الاتصال.'
+            : res.errorMessage || 'تعذر إرسال طلب التواصل. حاول مرة أخرى.',
         };
       }
       this.contactRequests.unshift(newRequest);
       this.selectedPetForRequest = null;
+      this.persistOfflineSnapshotForCurrentUser();
       this.notify();
       return { success: true, request: newRequest };
     }
@@ -7300,9 +7384,15 @@ class AppStateManager {
           targetMsg.timestamp = res.data.timestamp || targetMsg.timestamp;
           targetMsg.createdAtMs = res.data.createdAtMs || targetMsg.createdAtMs;
           if (res.data.fileUrl) targetMsg.fileUrl = res.data.fileUrl;
+          this.persistOfflineSnapshotForCurrentUser();
         } else {
+          if (isNetworkOrOfflineError(res.errorMessage)) {
+            this.isOfflineState = true;
+          }
           targetMsg.localStatus = 'failed';
-          targetMsg.localError = res.errorMessage || 'فشل إرسال الرسالة، اضغط لإعادة المحاولة.';
+          targetMsg.localError = isNetworkOrOfflineError(res.errorMessage)
+            ? 'انقطع الاتصال بالإنترنت — اضغط لإعادة إرسال الرسالة.'
+            : res.errorMessage || 'فشل إرسال الرسالة، اضغط لإعادة المحاولة.';
         }
         this.notify();
       });

@@ -43,16 +43,30 @@ export function renderSavedPetsView(): string {
       <div class="w-full max-w-md mx-auto px-4 pt-4 pb-[max(5rem,calc(2.5rem+env(safe-area-inset-bottom)))] flex-1 flex flex-col min-w-0">
         
         <!-- The 4 Required Tabs: 1. التزاوج, 2. التبني, 3. العيادات (مقفولة), 4. المتجر (مقفول) -->
-        <div class="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-white/90 dark:bg-[#1F1A16] border-2 border-brand-peachBorder/70 dark:border-[#3A3027] shadow-sm mb-5">
-          
+        <div id="saved-tabs-switcher" class="relative grid grid-cols-4 items-center p-1.5 rounded-2xl bg-white/90 dark:bg-[#1F1A16] border-2 border-brand-peachBorder/70 dark:border-[#3A3027] shadow-sm mb-5">
+          <div
+            id="saved-tab-pill"
+            aria-hidden="true"
+            class="meow-sliding-pill pointer-events-none absolute top-1.5 bottom-1.5 w-[calc(25%-0.1875rem)] rounded-xl bg-brand-orange shadow-soft"
+            style="right: ${
+              activeSubTab === 'mating'
+                ? '0.375rem'
+                : activeSubTab === 'adoption'
+                ? 'calc(25% + 0.1875rem)'
+                : activeSubTab === 'clinics'
+                ? 'calc(50%)'
+                : 'calc(75% - 0.1875rem)'
+            };"
+          ></div>
+
           <!-- 1. التزاوج -->
           <button
             data-saved-tab="mating"
             type="button"
-            class="saved-tab-btn py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo ${
+            class="saved-tab-btn relative z-10 py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-colors duration-200 flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo ${
               activeSubTab === 'mating'
-                ? 'bg-brand-orange text-white shadow-soft'
-                : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+                ? 'text-white'
+                : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
             }"
           >
             <span>التزاوج</span>
@@ -63,10 +77,10 @@ export function renderSavedPetsView(): string {
           <button
             data-saved-tab="adoption"
             type="button"
-            class="saved-tab-btn py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo ${
+            class="saved-tab-btn relative z-10 py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-colors duration-200 flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo ${
               activeSubTab === 'adoption'
-                ? 'bg-brand-orange text-white shadow-soft'
-                : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+                ? 'text-white'
+                : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
             }"
           >
             <span>التبني</span>
@@ -77,28 +91,28 @@ export function renderSavedPetsView(): string {
           <button
             data-saved-tab="clinics"
             type="button"
-            class="saved-tab-btn py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo opacity-85 ${
+            class="saved-tab-btn relative z-10 py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-colors duration-200 flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo opacity-85 ${
               activeSubTab === 'clinics'
-                ? 'bg-brand-orange text-white shadow-soft'
-                : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+                ? 'text-white'
+                : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
             }"
           >
             <span>العيادات</span>
-            <span class="text-[10px] text-amber-500 font-bold">🔒</span>
+            <span class="text-[10px] ${activeSubTab === 'clinics' ? 'text-white' : 'text-amber-500'} font-bold">🔒</span>
           </button>
 
           <!-- 4. المتجر (مقفول) -->
           <button
             data-saved-tab="store"
             type="button"
-            class="saved-tab-btn py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo opacity-85 ${
+            class="saved-tab-btn relative z-10 py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-colors duration-200 flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo opacity-85 ${
               activeSubTab === 'store'
-                ? 'bg-brand-orange text-white shadow-soft'
-                : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+                ? 'text-white'
+                : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
             }"
           >
             <span>المتجر</span>
-            <span class="text-[10px] text-amber-500 font-bold">🔒</span>
+            <span class="text-[10px] ${activeSubTab === 'store' ? 'text-white' : 'text-amber-500'} font-bold">🔒</span>
           </button>
 
         </div>
@@ -436,18 +450,34 @@ function attachSavedPetsBodyEvents(): void {
 function updateSavedPetsTabInPlace(tab: 'mating' | 'adoption' | 'clinics' | 'store'): void {
   state.setSavedPetsSubTab(tab, { silent: true });
 
+  const pillEl = document.getElementById('saved-tab-pill');
+  if (pillEl) {
+    pillEl.style.right =
+      tab === 'mating'
+        ? '0.375rem'
+        : tab === 'adoption'
+        ? 'calc(25% + 0.1875rem)'
+        : tab === 'clinics'
+        ? 'calc(50%)'
+        : 'calc(75% - 0.1875rem)';
+  }
+
   const tabBtns = document.querySelectorAll<HTMLButtonElement>('.saved-tab-btn');
   tabBtns.forEach((btn) => {
     const btnTab = btn.getAttribute('data-saved-tab');
     const isActive = btnTab === tab;
     const isLocked = btnTab === 'clinics' || btnTab === 'store';
-    btn.className = `saved-tab-btn py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo ${
+    btn.className = `saved-tab-btn relative z-10 py-2.5 px-1 rounded-xl text-xs sm:text-sm font-black transition-colors duration-200 flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer font-baloo ${
       isLocked ? 'opacity-85 ' : ''
     }${
       isActive
-        ? 'bg-brand-orange text-white shadow-soft'
-        : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+        ? 'text-white'
+        : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
     }`;
+    const lockSpan = isLocked ? btn.querySelector('span:last-child') : null;
+    if (lockSpan) {
+      lockSpan.className = `text-[10px] ${isActive ? 'text-white' : 'text-amber-500'} font-bold`;
+    }
   });
 
   const bodyEl = document.getElementById('saved-pets-body');
@@ -455,7 +485,10 @@ function updateSavedPetsTabInPlace(tab: 'mating' | 'adoption' | 'clinics' | 'sto
     const savedPets = state.getSavedPets();
     const matingSaved = savedPets.filter((p) => p.status === 'mating');
     const adoptionSaved = savedPets.filter((p) => p.status === 'adoption');
+    bodyEl.classList.remove('meow-fade-in');
     bodyEl.innerHTML = renderSavedPetsBody(tab, matingSaved, adoptionSaved);
+    void bodyEl.offsetWidth;
+    bodyEl.classList.add('meow-fade-in');
     attachSavedPetsBodyEvents();
   }
 }

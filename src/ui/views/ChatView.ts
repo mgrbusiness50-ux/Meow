@@ -149,7 +149,7 @@ function renderChatCategoryPillsHtml(conversationsCount: number): string {
             : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
         }"
       >
-        الكل (${conversationsCount})
+        الكل (<span id="chat-category-all-count">${conversationsCount}</span>)
       </button>
 
       <!-- 2. التزاوج -->
@@ -189,9 +189,9 @@ function renderChatCategoryPillsHtml(conversationsCount: number): string {
               : 'bg-white dark:bg-[#27201B] border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] opacity-85 hover:opacity-100'
           }"
         >
-          <i class="fa-solid fa-house-medical text-xs ${isClinics ? 'text-white' : 'text-brand-orange'}"></i>
+          <i id="chat-category-clinics-icon" class="fa-solid fa-house-medical text-xs ${isClinics ? 'text-white' : 'text-brand-orange'}"></i>
           <span>العيادات</span>
-          <span class="text-[10px] font-black px-1.5 py-0.5 rounded-full border ${
+          <span id="chat-category-clinics-badge" class="text-[10px] font-black px-1.5 py-0.5 rounded-full border ${
             isClinics
               ? 'bg-white/20 text-white border-white/30'
               : 'bg-brand-cream dark:bg-[#342A24] text-brand-orange border-brand-peachBorder/80 dark:border-warm-darkBorder'
@@ -215,7 +215,7 @@ function renderChatSubTabSwitcherHtml(
       <div
         id="chat-subtab-pill"
         aria-hidden="true"
-        class="pointer-events-none absolute top-1 bottom-1 w-[calc(50%-0.25rem)] rounded-full bg-brand-orange shadow-soft transition-all duration-200 ease-out"
+        class="meow-sliding-pill pointer-events-none absolute top-1 bottom-1 w-[calc(50%-0.25rem)] rounded-full bg-brand-orange shadow-soft transition-all duration-200 ease-out"
         style="right: ${activeSubTab === 'chats' ? '0.25rem' : 'calc(50%)'};"
       ></div>
 
@@ -507,7 +507,7 @@ function renderConversationsList(conversations: ReturnType<typeof state.getConve
                   showDeleteConversation: true,
                   reportTargetType: 'chat',
                   buttonClass:
-                    'w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-subtleGray hover:text-brand-dark dark:hover:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
+                    'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-brand-subtleGray hover:text-brand-orange dark:hover:text-brand-orange inline-flex items-center justify-center transition cursor-pointer active:scale-90',
                   dropdownAlign: 'left',
                 })}
                 <i class="fa-solid fa-chevron-left text-xs text-brand-subtleGray group-hover:text-brand-orange transition"></i>
@@ -531,18 +531,24 @@ function renderRequestsList(
     requestsDirectionFilter === 'incoming' ? incomingRequests : outgoingRequests;
 
   const directionSwitcherHtml = `
-    <div class="bg-white/90 dark:bg-[#27201B] border border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-2xl p-1 flex items-center gap-1 shadow-sm">
+    <div id="req-direction-switcher" class="relative grid grid-cols-2 items-center bg-white/90 dark:bg-[#27201B] border border-brand-peachBorder/80 dark:border-warm-darkBorder rounded-2xl p-1 shadow-sm">
+      <div
+        id="req-direction-pill"
+        aria-hidden="true"
+        class="meow-sliding-pill pointer-events-none absolute top-1 bottom-1 w-[calc(50%-0.25rem)] rounded-xl bg-brand-orange shadow-sm"
+        style="right: ${requestsDirectionFilter === 'incoming' ? '0.25rem' : 'calc(50%)'};"
+      ></div>
       <button
         type="button"
         data-req-direction="incoming"
-        class="req-direction-btn flex-1 h-9 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer font-baloo ${
+        class="req-direction-btn relative z-10 h-9 px-3 rounded-xl text-xs font-black transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer font-baloo ${
           requestsDirectionFilter === 'incoming'
-            ? 'bg-brand-orange text-white shadow-sm'
-            : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+            ? 'text-white'
+            : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
         }"
       >
         <span>الواردة</span>
-        <span class="px-1.5 py-0.5 rounded-full text-[10px] ${
+        <span id="req-direction-incoming-badge" class="px-1.5 py-0.5 rounded-full text-[10px] transition-colors ${
           requestsDirectionFilter === 'incoming'
             ? 'bg-white text-brand-orange font-black'
             : incomingPendingCount > 0
@@ -554,14 +560,14 @@ function renderRequestsList(
       <button
         type="button"
         data-req-direction="outgoing"
-        class="req-direction-btn flex-1 h-9 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer font-baloo ${
+        class="req-direction-btn relative z-10 h-9 px-3 rounded-xl text-xs font-black transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer font-baloo ${
           requestsDirectionFilter === 'outgoing'
-            ? 'bg-brand-orange text-white shadow-sm'
-            : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+            ? 'text-white'
+            : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
         }"
       >
         <span>الصادرة</span>
-        <span class="px-1.5 py-0.5 rounded-full text-[10px] ${
+        <span id="req-direction-outgoing-badge" class="px-1.5 py-0.5 rounded-full text-[10px] transition-colors ${
           requestsDirectionFilter === 'outgoing'
             ? 'bg-white text-brand-orange font-black'
             : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
@@ -570,10 +576,9 @@ function renderRequestsList(
     </div>
   `;
 
-  if (activeList.length === 0) {
-    return `
-      <div class="space-y-3">
-        ${directionSwitcherHtml}
+  const renderRequestsInnerHtml = () => {
+    if (activeList.length === 0) {
+      return `
         <div class="bg-white/75 dark:bg-[#27201B]/80 border border-brand-peachBorder dark:border-warm-darkBorder rounded-3xl p-6 text-center space-y-2.5 shadow-card meow-card-enter">
           <div class="w-14 h-14 rounded-full bg-brand-orange/15 text-brand-orange flex items-center justify-center mx-auto text-xl border-2 border-brand-peachBorder/60 dark:border-warm-darkBorder">
             <i class="fa-solid ${requestsDirectionFilter === 'incoming' ? 'fa-inbox' : 'fa-paper-plane'}"></i>
@@ -593,21 +598,17 @@ function renderRequestsList(
             }
           </p>
         </div>
-      </div>
-    `;
-  }
+      `;
+    }
 
-  const privacy = state.getRequestsPrivacySummary(activeList);
-  const privacyNoticeText = !privacy.hasPublicPhoneRequests
-    ? 'الخصوصية مفعّلة: أرقام الهواتف مخفية افتراضياً وفق إعدادات الحسابات، ويمكنك التواصل بأمان داخل المحادثة.'
-    : !privacy.hasHiddenPhoneRequests
-    ? 'حسب إعدادات الخصوصية الحالية: قد يظهر رقم الهاتف لمن فعّل خيار «إظهار رقم الهاتف في الملف الشخصي» داخل الإعدادات.'
-    : 'احترام إعدادات الخصوصية: يظهر رقم الهاتف فقط للأطراف التي فعّلت إظهاره في الإعدادات، ويبقى مخفياً للبقية.';
+    const privacy = state.getRequestsPrivacySummary(activeList);
+    const privacyNoticeText = !privacy.hasPublicPhoneRequests
+      ? 'الخصوصية مفعّلة: أرقام الهواتف مخفية افتراضياً وفق إعدادات الحسابات، ويمكنك التواصل بأمان داخل المحادثة.'
+      : !privacy.hasHiddenPhoneRequests
+      ? 'حسب إعدادات الخصوصية الحالية: قد يظهر رقم الهاتف لمن فعّل خيار «إظهار رقم الهاتف في الملف الشخصي» داخل الإعدادات.'
+      : 'احترام إعدادات الخصوصية: يظهر رقم الهاتف فقط للأطراف التي فعّلت إظهاره في الإعدادات، ويبقى مخفياً للبقية.';
 
-  return `
-    <div class="space-y-3">
-      ${directionSwitcherHtml}
-
+    return `
       <div class="p-3 rounded-2xl bg-brand-orange/10 border border-brand-peachBorder/80 dark:border-warm-darkBorder text-xs font-bold text-brand-dark dark:text-[#EFE6DD] flex items-center gap-2.5 shadow-sm">
         <i class="fa-solid fa-shield-halved text-brand-orange text-sm shrink-0"></i>
         <span>${privacyNoticeText}</span>
@@ -688,7 +689,7 @@ function renderRequestsList(
                           petName: previewPet?.name || req.senderPetName || req.receiverPetName,
                           reportTargetType: 'request',
                           buttonClass:
-                            'w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-subtleGray hover:text-brand-dark dark:hover:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
+                            'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-brand-subtleGray hover:text-brand-orange dark:hover:text-brand-orange inline-flex items-center justify-center transition cursor-pointer active:scale-90',
                           dropdownAlign: 'left',
                         })
                       : ''
@@ -791,6 +792,15 @@ function renderRequestsList(
           `;
         })
         .join('')}
+    `;
+  };
+
+  return `
+    <div class="space-y-3">
+      ${directionSwitcherHtml}
+      <div id="chat-requests-list-body" class="space-y-3">
+        ${renderRequestsInnerHtml()}
+      </div>
     </div>
   `;
 }
@@ -1736,7 +1746,7 @@ function renderChatRoom(conv: ReturnType<typeof state.getActiveConversation>): s
             showDeleteConversation: true,
             reportTargetType: 'chat',
             buttonClass:
-              'w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-brand-dark dark:text-white flex items-center justify-center transition cursor-pointer active:scale-90',
+              'w-9 h-9 min-w-[36px] min-h-[36px] bg-transparent border-0 text-brand-dark dark:text-white hover:text-brand-orange inline-flex items-center justify-center transition cursor-pointer active:scale-90',
             dropdownAlign: 'left',
           })}
         </div>
@@ -2208,6 +2218,50 @@ function attachChatListBodyEvents(scope: ParentNode = document): void {
   });
 }
 
+function updateChatCategoryPillsInPlace(conversationsCount: number): void {
+  const pillsContainer = document.getElementById('chat-category-pills-container');
+  if (!pillsContainer) return;
+
+  const allCountEl = document.getElementById('chat-category-all-count');
+  if (allCountEl) {
+    allCountEl.textContent = String(conversationsCount);
+  }
+
+  const isClinics = chatCategoryFilter === 'clinics';
+  pillsContainer.querySelectorAll<HTMLButtonElement>('.chat-category-btn').forEach((btn) => {
+    const filter = btn.getAttribute('data-chat-filter');
+    const isActive = filter === chatCategoryFilter;
+    if (filter === 'clinics') {
+      btn.className = `chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo flex items-center gap-1.5 shadow-sm border-2 ${
+        isActive
+          ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30 border-brand-orange'
+          : 'bg-white dark:bg-[#27201B] border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] opacity-85 hover:opacity-100'
+      }`;
+    } else {
+      btn.className = `chat-category-btn h-10 px-4 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap font-baloo shadow-sm ${
+        isActive
+          ? 'bg-brand-orange text-white shadow-soft ring-2 ring-brand-orange/30'
+          : 'bg-white dark:bg-[#27201B] border-2 border-brand-peachBorder dark:border-warm-darkBorder text-warm-textSec dark:text-[#D1C7BD] hover:bg-brand-peachBorder/20'
+      }`;
+    }
+  });
+
+  const clinicsIcon = document.getElementById('chat-category-clinics-icon');
+  if (clinicsIcon) {
+    clinicsIcon.className = `fa-solid fa-house-medical text-xs ${
+      isClinics ? 'text-white' : 'text-brand-orange'
+    }`;
+  }
+  const clinicsBadge = document.getElementById('chat-category-clinics-badge');
+  if (clinicsBadge) {
+    clinicsBadge.className = `text-[10px] font-black px-1.5 py-0.5 rounded-full border ${
+      isClinics
+        ? 'bg-white/20 text-white border-white/30'
+        : 'bg-brand-cream dark:bg-[#342A24] text-brand-orange border-brand-peachBorder/80 dark:border-warm-darkBorder'
+    }`;
+  }
+}
+
 function refreshChatListInPlace(): void {
   const activeSubTab = state.getChatSubTab();
   const incomingRequests = state.getIncomingContactRequests();
@@ -2217,11 +2271,7 @@ function refreshChatListInPlace(): void {
   const allConversationsCount = state.getConversations().length;
   const filteredConversations = getFilteredChatConversations();
 
-  const pillsContainer = document.getElementById('chat-category-pills-container');
-  if (pillsContainer) {
-    pillsContainer.outerHTML = renderChatCategoryPillsHtml(allConversationsCount);
-    bindChatCategoryButtons();
-  }
+  updateChatCategoryPillsInPlace(allConversationsCount);
 
   const pillEl = document.getElementById('chat-subtab-pill');
   if (pillEl) {
@@ -2269,19 +2319,82 @@ function refreshChatListInPlace(): void {
   }
 
   const contentEl = document.getElementById('chat-tab-content');
-  if (contentEl) {
-    contentEl.classList.remove('meow-fade-in');
-    contentEl.innerHTML = renderChatListBodyHtml(
-      filteredConversations,
-      incomingRequests,
-      outgoingRequests,
-      activeSubTab
-    );
-    void contentEl.offsetWidth;
-    contentEl.classList.add('meow-fade-in');
-    attachChatListBodyEvents(contentEl);
-    attachThreeDotsMenuEvents(contentEl);
+  if (!contentEl) return;
+
+  const existingReqSwitcher = document.getElementById('req-direction-switcher');
+  const existingReqListBody = document.getElementById('chat-requests-list-body');
+  if (
+    activeSubTab === 'requests' &&
+    chatCategoryFilter !== 'clinics' &&
+    existingReqSwitcher &&
+    existingReqListBody
+  ) {
+    const reqPill = document.getElementById('req-direction-pill');
+    if (reqPill) {
+      reqPill.style.right = requestsDirectionFilter === 'incoming' ? '0.25rem' : 'calc(50%)';
+    }
+    const incomingBtn = existingReqSwitcher.querySelector<HTMLButtonElement>('[data-req-direction="incoming"]');
+    const outgoingBtn = existingReqSwitcher.querySelector<HTMLButtonElement>('[data-req-direction="outgoing"]');
+    if (incomingBtn) {
+      incomingBtn.className = `req-direction-btn relative z-10 h-9 px-3 rounded-xl text-xs font-black transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer font-baloo ${
+        requestsDirectionFilter === 'incoming'
+          ? 'text-white'
+          : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
+      }`;
+    }
+    if (outgoingBtn) {
+      outgoingBtn.className = `req-direction-btn relative z-10 h-9 px-3 rounded-xl text-xs font-black transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer font-baloo ${
+        requestsDirectionFilter === 'outgoing'
+          ? 'text-white'
+          : 'text-brand-dark/75 dark:text-[#D1C7BD] hover:text-brand-orange'
+      }`;
+    }
+    const inBadge = document.getElementById('req-direction-incoming-badge');
+    if (inBadge) {
+      inBadge.textContent = String(incomingRequests.length);
+      inBadge.className = `px-1.5 py-0.5 rounded-full text-[10px] transition-colors ${
+        requestsDirectionFilter === 'incoming'
+          ? 'bg-white text-brand-orange font-black'
+          : incomingPendingCount > 0
+            ? 'bg-red-500 text-white font-black'
+            : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
+      }`;
+    }
+    const outBadge = document.getElementById('req-direction-outgoing-badge');
+    if (outBadge) {
+      outBadge.textContent = String(outgoingRequests.length);
+      outBadge.className = `px-1.5 py-0.5 rounded-full text-[10px] transition-colors ${
+        requestsDirectionFilter === 'outgoing'
+          ? 'bg-white text-brand-orange font-black'
+          : 'bg-brand-peachBorder/40 dark:bg-[#342A24] text-brand-dark dark:text-white'
+      }`;
+    }
+
+    const temp = document.createElement('div');
+    temp.innerHTML = renderRequestsList(incomingRequests, outgoingRequests);
+    const nextInner = temp.querySelector('#chat-requests-list-body');
+    if (nextInner) {
+      existingReqListBody.classList.remove('meow-fade-in');
+      existingReqListBody.innerHTML = nextInner.innerHTML;
+      void existingReqListBody.offsetWidth;
+      existingReqListBody.classList.add('meow-fade-in');
+      attachChatListBodyEvents(existingReqListBody);
+      attachThreeDotsMenuEvents(existingReqListBody);
+      return;
+    }
   }
+
+  contentEl.classList.remove('meow-fade-in');
+  contentEl.innerHTML = renderChatListBodyHtml(
+    filteredConversations,
+    incomingRequests,
+    outgoingRequests,
+    activeSubTab
+  );
+  void contentEl.offsetWidth;
+  contentEl.classList.add('meow-fade-in');
+  attachChatListBodyEvents(contentEl);
+  attachThreeDotsMenuEvents(contentEl);
 }
 
 function updateReplyPreviewBarInPlace(): void {
