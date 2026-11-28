@@ -189,6 +189,54 @@ describe('updateService version & manifest gating', () => {
     expect(result.otaUpdate?.version).toBe('1.2.3');
   });
 
+  it('resolves external GitHub Pages /updates baseUrl without duplicating /updates path segments', async () => {
+    vi.resetModules();
+    vi.doMock('@capacitor/core', () => ({
+      Capacitor: { isNativePlatform: () => false },
+    }));
+    const requestedUrls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requestedUrls.push(url);
+        if (url.endsWith('/apk-release.json')) {
+          return new Response(null, { status: 404 });
+        }
+        return new Response(
+          JSON.stringify({
+            version: '1.2.2',
+            buildNumber: 4,
+            bundleUrl:
+              'https://mgrbusiness50-ux.github.io/meow---ota--updates/updates/bundles/1.2.2-b4-production/bundle.zip',
+            checksum: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+            minNativeVersion: '1.2.0',
+            channel: 'production',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      })
+    );
+
+    const { checkForUpdates } = await import('../src/services/updateService.ts');
+    const result = await checkForUpdates({
+      baseUrl: 'https://mgrbusiness50-ux.github.io/meow---ota--updates/updates/',
+      channel: 'production',
+      currentNativeVersion: '1.2.1',
+      currentBuildNumber: 3,
+      currentBundleVersion: '1.2.1',
+    });
+
+    expect(requestedUrls).toEqual([
+      'https://mgrbusiness50-ux.github.io/meow---ota--updates/updates/apk-release.json',
+      'https://mgrbusiness50-ux.github.io/meow---ota--updates/updates/ota-manifest.json',
+    ]);
+    expect(result.status).toBe('ota_available');
+    expect(result.otaUpdate?.bundleUrl).toBe(
+      'https://mgrbusiness50-ux.github.io/meow---ota--updates/updates/bundles/1.2.2-b4-production/bundle.zip'
+    );
+  });
+
   it('returns clear error when CapacitorUpdater.download fails', async () => {
     vi.resetModules();
     vi.doMock('@capacitor/core', () => ({

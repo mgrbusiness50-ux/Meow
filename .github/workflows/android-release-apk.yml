@@ -79,11 +79,28 @@ jobs:
         id: meta
         env:
           CONFIGURED_UPDATES_URL: ${{ vars.VITE_UPDATES_BASE_URL || secrets.VITE_UPDATES_BASE_URL || '' }}
+          PUBLISH_TARGET: ${{ vars.OTA_PUBLISH_TARGET || 'gh_pages' }}
+          UPDATES_REPO: ${{ vars.OTA_UPDATES_REPO || '' }}
+          OTA_UPDATES_DEPLOY_TOKEN: ${{ secrets.OTA_UPDATES_DEPLOY_TOKEN }}
+          PUBLISH_RELEASE: ${{ (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_github_release == true)) && 'true' || 'false' }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
           RESOLVED_URL="${CONFIGURED_UPDATES_URL%/}"
-          if [ -z "${RESOLVED_URL}" ]; then
+          if [ "${PUBLISH_TARGET}" = "external_github_pages" ]; then
+            if [ -z "${RESOLVED_URL}" ]; then
+              echo "::error::VITE_UPDATES_BASE_URL must be configured when OTA_PUBLISH_TARGET=external_github_pages."
+              exit 1
+            fi
+            if [ -z "${UPDATES_REPO}" ]; then
+              echo "::error::OTA_UPDATES_REPO must be configured when OTA_PUBLISH_TARGET=external_github_pages."
+              exit 1
+            fi
+            if [ "${PUBLISH_RELEASE}" = "true" ] && [ -z "${OTA_UPDATES_DEPLOY_TOKEN:-}" ]; then
+              echo "::error::OTA_UPDATES_DEPLOY_TOKEN secret must be configured when publishing apk-release.json to external_github_pages."
+              exit 1
+            fi
+          elif [ -z "${RESOLVED_URL}" ]; then
             OWNER_LOWER=$(echo "${REPO_OWNER}" | tr '[:upper:]' '[:lower:]')
             RESOLVED_URL="https://${OWNER_LOWER}.github.io/${REPO_NAME}/updates"
             echo "Resolved default same-repo GitHub Pages updates URL: ${RESOLVED_URL}"
